@@ -258,6 +258,11 @@ footer p{margin:6px 0}
         <p>chroot 内从 <code>/designs</code> 根目录启动；环境变量 <code>TERM/NO_COLOR/LC_ALL/LANG/PDK_ROOT</code> 缺一不可，
         漏 <code>LC_ALL=C</code> 会让 STEP 0 verilator lint 直接崩掉。</p>
       </div>
+      <div class="card">
+        <h3>设计说明（RTL 架构）</h3>
+        <p>顶层握手时序、压缩核三级流水每拍在算什么、<code>W</code> 窗口为什么吃掉 18.2% 的单元面积、三个频率数字（<code>critical_path</code> 8.2 ns 内部估算 / signoff 22.75 ns 上限 / 约束 24.0 ns）分别是什么口径，以及六条已知限制。<br>
+        仓库内 <code>docs/ARCHITECTURE.md</code> · <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/blob/master/docs/ARCHITECTURE.md">在 GitHub 阅读</a></p>
+      </div>
     </div>
   </div>
 </section>
