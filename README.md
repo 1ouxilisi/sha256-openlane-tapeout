@@ -130,9 +130,9 @@ sudo bash tapeout/run_sha256_flow.sh
 |---|---|---|
 | L1 算法逻辑 | K 常量、σ/Σ、Ch/Maj、64 轮压缩（对照 Python hashlib） | 11/11 PASS |
 | L2 核心时序 | iverilog 逐周期仿真，12 组标准向量 | 12/12 PASS |
-| L3 SoC 握手 | start→busy→done→digest 时序 | 2/2 PASS |
+| L3 SoC 握手 | start→busy→done→digest 时序 | 3/3 PASS（v3 起；v1/v2 为 2/2） |
 
-物理验证：四代详细布线 **0 违例**、DRC **0 违例**；Magic 与 KLayout 双工具 GDS 逐层 XOR 比对，40 层共同层零差异（基于 v1 实测，唯一差异为标定层）。
+物理验证：四代详细布线 **0 违例**、DRC **0 违例**；Magic 与 KLayout 双工具 GDS 逐层 XOR 比对，**四代均为 40 层共同层零差异**（唯一差异为标定层 81/14，非结构层）。
 
 ---
 

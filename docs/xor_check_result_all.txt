@@ -1,0 +1,14 @@
+GDS 一致性 XOR 校验 · 四代汇总
+=======================================================
+方法：Magic 导出 GDS 与 KLayout 导出 GDS 逐层 XOR，比较每层多边形集合差异
+工具：宿主 KLayout 0.30.12（klayout.db Python API），脚本 xor_check_v.py
+说明：A-only (81,14) 为标定层，两版导出不参与比较属正常现象
+
+v1 / tapeout6  : PASS - 40 层共同层 0 差异；A-only [(81,14)]；B-only []
+v2 / tapeout9  : PASS - 40 层共同层 0 差异；A-only [(81,14)]；B-only []
+v3 / tapeout10 : PASS - 40 层共同层 0 差异；A-only [(81,14)]；B-only []
+v4 / tapeout12 : PASS - 40 层共同层 0 差异；A-only [(81,14)]；B-only []
+
+结论：四代 GDS 在 Magic 与 KLayout 两种导出路径下完全一致，
+      物理实现结果可复现、可交叉验证。
+=======================================================
