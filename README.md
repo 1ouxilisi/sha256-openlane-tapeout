@@ -160,9 +160,10 @@ sudo bash tapeout/run_sha256_flow.sh
 ```bash
 bash scripts/verify.sh            # 编译 RTL + testbench，跑 abc / empty / fox 三条锚点，输出 ALL TESTS PASSED
 python3 scripts/check_vectors.py  # 用 Python hashlib 独立核对 testbench 里的期望值，防止"自己验自己"
+bash scripts/lint_check.sh        # verilator 静态 lint，除两条已豁免的位宽扩展告警外要求干净
 ```
 
-仓库内置 GitHub Actions（`.github/workflows/verify.yml`），每次 push 都会在干净环境里重跑上面两步，状态见顶部 badge。这条链路的意义不是多一次仿真，而是把"我验证过"变成"你可以自己验证"。
+仓库内置 GitHub Actions（`.github/workflows/verify.yml`），每次 push 都会在干净环境里重跑上面三步（仿真 / 向量核对 / lint），状态见顶部 badge。这条链路的意义不是多一次仿真，而是把"我验证过"变成"你可以自己验证"。
 
 **综合层对照（可选，需本地 PDK）**
 
