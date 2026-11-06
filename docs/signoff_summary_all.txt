@@ -11,12 +11,19 @@ v2	tapeout9	-7.74	-8.71	-9.62	-711.56		-0.24	不合格
 v3	tapeout10	-6.45	-7.19	-7.97	-637.46		-0.16	不合格
 v4	tapeout12	-6.63	-7.63	-8.44	-570.30		-0.45	不合格
 v5	tapeout13	+5.00	+4.03	+3.12	0.00		+0.43	合格
+v6	tapeout14	+3.08	+2.12	+1.25	0.00		+0.43	合格
 
 v5 三 corner 明细（multi_corner_sta.summary.rpt）
 corner			WNS	TNS	setup worst	hold worst
 29-sta-rcx_min		0.00	0.00	+5.00 ns	+0.43 ns
 31-sta-rcx_max		0.00	0.00	+3.12 ns	+0.44 ns
 33-sta-rcx_nom		0.00	0.00	+4.03 ns	+0.43 ns
+
+v6 三 corner 明细（multi_corner_sta.summary.rpt，CLOCK_PERIOD 24.0 ns）
+corner			WNS	TNS	setup worst	hold worst
+29-sta-rcx_min		0.00	0.00	+3.08 ns	+0.43 ns
+31-sta-rcx_max		0.00	0.00	+1.25 ns	+0.43 ns
+33-sta-rcx_nom		0.00	0.00	+2.12 ns	+0.43 ns
 
 功耗（nom corner）
 版本	Run		Internal	Switching	Leakage		Total
@@ -25,15 +32,20 @@ v2	tapeout9	1.08e-02 W	4.19e-03 W	5.28e-07 W	1.50e-02 W (15.0 mW)
 v3	tapeout10	1.10e-02 W	4.11e-03 W	5.21e-07 W	1.51e-02 W (15.1 mW)
 v4	tapeout12	1.21e-02 W	4.24e-03 W	5.20e-07 W	1.63e-02 W (16.3 mW)
 v5	tapeout13	4.67e-03 W	1.64e-03 W	5.30e-07 W	6.31e-03 W (6.31 mW)
+v6	tapeout14	5.06e-03 W	1.78e-03 W	5.30e-07 W	6.84e-03 W (6.84 mW)
 
-v4 功耗构成（nom）			v5 功耗构成（nom）
-Sequential	7.93e-03 W 48.6%	Sequential	3.04e-03 W 48.2%
-Combinational	3.81e-04 W 2.3%	Combinational	1.77e-04 W 2.8%
-Clock		8.03e-03 W 49.1%	Clock		3.09e-03 W 49.0%
+v4 功耗构成（nom）			v5 功耗构成（nom）			v6 功耗构成（nom）
+Sequential	7.93e-03 W 48.6%	Sequential	3.04e-03 W 48.2%	Sequential	3.83e-03 W 48.1%
+Combinational	3.81e-04 W 2.3%	Combinational	1.77e-04 W 2.8%	Combinational	2.23e-04 W 2.8%
+Clock		8.03e-03 W 49.1%	Clock		3.09e-03 W 49.0%	Clock		3.91e-03 W 49.1%
 
-结论：v4 功耗 97.7%、v5 功耗 97.2% 集中在时钟树与触发器，组合逻辑不足 3%。
+结论：v4 功耗 97.7%、v5 功耗 97.2%、v6 功耗 97.2% 集中在时钟树与触发器，组合逻辑不足 3%。
 说明：58 MHz 边界来自工艺（寄存器 CK-to-Q + 布线 RC），优化组合逻辑既不提频也不省电。
 v5 解决方式：CLOCK_PERIOD 10.0 -> 26.0，加 setup 0.30 ns / hold 0.40 ns resizer 余量；
 	      RTL、die、综合策略均未改动，三 corner 时序全部转正。
-已知项：v5 功耗 6.31 mW 与 v4 16.3 mW 频率不同不可直比；未做 DFT 插入与更高频率加压收敛。
+v6 加压收敛：由 v5 的 26.0 ns 压至 24.0 ns（41.67 MHz），其余配置完全不变；
+	      三 corner 仍全部为正，最紧 setup 余量 +1.25 ns（rcx_max 角），hold +0.43 ns。
+	      按最紧角反推，该设计在 130nm 下的可达周期约 22.75 ns（约 43.9 MHz）。
+已知项：v5 6.31 mW / v6 6.84 mW 与 v4 16.3 mW 频率不同不可直比；未做 DFT 插入，
+	      未做时序 ECO 与 hold fix 之外的余量修复。
 =======================================================
