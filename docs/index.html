@@ -205,6 +205,13 @@ footer p{margin:6px 0}
     <p class="sub" style="margin-top:22px">
       锚点向量：<code>abc</code> = ba7816bf…、空串 = e3b0c442…、<code>fox</code> = d7a8fbb3…，全部逐位一致。
     </p>
+    <div class="card" style="margin-top:18px;border-color:rgba(74,222,128,.35)">
+      <h3>不止这里写着 PASS —— 你自己跑一遍</h3>
+      <p style="margin-top:10px">两条命令即可复现本页的功能结论，不需要 OpenLane、不需要 PDK、不需要云主机：</p>
+      <p style="margin-top:10px;font-family:var(--mono);font-size:13px;background:#0b0e13;border:1px solid var(--line);border-radius:8px;padding:12px 14px;color:var(--text)">bash scripts/verify.sh<br>python3 scripts/check_vectors.py</p>
+      <p style="margin-top:10px">前者用 iverilog 编译 RTL + testbench，跑 <code>abc</code> / <code>empty</code> / <code>fox</code> 三条锚点向量，输出 <code>ALL TESTS PASSED</code>；后者用 Python <code>hashlib</code> 独立复算期望值，避免“自己验自己”。两步同样跑在 GitHub Actions 上（<code>.github/workflows/verify.yml</code>），每次 push 都在干净 runner 里重跑。</p>
+    </div>
+
   </div>
 </section>
 
