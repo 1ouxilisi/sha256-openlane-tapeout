@@ -4,6 +4,9 @@
 
 > **在线速览页（GitHub Pages）**：https://1ouxilisi.github.io/sha256-openlane-tapeout/ —— 六代演进、三 PVT corner 签核全表、六张版图、四层验证证据与边界说明，一页可读完。
 
+
+[![verify](https://github.com/1ouxilisi/sha256-openlane-tapeout/actions/workflows/verify.yml/badge.svg)](https://github.com/1ouxilisi/sha256-openlane-tapeout/actions/workflows/verify.yml)
+
 > 一句话：一个人、一台云主机、零成本，把一条 SHA-256 加速器从 Verilog 做到可交付的 GDS 版图，并把每个工程决策用真实指标讲清楚——最后两代把时序真正收敛到签核通过，并用加压实验探明余量边界。
 
 ---
@@ -149,6 +152,15 @@ sudo bash tapeout/run_sha256_flow.sh
 | L3 SoC 握手 | start→busy→done→digest 时序 | 3/3 PASS（v3 起；v1/v2 为 2/2） |
 
 物理验证：六代详细布线 **DRC 0 违例**（v4 经 14 轮迭代从 16,283 收敛到 0）；Magic 与 KLayout 双工具 GDS 逐层 XOR 比对，**六代均为 40 层共同层零差异**（唯一差异为标定层 81/14，非结构层）。
+
+**一键复现（任何人都能在本地重跑）**
+
+```bash
+bash scripts/verify.sh            # 编译 RTL + testbench，跑 abc / empty / fox 三条锚点，输出 ALL TESTS PASSED
+python3 scripts/check_vectors.py  # 用 Python hashlib 独立核对 testbench 里的期望值，防止"自己验自己"
+```
+
+仓库内置 GitHub Actions（`.github/workflows/verify.yml`），每次 push 都会在干净环境里重跑上面两步，状态见顶部 badge。这条链路的意义不是多一次仿真，而是把"我验证过"变成"你可以自己验证"。
 
 签核数据（SPEF/RCX 驱动三 PVT corner）：
 

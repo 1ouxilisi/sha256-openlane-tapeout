@@ -1,0 +1,26 @@
+name: verify
+
+# 功能回归：每次 push / PR 都重新跑一遍 RTL 仿真，
+# 并把 testbench 里的期望值与 Python hashlib 独立比对。
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  simulate:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+
+      - name: 校验测试向量（独立于 RTL，用 Python hashlib 计算）
+        run: python3 scripts/check_vectors.py
+
+      - name: 跑 RTL 功能回归（三条锚点向量）
+        run: bash scripts/verify.sh
