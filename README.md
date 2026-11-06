@@ -187,6 +187,22 @@ iverilog -g2005 -o simv designs/sha256_v7/tb/tb_v7_core.v designs/sha256_v7/src/
 iverilog -g2005 -o simax designs/sha256_v7/tb/tb_v7_axil.v designs/sha256_v7/src/sha256_axil.v designs/sha256_v7/src/sha256_core.v && ./simax
 ```
 
+**驱动级验收（三份实现互不依赖）**
+
+一颗已经流片的核，如果没人能从软件侧证明它是对的，它就只是一张漂亮的图。`driver/` 里给了可移植的 AXI4-Lite 主机驱动和一条端到端对照命令：
+
+```bash
+bash scripts/verify_driver.sh     # 末行应为 ALL DRIVER TESTS PASSED
+# 若 iverilog 只在 chroot / 容器里（本项目的云主机就是这种情况）：
+WRAP='sudo chroot /home/user/openlane-rootfs' bash scripts/verify_driver.sh
+```
+
+链条是：**C 驱动打出寄存器写序列（trace）→ Verilog 主机模型把该序列原样发到真 RTL 的 AXI 总线上 → Python hashlib 独立算期望摘要**。三者互不依赖，四条消息（`abc` / 空串 / 119 字节两块流式 / fox）全部 PASS。这一层不以"作者自己写的期望常量"为判据，所以它同时回答了"别人能不能接手"。
+
+驱动本身只依赖两个回调（读一个 32-bit 寄存器、写一个 32-bit 寄存器），换成 Xilinx `Xil_In32/Xil_Out32`、Linux `/dev/mem`、UIO 或本仓库的 trace 后端，就能在裸机、Linux、仿真三处跑同一份代码。**明确不做的事**写在头注释里：padding 由软件完成、没有中断、没有并发保护。
+
+> 想让一个不懂芯片的人也能判断这份交付物真假，看 [`docs/VERIFYING.md`](docs/VERIFYING.md)：六个真实踩过的坑、六条通用验收动作、以及"你不需要懂什么"的边界表。
+
 仓库内置 GitHub Actions（`.github/workflows/verify.yml`），每次 push 都会在干净环境里重跑上面三步（仿真 / 向量核对 / lint），状态见顶部 badge。这条链路的意义不是多一次仿真，而是把"我验证过"变成"你可以自己验证"。
 
 **综合层对照（可选，需本地 PDK）**
