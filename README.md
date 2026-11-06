@@ -4,6 +4,8 @@
 
 > **在线速览页（GitHub Pages）**：https://1ouxilisi.github.io/sha256-openlane-tapeout/ —— 六代演进、三 PVT corner 签核全表、六张版图、四层验证证据与边界说明，一页可读完。
 
+> **设计说明（RTL 架构）**：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) —— 顶层握手时序、压缩核三级流水每拍职责、W 窗口为什么吃掉 18% 面积、频率的三种口径怎么读，以及明确列出的六条已知限制。
+
 
 [![verify](https://github.com/1ouxilisi/sha256-openlane-tapeout/actions/workflows/verify.yml/badge.svg)](https://github.com/1ouxilisi/sha256-openlane-tapeout/actions/workflows/verify.yml)
 
@@ -233,3 +235,20 @@ bash scripts/synth_check.sh       # 裸 yosys + sky130 liberty，输出 cells �
 ## 说明
 
 本仓库为个人作品集性质的开源流片记录，目标不是量产商用芯片，而是完整验证“零成本完成数字芯片 RTL→GDS 全流程”这一路径的可行性与工程质量。
+
+---
+
+## 引用
+
+仓库带 `CITATION.cff`，在 GitHub 页面上点 **Cite this repository** 可直接导出 APA / BibTeX：
+
+```
+@misc{1ouxilisi_sha256_openlane_tapeout,
+  title  = {SHA-256 Accelerator: zero-cost open-source tapeout on SkyWater sky130A with OpenLane},
+  author = {1ouxilisi},
+  year   = {2026},
+  note   = {v1.0.0, six generations, GDSII + metrics + signoff}
+}
+```
+
+代码 `LICENSE` 为 Apache-2.0；RTL 与 GDSII `LICENSE-HARDWARE` 为 CERN-OHL-P-2.0。

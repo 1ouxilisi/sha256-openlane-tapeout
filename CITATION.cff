@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this design, its GDSII results, or its measurement data, please cite it as below. Code is licensed under Apache-2.0; hardware (RTL and GDSII) under CERN-OHL-P-2.0."
+title: "SHA-256 Accelerator: zero-cost open-source tapeout on SkyWater sky130A with OpenLane"
+abstract: >-
+  A single-block SHA-256 compression core taken from Verilog to GDSII with OpenLane 1.1.1 and the
+  SkyWater sky130A PDK, at zero commercial-EDA and zero fabrication cost. Six generations of
+  iteration are included: v1 parallel I/O, v2 32-bit serial interface with a two-stage pipeline,
+  v3 three-stage pipeline, v4 die shrink to 640x640 um, v5 clock-constraint correction to 26 ns
+  (three PVT corners closed, 38.46 MHz), and v6 pushed to 24 ns (41.67 MHz, three corners still
+  closed, tightest setup margin +1.25 ns). v1-v4 are reported as failing timing signoff, as measured.
+  Includes per-generation GDSII, metrics, three-corner STA reports, Magic-vs-KLayout XOR results,
+  and scripts to re-run functional simulation and synthesis checks.
+authors:
+  - name: "1ouxilisi"
+    website: "https://github.com/1ouxilisi"
+version: "1.0.0"
+date-released: "2026-11-06"
+license: "Apache-2.0"
+repository-code: "https://github.com/1ouxilisi/sha256-openlane-tapeout"
+repository-artifact: "https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/v1.0.0"
+url: "https://1ouxilisi.github.io/sha256-openlane-tapeout/"
+keywords:
+  - sha256
+  - openlane
+  - sky130
+  - gdsii
+  - tapeout
+  - asic
+  - open-source-hardware
