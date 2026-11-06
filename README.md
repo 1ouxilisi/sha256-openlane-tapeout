@@ -159,9 +159,15 @@ sudo bash tapeout/run_sha256_flow.sh
 
 ## 许可与致谢
 
-- **License：Apache-2.0**，全文见 [LICENSE](LICENSE)
-  - 覆盖范围：本仓库全部产出，包括 RTL 源码（`designs/sha256/src/`）、流程与工具脚本（`tapeout/`、`tools/`）、版图渲染图（`docs/images/`）以及 Release 中提供的 GDS 文件
-  - 第三方组件：SkyWater sky130A PDK、OpenLane / OpenROAD / Yosys / Magic / KLayout 均按各自许可证使用，不随本仓库分发
+本项目按产出类型采用双许可：
+
+- **硬件设计 → CERN-OHL-P-2.0**，全文见 [LICENSE-HARDWARE](LICENSE-HARDWARE)
+  - 适用范围：RTL 源码（`designs/sha256/src/*.v`）、测试平台，以及 Release 附件中的四代 GDS
+  - 该许可允许使用、修改、制造与商业分发，要求保留声明并在修改处标注变更
+- **代码与文档 → Apache-2.0**，全文见 [LICENSE](LICENSE)
+  - 适用范围：流程脚本（`tapeout/`）、工具脚本（`tools/`）、说明文档（`README.md`、`docs/`，含版图渲染图）
+  - 含专利授权条款，适合被工程环境复用
+- **第三方组件**：SkyWater sky130A PDK、OpenLane / OpenROAD / Yosys / Magic / KLayout 均按各自许可证使用，不随本仓库分发
   - 引用或复用时请保留本许可证与原始版权声明
 - 本项目基于开源生态完成，致谢 OpenLane、OpenROAD、Yosys、SkyWater PDK 等开源社区
 
