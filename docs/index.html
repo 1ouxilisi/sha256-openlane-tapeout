@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SHA-256 加速器 · 零成本开源流片（sky130A · OpenLane）</title>
+<meta name="description" content="OpenLane 1.1.1 + SkyWater sky130A 零成本流片：一颗 SHA-256 加速器从 RTL 到 GDS 的六代迭代，v5/v6 三 PVT corner 时序签核全通过，可达边界 22.75 ns（43.9 MHz）。">
+<style>
+:root{
+  --bg:#0e1116; --panel:#161a21; --panel2:#1c222b; --line:#2a323d;
+  --text:#e8edf4; --muted:#8d9aab; --accent:#4ade80; --accent2:#38bdf8; --warn:#fbbf24;
+  --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.9em;background:#0b0e13;border:1px solid var(--line);
+  padding:1px 5px;border-radius:4px}
+header{border-bottom:1px solid var(--line);padding:64px 0 48px;
+  background:radial-gradient(1200px 400px at 20% -10%,rgba(74,222,128,.10),transparent 70%),var(--bg)}
+.tag{display:inline-block;font-family:var(--mono);font-size:12px;letter-spacing:.08em;
+  color:var(--accent);border:1px solid rgba(74,222,128,.35);border-radius:999px;padding:4px 12px;margin-bottom:20px}
+h1{font-size:40px;line-height:1.25;margin:0 0 16px;font-weight:700;letter-spacing:-.01em}
+h1 span{color:var(--accent)}
+.lead{font-size:17px;color:var(--muted);max-width:760px;margin:0}
+.kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:40px}
+.kpi div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 16px}
+.kpi b{display:block;font-size:26px;font-family:var(--mono);color:var(--accent);letter-spacing:-.02em}
+.kpi small{display:block;color:var(--muted);font-size:12px;margin-top:6px;letter-spacing:.04em}
+section{padding:56px 0;border-bottom:1px solid var(--line)}
+h2{font-size:22px;margin:0 0 8px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:4px;height:18px;background:var(--accent);border-radius:2px;display:inline-block}
+.sub{color:var(--muted);font-size:14px;margin:0 0 28px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border-radius:10px;overflow:hidden}
+th,td{padding:11px 12px;border-bottom:1px solid var(--line);text-align:right}
+th{background:#1b222c;color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.04em}
+td:first-child,th:first-child{text-align:left}
+td.pass{color:var(--accent);font-weight:600}
+td.fail{color:#f87171}
+tr:last-child td{border-bottom:none}
+tr.hl td{background:rgba(74,222,128,.07)}
+.tl{position:relative;margin-left:10px;padding-left:26px;border-left:2px solid var(--line)}
+.tl .item{position:relative;margin-bottom:26px}
+.tl .item::before{content:"";position:absolute;left:-33px;top:6px;width:12px;height:12px;border-radius:50%;
+  background:var(--bg);border:2px solid var(--accent)}
+.tl .item h3{margin:0 0 4px;font-size:16px}
+.tl .item h3 em{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:8px}
+.tl .item p{margin:0;color:var(--muted);font-size:14px;max-width:820px}
+.tl .item p b{color:var(--text);font-family:var(--mono);font-size:13px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.card h3{margin:0 0 10px;font-size:15px;color:var(--accent)}
+.card p{margin:0;color:var(--muted);font-size:14px}
+.card p b{color:var(--text)}
+figure{margin:0}
+figure img{width:100%;border:1px solid var(--line);border-radius:10px;display:block;background:#000}
+figcaption{color:var(--muted);font-size:12.5px;margin-top:8px;font-family:var(--mono)}
+.thumbs{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:18px}
+.thumbs figure img{border-radius:6px}
+.thumbs figcaption{text-align:center;font-size:11.5px;margin-top:6px}
+.note{border-left:3px solid var(--warn);background:rgba(251,191,36,.06);padding:14px 18px;border-radius:0 8px 8px 0}
+.note p{margin:6px 0;font-size:14px;color:#d9dee6}
+footer{padding:40px 0 64px;color:var(--muted);font-size:13px}
+footer p{margin:6px 0}
+@media(max-width:760px){
+  h1{font-size:28px} .kpi{grid-template-columns:1fr 1fr} .grid2{grid-template-columns:1fr}
+  .thumbs{grid-template-columns:1fr 1fr} table{font-size:12px} th,td{padding:8px 8px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="tag">OPEN SOURCE SILICON · SKY130A · OPENLANE 1.1.1</div>
+    <h1>零成本把 SHA-256 <span>从 Verilog 做到 GDS</span></h1>
+    <p class="lead">
+      没有商业 EDA 授权，没有流片预算，没有制造排期。用 OpenLane 1.1.1 与 SkyWater 130nm 开源 PDK，
+      把一颗 SHA-256 加速器真实地做到可打开的 GDSII 版图 —— 六代迭代，每代解决一个真问题，
+      最后把这条设计的时序边界量到了 <b style="color:var(--text)">22.75 ns</b>。
+    </p>
+    <div class="kpi">
+      <div><b>43.9 MHz</b><small>反推可达边界</small></div>
+      <div><b>41.67 MHz</b><small>v6 签核工作点</small></div>
+      <div><b>0.4096 mm²</b><small>640 × 640 µm die</small></div>
+      <div><b>0 DRC</b><small>六代全 0 违例</small></div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>六代演进：每代只解决一个问题</h2>
+    <p class="sub">不是调参刷数字。每一代的起点都是上一代暴露的一个具体缺陷。</p>
+    <div class="tl">
+      <div class="item">
+        <h3>v1 · 先把链路跑通<em>tapeout6</em></h3>
+        <p>单块组合逻辑、773 个并行 IO、不做流水线。<b>38.58 MHz / 0.64 mm² / 利用率 20.99%</b>，布线 0 违例。
+        用 RCX 真实寄生重签核后 WNS -15.92 ns —— 这一代的价值不是指标，是证明链路可行，以及暴露了三个短板：无流水线、IO 撑大 die、利用率只有两成。</p>
+      </div>
+      <div class="item">
+        <h3>v2 · 砍 IO，切两级流水<em>tapeout9</em></h3>
+        <p>顶层改成 32-bit 串行接口 + start/busy/done 握手，压缩核拆两级。中途 die 收到 550 直接拥塞 fatal，
+        最终靠 <code>GRT_ALLOW_CONGESTION=1</code> + <code>GRT_OVERFLOW_ITERS=200</code> 让布线器收敛。
+        <b>53.45 MHz（+38%）/ 0.49 mm²（-23%）/ 利用率 33.53%</b>，收益最猛的一代。</p>
+      </div>
+      <div class="item">
+        <h3>v3 · 三级流水，撞见工艺墙<em>tapeout10</em></h3>
+        <p>压缩核再细分三级。<b>58.17 MHz</b>，只比 v2 高 9%。这里出现本项目最重要的认知转折：
+        单级组合逻辑已压到 6.64 ns，而签核关键路径是 17.19 ns —— 中间 10 ns 不是逻辑，是寄存器 CK-to-Q 加布线 RC。
+        瓶颈从"算得慢"变成"寄存器和连线本身慢"，再切流水没有意义。</p>
+      </div>
+      <div class="item">
+        <h3>v4 · 不再堆频率，改做面积<em>tapeout12</em></h3>
+        <p>die 从 700×700 收到 640×640，硬冲利用率。<b>56.72 MHz / 0.4096 mm² / 40.65%</b>，14 轮迭代把 DRC 从 16,283 收敛到 0。
+        代价是频率回落 1.45 MHz、WNS 从 -7.19 变 -7.63。这一代的意义是"做取舍"：知道何时该停、该换维度。</p>
+      </div>
+      <div class="item">
+        <h3>v5 · 把约束改对，让时序真正签核通过<em>tapeout13</em></h3>
+        <p>前面四代 <code>flow_status</code> 显示的 optimized WNS = 0 是 resizer 估算值，不是签核值。用 RCX 真实 SPEF 跑三 PVT corner，
+        v1–v4 的 setup 余量全是负的。根因：<code>config.tcl</code> 里 <code>CLOCK_PERIOD</code> 从第一天就写着 10.0 ns（100 MHz 的愿望），
+        而实际只到 56.72 MHz —— 约束比工艺能力激进一倍多。
+        不改 RTL、不动 die、不换策略，只把周期改成 <b>26.0 ns</b> 并给 resizer 加余量：
+        <b>三 corner 全部转正（WNS 0.00 / TNS 0.00 / setup +5.00、+4.03、+3.12 / hold +0.43）</b>，功耗 6.31 mW。</p>
+      </div>
+      <div class="item">
+        <h3>v6 · 只压约束，测出余量还剩多少<em>tapeout14</em></h3>
+        <p>v5 余量是真富余还是取整碰巧？v6 把 v5 配置一字不动，只把周期从 26.0 改成 <b>24.0 ns（41.67 MHz）</b>，干净的单变量对照。
+        三 corner 仍全为正：<b>+3.08 / +2.12 / +1.25 ns</b>，hold 稳定 +0.43，功耗 6.84 mW（+8.4%，频率 +8.3%，基本线性）。
+        把最紧角 1.25 ns 加回周期，得 <b>22.75 ns ≈ 43.9 MHz</b> —— 这就是这条 RTL 在 sky130A 上的定量边界。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>签核结果：三 PVT corner 全表</h2>
+    <p class="sub">数据来自 signoff 多角 STA 报告（RCX 真实寄生），不是布线器估算值。v1–v4 的不合格如实列出。</p>
+    <table>
+      <thead>
+        <tr><th>版本</th><th>周期 ns</th><th>频率 MHz</th><th>WNS min / nom / max</th><th>TNS nom</th><th>Hold nom</th><th>功耗 mW</th><th>判定</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>v1</td><td>25.92</td><td>38.58</td><td>-14.97 / -15.92 / -16.84</td><td>-4286.12</td><td>-0.33</td><td>10.8</td><td class="fail">不合格</td></tr>
+        <tr><td>v2</td><td>18.71</td><td>53.45</td><td>-7.74 / -8.71 / -9.62</td><td>-711.56</td><td>-0.24</td><td>15.0</td><td class="fail">不合格</td></tr>
+        <tr><td>v3</td><td>17.19</td><td>58.17</td><td>-6.45 / -7.19 / -7.97</td><td>-637.46</td><td>-0.16</td><td>15.1</td><td class="fail">不合格</td></tr>
+        <tr><td>v4</td><td>17.63</td><td>56.72</td><td>-6.63 / -7.63 / -8.44</td><td>-570.30</td><td>-0.45</td><td>16.3</td><td class="fail">不合格</td></tr>
+        <tr><td>v5</td><td>26.00</td><td>38.46</td><td>0.00 / 0.00 / 0.00</td><td>0.00</td><td>+0.43</td><td>6.31</td><td class="pass">通过</td></tr>
+        <tr class="hl"><td><b>v6</b></td><td><b>24.00</b></td><td><b>41.67</b></td><td><b>0.00 / 0.00 / 0.00</b></td><td><b>0.00</b></td><td><b>+0.43</b></td><td><b>6.84</b></td><td class="pass">通过</td></tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:18px">
+      v5 / v6 的 setup 余量：v5 +5.00（rcx_min）/ +4.03（rcx_nom）/ +3.12（rcx_max）；
+      v6 +3.08 / +2.12 / +1.25。功耗 6.31 → 6.84 mW 与 v4 的 16.3 mW 不可直比（工作频率不同）。
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>版图：v6 全层渲染</h2>
+    <p class="sub">GDS 43,264,122 B，3,013,270 个多边形，bbox 0,0 – 640,640 µm。跳过金属填充层与铺满层，只渲染结构层才能看清布线。</p>
+    <figure>
+      <img src="images/sha256_v6_layout.png" alt="v6 GDS 版图渲染（sky130A，640×640 µm）" loading="lazy">
+      <figcaption>物料：<code>results/signoff/sha256_top.magic.gds</code> · 渲染：gdspy + matplotlib · 双工具 XOR 40 层共同层 0 差异</figcaption>
+    </figure>
+    <div class="thumbs">
+      <figure><img src="images/sha256_v1_layout.png" alt="v1 版图" loading="lazy"><figcaption>v1 · 0.64 mm²</figcaption></figure>
+      <figure><img src="images/sha256_v2_layout.png" alt="v2 版图" loading="lazy"><figcaption>v2 · 0.49 mm²</figcaption></figure>
+      <figure><img src="images/sha256_v3_layout.png" alt="v3 版图" loading="lazy"><figcaption>v3 · 三级流水</figcaption></figure>
+      <figure><img src="images/sha256_v4_layout.png" alt="v4 版图" loading="lazy"><figcaption>v4 · 40.65% 利用率</figcaption></figure>
+      <figure><img src="images/sha256_v5_layout.png" alt="v5 版图" loading="lazy"><figcaption>v5 · 三 corner 通过</figcaption></figure>
+      <figure><img src="images/sha256_v6_layout.png" alt="v6 版图" loading="lazy"><figcaption>v6 · 43.9 MHz 边界</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>验证：四层可核对的证据</h2>
+    <p class="sub">正确性有绝对标准 —— SHA-256 的输出可以用 Python <code>hashlib</code> 逐位比对。</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>L1 · 逻辑对照</h3>
+        <p><b>11/11 PASS</b>。RTL 行为模型与软件实现在同一批输入下逐位一致。</p>
+      </div>
+      <div class="card">
+        <h3>L2 · 核心仿真</h3>
+        <p><b>12/12 PASS</b>。iverilog 跑 12 组测试向量，覆盖空串与边界长度。</p>
+      </div>
+      <div class="card">
+        <h3>L3 · 顶层握手</h3>
+        <p><b>3/3 PASS</b>（v1/v2 为 2/2）。start / busy / done 时序与串行接口对齐。</p>
+      </div>
+      <div class="card">
+        <h3>物理 · 版图一致性</h3>
+        <p><b>六代全部 PASS</b>。Magic 与 KLayout 双 GDS 逐层 XOR，40 层共同层 0 差异，唯一差异是标定层 (81,14)。</p>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:22px">
+      锚点向量：<code>abc</code> = ba7816bf…、空串 = e3b0c442…、<code>fox</code> = d7a8fbb3…，全部逐位一致。
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>边界：这一页不写的东西</h2>
+    <div class="note">
+      <p><b>不是量产芯片。</b>作品集与方法论验证，商用价值为零 —— SHA-256 加速器本身没有稀缺性。</p>
+      <p><b>v1–v4 时序确实没收敛。</b>SPEF 重签核后 setup 余量全负（v4 nom -7.63 ns），按签核标准不合格。不写这一点，就是把估算当签核。</p>
+      <p><b>v5 的通过靠的是降低频率，不是提高设计能力。</b>38.46 MHz 不代表性能强，它是在该工艺下"真能签核"的工作点。</p>
+      <p><b>22.75 ns 以下预期负余量，必须改 RTL 或改工艺。</b>调约束已经没有空间。</p>
+      <p><b>未做 DFT 扫链插入，未做 ECO。</b>距离"可测、可修"的量产流程还差两环。</p>
+      <p><b>六代 flow_status 均为 failed</b>，唯一原因是 STEP 37 在 chroot 内调用 KLayout 崩溃（<code>tlFileUtils.cc:979</code>，工具自身 bug）；STEP 36 已正常产出 GDS，全部指标有效。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>仓库与下载</h2>
+    <div class="grid2">
+      <div class="card">
+        <h3>源码（双平台）</h3>
+        <p>
+          GitHub：<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">1ouxilisi/sha256-openlane-tapeout</a><br>
+          Gitee：<a href="https://gitee.com/beyond-invincibility/sha256-openlane-tapeout">beyond-invincibility/sha256-openlane-tapeout</a>
+        </p>
+      </div>
+      <div class="card">
+        <h3>Release（61 MB 完整交付包）</h3>
+        <p>
+          <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/v1.0.0">v1.0.0 附件</a><br>
+          含六代 GDS、六张版图、metrics CSV、签核汇总、XOR 报告、六代 Word 报告。
+        </p>
+      </div>
+      <div class="card">
+        <h3>工艺与工具链</h3>
+        <p>OpenLane <b>1.1.1</b> + SkyWater <b>sky130A</b>（130nm），标准单元库 <code>sky130_fd_sc_hd</code>，
+        综合 Yosys、布局布线 OpenROAD、详细布线 TritonRoute、物理验证 Magic / KLayout。</p>
+      </div>
+      <div class="card">
+        <h3>复现要点</h3>
+        <p>chroot 内从 <code>/designs</code> 根目录启动；环境变量 <code>TERM/NO_COLOR/LC_ALL/LANG/PDK_ROOT</code> 缺一不可，
+        漏 <code>LC_ALL=C</code> 会让 STEP 0 verilator lint 直接崩掉。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>数据来源：<code>designs/sha256/runs/tapeout{6,9,10,12}/reports</code>、<code>designs/sha256_v5/runs/tapeout13</code>、
+    <code>designs/sha256_v6/runs/tapeout14</code> 的 metrics.csv 与 signoff 多角 STA 报告。</p>
+    <p>版权：软件部分 Apache-2.0，硬件部分 CERN-OHL-P-2.0。仓库内不含 PDK，请用 volare 自行启用 sky130A。</p>
+  </div>
+</footer>
+
+</body>
+</html>
