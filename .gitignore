@@ -1,0 +1,32 @@
+# 忽略大型构建产物与 PDK，避免提交进仓库
+# PDK 体积巨大，按 README 指引自行用 volare 启用
+pdk/
+
+# OpenLane 运行产物（GDS / 报告 / 中间文件），通过 Release 附件提供
+out/
+designs/sha256/runs/
+*.gds
+*.def
+*.odb
+*.spef
+*.sdc
+*.log
+
+# 大体积二进制与交付包
+*.zip
+*.tar.gz
+
+# Python 缓存
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# 本地工具
+tools/iverilog_setup.exe
+tools/7zr.exe
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
