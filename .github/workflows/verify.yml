@@ -1,7 +1,8 @@
 name: verify
 
-# 四层质量门：功能回归（RTL 仿真）+ 测试向量独立核对（Python hashlib）
-# + 静态 lint（verilator）。每次 push / PR 都跑。
+# 五层质量门：功能回归（v6 串行接口 + v7 AXI4-Lite）
+# + 测试向量独立核对（Python hashlib）+ 两代静态 lint（verilator）。
+# 每次 push / PR 都跑。
 on:
   push:
   pull_request:
@@ -22,8 +23,14 @@ jobs:
       - name: 校验测试向量（独立于 RTL，用 Python hashlib 计算）
         run: python3 scripts/check_vectors.py
 
-      - name: 跑 RTL 功能回归（三条锚点向量）
+      - name: 跑 v6 功能回归（三条锚点向量，串行接口）
         run: bash scripts/verify.sh
 
-      - name: 静态 Lint（verilator，位宽扩展告警已按版本豁免）
+      - name: 跑 v7 功能回归（AXI4-Lite + 多块流式）
+        run: bash scripts/verify_v7.sh
+
+      - name: 静态 Lint v6（verilator，位宽扩展告警已按版本豁免）
         run: bash scripts/lint_check.sh
+
+      - name: 静态 Lint v7（verilator，要求零告警）
+        run: bash scripts/lint_v7.sh
