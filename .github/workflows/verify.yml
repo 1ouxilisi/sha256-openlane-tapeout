@@ -10,7 +10,10 @@ on:
 
 jobs:
   simulate:
-    runs-on: ubuntu-22.04
+    # 24.04 的 apt verilator 是 5.x，与本地开发用的 5.018 同代；
+    # 22.04 只有 4.x，它不认识 `lint_off UNUSEDSIGNAL` 这个规则名，
+    # 会把 v7 里已显式屏蔽的两位地址告警重新报出来。
+    runs-on: ubuntu-24.04
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
