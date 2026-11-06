@@ -210,6 +210,7 @@ footer p{margin:6px 0}
       <p style="margin-top:10px">两条命令即可复现本页的功能结论，不需要 OpenLane、不需要 PDK、不需要云主机：</p>
       <p style="margin-top:10px;font-family:var(--mono);font-size:13px;background:#0b0e13;border:1px solid var(--line);border-radius:8px;padding:12px 14px;color:var(--text)">bash scripts/verify.sh<br>python3 scripts/check_vectors.py</p>
       <p style="margin-top:10px">前者用 iverilog 编译 RTL + testbench，跑 <code>abc</code> / <code>empty</code> / <code>fox</code> 三条锚点向量，输出 <code>ALL TESTS PASSED</code>；后者用 Python <code>hashlib</code> 独立复算期望值，避免“自己验自己”。两步同样跑在 GitHub Actions 上（<code>.github/workflows/verify.yml</code>），每次 push 都在干净 runner 里重跑。</p>
+      <p style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">再往上一层是可选的综合对照：<code>bash scripts/synth_check.sh</code>（需本地 <code>yosys</code> 与 sky130 liberty）把同一份 RTL 独立映射到 <code>sky130_fd_sc_hd</code>，得到 <strong>9,248 cells</strong>；而本页记录的 12,288 cells 里<strong>有 2,532 个是 <code>buf_1</code></strong>，剔掉 buffer 后净逻辑约 9,756——两者相差 5%，说明这个数字不是流程黑箱，换掉 OpenLane 也能得出同量级网表。</p>
     </div>
 
   </div>

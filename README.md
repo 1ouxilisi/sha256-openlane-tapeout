@@ -162,6 +162,16 @@ python3 scripts/check_vectors.py  # 用 Python hashlib 独立核对 testbench �
 
 仓库内置 GitHub Actions（`.github/workflows/verify.yml`），每次 push 都会在干净环境里重跑上面两步，状态见顶部 badge。这条链路的意义不是多一次仿真，而是把"我验证过"变成"你可以自己验证"。
 
+**综合层对照（可选，需本地 PDK）**
+
+```bash
+bash scripts/synth_check.sh       # 裸 yosys + sky130 liberty，输出 cells 数与面积
+```
+
+用 yosys 0.38 加 `sky130_fd_sc_hd__tt_025C_1v80.lib` 独立综合 v6 的 RTL，得到 **9,248 cells**；OpenLane 记录的综合结果是 **12,288 cells**，其中 **2,532 个是 `buf_1`**，剔除 buffer 后净逻辑约 **9,756**，两者相差 5%。也就是说 12,288 不是一个流程黑箱数字——换一套完全不依赖 OpenLane 的最小流程，也能在真实工艺库上映射出同量级网表。
+
+> 边界：裸 yosys 不插 buffer、不做时序驱动映射，也不等价于 OpenLane 的综合链，因此不追求逐单元一致；这一步只证明"可综合、可映射到 sky130"，不作通过/失败判据。它需要本地 PDK，因此没有放进 CI（避免每次 push 拉 12 MB liberty）。
+
 签核数据（SPEF/RCX 驱动三 PVT corner）：
 
 | 版本 | setup WNS min / nom / max | TNS nom | hold 最差 (nom) | 功耗 (nom) |
