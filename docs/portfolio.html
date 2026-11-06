@@ -136,6 +136,29 @@ python3 scripts/check_vectors.py</pre>
 
 <section>
   <div class="wrap">
+    <h2>我怎么干活</h2>
+    <p class="sub">既然身份是「驱动 AI 干活的人」，该展示的不是我知道多少，是我每次怎么组织一次工作。</p>
+    <table>
+      <tr><th style="width:22%">一步</th><th>做什么</th></tr>
+      <tr><td><b>1 定目标</b></td><td>一句话说清要什么。「做出一个能打开的 GDS」，不是「研究一下」——目标得能被别人复述。</td></tr>
+      <tr><td><b>2 划边界</b></td><td>同时说清不做什么：不量产、不做 DFT 扫链、不追完美。边界不写，工期就没有终点。</td></tr>
+      <tr><td><b>3 全权交出去</b></td><td>跑流程、读日志、写脚本、渲染、排版——重复劳动全交给机器。人只盯两件事：还剩什么、结论对不对。</td></tr>
+      <tr><td><b>4 判真假</b></td><td>只认互不依赖的证据，不认「我跑通了」。三条：独立复算、双工具互验、外人能一条命令证伪。</td></tr>
+      <tr><td><b>5 决定停还是继续</b></td><td>每代只改一个变量，改完先判断收益，再决定要不要下一代。不靠惯性往前推。</td></tr>
+    </table>
+    <p style="margin-top:24px;font-size:14px;color:var(--muted)"><b style="color:var(--text)">三个真实事例，都在同一件事里：</b></p>
+    <table style="margin-top:10px">
+      <tr><th style="width:38%">当时以为</th><th>实际是</th></tr>
+      <tr><td>功耗 6.84 mW 取的是最保守的 Fastest 角</td><td>其实是 Typical 角。数字没错，标签错了——比最坏情况乐观约 14%。</td></tr>
+      <tr><td>这条 RTL 到 43.9 MHz 就到底了</td><td>那是旧架构的上限。第 7 代换掉调度结构后做到 55.56 MHz。</td></tr>
+      <tr><td>四条消息跑通就算接口没问题</td><td>还得在陌生机器上用一条命令复现。CI 第 6 道门干的就是这件事。</td></tr>
+    </table>
+    <p style="margin-top:20px;font-size:14px;color:var(--muted)">我不做的事也写清楚：不亲自写每行 RTL，不盯每个日志，不为了一个更漂亮的数字再加一代。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
     <h2>我负责什么，不负责什么</h2>
     <p class="sub">边界写清楚，比能力写得漂亮更有用。</p>
     <table>
@@ -188,7 +211,7 @@ python3 scripts/check_vectors.py</pre>
 <footer>
   <div class="wrap">
     <p>署名 <b>1ouxilisi</b>（公众号：欧西1847）。一个人，不是团队。</p>
-    <p>联系：<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">GitHub</a> &nbsp;·&nbsp; <a href="https://gitee.com/beyond-invincibility/sha256-openlane-tapeout">Gitee</a> &nbsp;·&nbsp; <a href="project.html">项目页</a> &nbsp;·&nbsp; <a href="VERIFYING.md">验收手册</a> &nbsp;·&nbsp; <a href="portfolio.pdf">下载 PDF 作品集</a></p>
+    <p>联系：<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">GitHub</a> &nbsp;·&nbsp; <a href="https://gitee.com/beyond-invincibility/sha256-openlane-tapeout">Gitee</a> &nbsp;·&nbsp; <a href="project.html">项目页</a> &nbsp;·&nbsp; <a href="VERIFYING.md">验收手册</a> &nbsp;·&nbsp; <a href="portfolio.pdf">下载 6 页 PDF 作品集</a></p>
     <p style="color:#5f6b7a">本页所有数字均可在仓库对应日志里查到；跑不通的命令，欢迎直接说它是假的。</p>
   </div>
 </footer>
