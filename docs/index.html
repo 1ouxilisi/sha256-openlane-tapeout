@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SHA-256 加速器 · 零成本开源流片（sky130A · OpenLane）</title>
-<meta name="description" content="OpenLane 1.1.1 + SkyWater sky130A 零成本流片：一颗 SHA-256 加速器从 RTL 到 GDS 的六代迭代，v5/v6 三 PVT corner 时序签核全通过，可达边界 22.75 ns（43.9 MHz）。">
+<meta name="description" content="OpenLane 1.1.1 + SkyWater sky130A 零成本流片：一颗 SHA-256 加速器从 RTL 到 GDS 的七代迭代，v5/v6/v7 三代三 PVT corner 时序签核全通过；v7 换掉消息调度结构后，同 die 从 41.67 MHz 推到 55.56 MHz（18 ns 三 corner 仍全正余量）。">
 <style>
 :root{
   --bg:#0e1116; --panel:#161a21; --panel2:#1c222b; --line:#2a323d;
@@ -80,21 +80,21 @@ footer p{margin:6px 0}
     <h1>零成本把 SHA-256 <span>从 Verilog 做到 GDS</span></h1>
     <p class="lead">
       没有商业 EDA 授权，没有流片预算，没有制造排期。用 OpenLane 1.1.1 与 SkyWater 130nm 开源 PDK，
-      把一颗 SHA-256 加速器真实地做到可打开的 GDSII 版图 —— 六代迭代，每代解决一个真问题，
-      最后把这条设计的时序边界量到了 <b style="color:var(--text)">22.75 ns</b>。
+      把一颗 SHA-256 加速器真实地做到可打开的 GDSII 版图 —— 七代迭代，每代解决一个真问题，
+      最后换掉消息调度结构，把“这条 RTL 到 43.9 MHz 就到底了”这句话亲自推掉。
     </p>
     <div class="kpi">
-      <div><b>43.9 MHz</b><small>反推可达边界</small></div>
-      <div><b>41.67 MHz</b><small>v6 签核工作点</small></div>
-      <div><b>0.4096 mm²</b><small>640 × 640 µm die</small></div>
-      <div><b>0 DRC</b><small>六代全 0 违例</small></div>
+      <div><b>55.56 MHz</b><small>v7 签核工作点（18 ns）</small></div>
+      <div><b>+33%</b><small>同 die 相对 v6 提频</small></div>
+      <div><b>0.4096 mm²</b><small>640 × 640 µm die · 11,475 cells</small></div>
+      <div><b>0 DRC</b><small>七代全 0 违例</small></div>
     </div>
   </div>
 </header>
 
 <section>
   <div class="wrap">
-    <h2>六代演进：每代只解决一个问题</h2>
+    <h2>七代演进：每代只解决一个问题</h2>
     <p class="sub">不是调参刷数字。每一代的起点都是上一代暴露的一个具体缺陷。</p>
     <div class="tl">
       <div class="item">
@@ -131,7 +131,18 @@ footer p{margin:6px 0}
         <h3>v6 · 只压约束，测出余量还剩多少<em>tapeout14</em></h3>
         <p>v5 余量是真富余还是取整碰巧？v6 把 v5 配置一字不动，只把周期从 26.0 改成 <b>24.0 ns（41.67 MHz）</b>，干净的单变量对照。
         三 corner 仍全为正：<b>+3.08 / +2.12 / +1.25 ns</b>，hold 稳定 +0.43，功耗 6.84 mW（+8.4%，频率 +8.3%，基本线性）。
-        把最紧角 1.25 ns 加回周期，得 <b>22.75 ns ≈ 43.9 MHz</b> —— 这就是这条 RTL 在 sky130A 上的定量边界。</p>
+        把最紧角 1.25 ns 加回周期，得 <b>22.75 ns ≈ 43.9 MHz</b> —— 这就是这条 RTL 在 sky130A 上的定量边界。
+        <b>但它只是"这条 RTL"的边界，v7 把它推掉了。</b></p>
+      </div>
+      <div class="item">
+        <h3>v7 · 换结构，而不是继续试探约束<em>tapeout15 / tapeout16</em></h3>
+        <p>前六代都在同一套 RTL 上压约束。v7 换掉消息调度：<code>W</code> 从 16 深循环窗口（<code>(t-k)%16</code> 动态索引）改成 16 级移位寄存器，
+        索引退化为固定连线，<code>mux2_2</code> 从 <b>2,239 降到 685</b>（mux 总数 -64.5%），逻辑单元 <b>12,288 → 11,475</b>。
+        同时加 <code>h_in/h_out</code> 链值接口做多块流式，顶层换成 <b>AXI4-Lite</b> 从接口。</p>
+        <p>先在 <b>24.0 ns</b> 跑一代做可比对照：面积小 6.6%，三 corner 余量从 +1.25 放大到 <b>+6.44</b>，说明关键路径真的短了。
+        于是再压到 <b>18.0 ns</b>：三 corner 仍全正（<b>+1.03 / +0.80 / +0.56</b>，hold ≈ +0.40，TNS 0），
+        <b>55.56 MHz</b> —— 同一块 0.4096 mm² 的 die、同一个库、同一个时钟端口，比 v6 快 <b>33%</b>。</p>
+        <p>代价如实记：功耗 6.84 → 9.41 mW（频率 +33%，单位频率功耗基本持平），<b>v7 买到的是更快、更小、能集成，不是更省电</b>。</p>
       </div>
     </div>
   </div>
@@ -151,23 +162,26 @@ footer p{margin:6px 0}
         <tr><td>v3</td><td>17.19</td><td>58.17</td><td>-6.45 / -7.19 / -7.97</td><td>-637.46</td><td>-0.16</td><td>15.1</td><td class="fail">不合格</td></tr>
         <tr><td>v4</td><td>17.63</td><td>56.72</td><td>-6.63 / -7.63 / -8.44</td><td>-570.30</td><td>-0.45</td><td>16.3</td><td class="fail">不合格</td></tr>
         <tr><td>v5</td><td>26.00</td><td>38.46</td><td>0.00 / 0.00 / 0.00</td><td>0.00</td><td>+0.43</td><td>6.31</td><td class="pass">通过</td></tr>
-        <tr class="hl"><td><b>v6</b></td><td><b>24.00</b></td><td><b>41.67</b></td><td><b>0.00 / 0.00 / 0.00</b></td><td><b>0.00</b></td><td><b>+0.43</b></td><td><b>6.84</b></td><td class="pass">通过</td></tr>
+        <tr><td>v6</td><td>24.00</td><td>41.67</td><td>+3.08 / +2.12 / +1.25</td><td>0.00</td><td>+0.43</td><td>6.84</td><td class="pass">通过</td></tr>
+        <tr><td>v7 · 24 ns 口径</td><td>24.00</td><td>41.67</td><td>+6.94 / +6.70 / +6.44</td><td>0.00</td><td>+0.40</td><td>7.06</td><td class="pass">通过</td></tr>
+        <tr class="hl"><td><b>v7 · 最终</b></td><td><b>18.00</b></td><td><b>55.56</b></td><td><b>+1.03 / +0.80 / +0.56</b></td><td><b>0.00</b></td><td><b>+0.40</b></td><td><b>9.41</b></td><td class="pass">通过</td></tr>
       </tbody>
     </table>
     <p class="sub" style="margin-top:18px">
-      v5 / v6 的 setup 余量：v5 +5.00（rcx_min）/ +4.03（rcx_nom）/ +3.12（rcx_max）；
-      v6 +3.08 / +2.12 / +1.25。功耗 6.31 → 6.84 mW 与 v4 的 16.3 mW 不可直比（工作频率不同）。
+      v5 / v6 / v7 的 setup 余量：v5 +5.00（rcx_min）/ +4.03（rcx_nom）/ +3.12（rcx_max）；
+      v6 +3.08 / +2.12 / +1.25；v7@24ns +6.94 / +6.70 / +6.44；v7@18ns +1.03 / +0.80 / +0.56。
+      功耗在不同频率之间不可直比：v6 6.84 mW @41.67 MHz，v7 9.41 mW @55.56 MHz，折算到每 MHz 分别是 0.164 与 0.169 mW。表中功耗取 nom corner RC 提取下的 <b>Fastest 工艺角</b>（三组里最保守的一个）；同角的 Typical / Slowest，v6 是 5.46 / 7.97 mW，v7@18ns 是 7.44 / 11.0 mW。
     </p>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <h2>版图：v6 全层渲染</h2>
-    <p class="sub">GDS 43,264,122 B，3,013,270 个多边形，bbox 0,0 – 640,640 µm。跳过金属填充层与铺满层，只渲染结构层才能看清布线。</p>
+    <h2>版图：v7 全层渲染（55.56 MHz 这一代）</h2>
+    <p class="sub">GDS 39,965,858 B，2,983,020 个多边形，bbox 0,0 – 640,640 µm。跳过金属填充层与铺满层，只渲染结构层才能看清布线。</p>
     <figure>
-      <img src="images/sha256_v6_layout.png" alt="v6 GDS 版图渲染（sky130A，640×640 µm）" loading="lazy">
-      <figcaption>物料：<code>results/signoff/sha256_top.magic.gds</code> · 渲染：gdspy + matplotlib · 双工具 XOR 40 层共同层 0 差异</figcaption>
+      <img src="images/sha256_v7_layout.png" alt="v7 GDS 版图渲染（sky130A，640×640 µm，55.56 MHz）" loading="lazy">
+      <figcaption>物料：<code>results/signoff/sha256_axil.magic.gds</code> · 渲染：gdspy + matplotlib · 双工具 XOR 41 层共同层 0 差异</figcaption>
     </figure>
     <div class="thumbs">
       <figure><img src="images/sha256_v1_layout.png" alt="v1 版图" loading="lazy"><figcaption>v1 · 0.64 mm²</figcaption></figure>
@@ -175,14 +189,15 @@ footer p{margin:6px 0}
       <figure><img src="images/sha256_v3_layout.png" alt="v3 版图" loading="lazy"><figcaption>v3 · 三级流水</figcaption></figure>
       <figure><img src="images/sha256_v4_layout.png" alt="v4 版图" loading="lazy"><figcaption>v4 · 40.65% 利用率</figcaption></figure>
       <figure><img src="images/sha256_v5_layout.png" alt="v5 版图" loading="lazy"><figcaption>v5 · 三 corner 通过</figcaption></figure>
-      <figure><img src="images/sha256_v6_layout.png" alt="v6 版图" loading="lazy"><figcaption>v6 · 43.9 MHz 边界</figcaption></figure>
+      <figure><img src="images/sha256_v6_layout.png" alt="v6 版图" loading="lazy"><figcaption>v6 · 41.67 MHz</figcaption></figure>
+      <figure><img src="images/sha256_v7_layout.png" alt="v7 版图" loading="lazy"><figcaption>v7 · 55.56 MHz</figcaption></figure>
     </div>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <h2>验证：四层可核对的证据</h2>
+    <h2>验证：五层可核对的证据</h2>
     <p class="sub">正确性有绝对标准 —— SHA-256 的输出可以用 Python <code>hashlib</code> 逐位比对。</p>
     <div class="grid2">
       <div class="card">
@@ -199,7 +214,11 @@ footer p{margin:6px 0}
       </div>
       <div class="card">
         <h3>物理 · 版图一致性</h3>
-        <p><b>六代全部 PASS</b>。Magic 与 KLayout 双 GDS 逐层 XOR，40 层共同层 0 差异，唯一差异是标定层 (81,14)。</p>
+        <p><b>七代全部 PASS</b>。Magic 与 KLayout 双 GDS 逐层 XOR，40/41 层共同层 0 差异，唯一差异是标定层 (81,14)。</p>
+      </div>
+      <div class="card">
+        <h3>L3+ / L4 · v7 新增</h3>
+        <p>压缩核 <b>3/3 PASS</b>（abc / empty / fox，含一条"v6 与 v7 同输入并排跑逐位一致"的对照）；AXI4-Lite 顶层 <b>2/2 PASS</b>（含两块流式链值）；<code>verilator 5.018 --lint-only -Wall</code> 对 v7 是 <b>0 error / 0 warning</b>。</p>
       </div>
     </div>
     <p class="sub" style="margin-top:22px">
@@ -210,7 +229,7 @@ footer p{margin:6px 0}
       <p style="margin-top:10px">两条命令即可复现本页的功能结论，不需要 OpenLane、不需要 PDK、不需要云主机：</p>
       <p style="margin-top:10px;font-family:var(--mono);font-size:13px;background:#0b0e13;border:1px solid var(--line);border-radius:8px;padding:12px 14px;color:var(--text)">bash scripts/verify.sh<br>python3 scripts/check_vectors.py</p>
       <p style="margin-top:10px">前者用 iverilog 编译 RTL + testbench，跑 <code>abc</code> / <code>empty</code> / <code>fox</code> 三条锚点向量，输出 <code>ALL TESTS PASSED</code>；后者用 Python <code>hashlib</code> 独立复算期望值，避免“自己验自己”。两步同样跑在 GitHub Actions 上（<code>.github/workflows/verify.yml</code>），每次 push 都在干净 runner 里重跑。</p>
-      <p style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">再往上一层是可选的综合对照：<code>bash scripts/synth_check.sh</code>（需本地 <code>yosys</code> 与 sky130 liberty）把同一份 RTL 独立映射到 <code>sky130_fd_sc_hd</code>，得到 <strong>9,248 cells</strong>；而本页记录的 12,288 cells 里<strong>有 2,532 个是 <code>buf_1</code></strong>，剔掉 buffer 后净逻辑约 9,756——两者相差 5%，说明这个数字不是流程黑箱，换掉 OpenLane 也能得出同量级网表。</p>
+      <p style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">再往上一层是可选的综合对照：<code>bash scripts/synth_check.sh</code>（需本地 <code>yosys</code> 与 sky130 liberty）把同一份 RTL 独立映射到 <code>sky130_fd_sc_hd</code>，v6 得到 <strong>9,248 cells</strong>；而本页记录的 12,288 cells 里<strong>有 2,532 个是 <code>buf_1</code></strong>，剔掉 buffer 后净逻辑约 9,756——两者相差 5%，说明这个数字不是流程黑箱，换掉 OpenLane 也能得出同量级网表。v7 我也用同一条流程复跑了一次，结论是这个对照<b>不成立</b>：不加 DFF 库映射时 v6 得 9,248、v7 得 14,375；补上 <code>dfflibmap</code> 后 v6 得 10,842、v7 得 11,604——两套结果与 OpenLane 的 12,288 vs 11,475 <b>符号相反</b>。说明裸综合的可比性取决于有没有做 DFF 库映射和用什么 abc 策略，它只够证明“这条 RTL 能独立综合进 sky130 标准单元库”，不足以用来判断 v6 与 v7 谁更小。<b>这里把失败的复现如实写出来，而不是只留 v6 那次漂亮的数字。</b></p>
     </div>
 
   </div>
@@ -223,9 +242,11 @@ footer p{margin:6px 0}
       <p><b>不是量产芯片。</b>作品集与方法论验证，商用价值为零 —— SHA-256 加速器本身没有稀缺性。</p>
       <p><b>v1–v4 时序确实没收敛。</b>SPEF 重签核后 setup 余量全负（v4 nom -7.63 ns），按签核标准不合格。不写这一点，就是把估算当签核。</p>
       <p><b>v5 的通过靠的是降低频率，不是提高设计能力。</b>38.46 MHz 不代表性能强，它是在该工艺下"真能签核"的工作点。</p>
-      <p><b>22.75 ns 以下预期负余量，必须改 RTL 或改工艺。</b>调约束已经没有空间。</p>
+      <p><b>22.75 ns 是"v6 那套 RTL"的边界，不是工艺边界。</b>v7 换掉消息调度后，18 ns 三 corner 仍全正余量（最紧 +0.56 ns）。把架构上限说成工艺上限，是这个项目前六代差点犯的错。</p>
+      <p><b>v7 没有变省电。</b>频率 +33%、功耗 +37%，单位频率功耗基本持平；每块能耗反而更差。它不是能效优化的一代。</p>
+      <p><b>吞吐仍然很低。</b>约 15 MB/s，比带 SHA-NI 的 CPU 慢两个数量级；多块流式省的是软件搬运，不是算力。padding 仍由软件完成。</p>
       <p><b>未做 DFT 扫链插入，未做 ECO。</b>距离"可测、可修"的量产流程还差两环。</p>
-      <p><b>六代 flow_status 均为 failed</b>，唯一原因是 STEP 37 在 chroot 内调用 KLayout 崩溃（<code>tlFileUtils.cc:979</code>，工具自身 bug）；STEP 36 已正常产出 GDS，全部指标有效。</p>
+      <p><b>七代 flow_status 均为 failed</b>，唯一原因是 STEP 37 在 chroot 内调用 KLayout 崩溃（<code>tlFileUtils.cc:979</code>，工具自身 bug）；STEP 36 已正常产出 GDS，全部指标有效。</p>
     </div>
   </div>
 </section>
@@ -245,7 +266,7 @@ footer p{margin:6px 0}
         <h3>Release（61 MB 完整交付包）</h3>
         <p>
           <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/v1.0.0">v1.0.0 附件</a><br>
-          含六代 GDS、六张版图、metrics CSV、签核汇总、XOR 报告、六代 Word 报告。
+          含七代 GDS、七张版图、metrics CSV、签核汇总、XOR 报告、六代 Word 报告。
         </p>
       </div>
       <div class="card">
@@ -260,7 +281,7 @@ footer p{margin:6px 0}
       </div>
       <div class="card">
         <h3>设计说明（RTL 架构）</h3>
-        <p>顶层握手时序、压缩核三级流水每拍在算什么、<code>W</code> 窗口为什么吃掉 18.2% 的单元面积、三个频率数字（<code>critical_path</code> 8.2 ns 内部估算 / signoff 22.75 ns 上限 / 约束 24.0 ns）分别是什么口径，以及六条已知限制。<br>
+        <p>v1–v6 的握手时序与三级流水每拍在算什么、<code>W</code> 窗口为什么曾吃掉 18.2% 的单元面积、v7 怎么把它换成移位寄存器（mux -64.5%、面积 -6.6%、功耗 +3.2%）、AXI4-Lite 寄存器映射与多块流式握手，以及第 10 节的 v7 取舍表。<br>
         仓库内 <code>docs/ARCHITECTURE.md</code> · <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/blob/master/docs/ARCHITECTURE.md">在 GitHub 阅读</a></p>
       </div>
     </div>
@@ -270,7 +291,8 @@ footer p{margin:6px 0}
 <footer>
   <div class="wrap">
     <p>数据来源：<code>designs/sha256/runs/tapeout{6,9,10,12}/reports</code>、<code>designs/sha256_v5/runs/tapeout13</code>、
-    <code>designs/sha256_v6/runs/tapeout14</code> 的 metrics.csv 与 signoff 多角 STA 报告。</p>
+    <code>designs/sha256_v6/runs/tapeout14</code>、<code>designs/sha256_v7/runs/tapeout15</code>、
+    <code>designs/sha256_v7b/runs/tapeout16</code> 的 metrics.csv 与 signoff 多角 STA 报告。</p>
     <p>版权：软件部分 Apache-2.0，硬件部分 CERN-OHL-P-2.0。仓库内不含 PDK，请用 volare 自行启用 sky130A。</p>
   </div>
 </footer>
