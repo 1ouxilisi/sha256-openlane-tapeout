@@ -5,11 +5,18 @@ SHA-256 加速器 · 三 PVT corner 时序与功耗签核汇总
 功耗：同目录 multi_corner_sta.power.rpt（Internal / Switching / Leakage / Total）
 
 时序（ns）
-版本	Run		WNS min	WNS nom	WNS max	TNS nom		Hold worst (nom)
-v1	tapeout6	-14.97	-15.92	-16.84	-4286.12	-0.33
-v2	tapeout9	-7.74	-8.71	-9.62	-711.56		-0.24
-v3	tapeout10	-6.45	-7.19	-7.97	-637.46		-0.16
-v4	tapeout12	-6.63	-7.63	-8.44	-570.30		-0.45
+版本	Run		WNS min	WNS nom	WNS max	TNS nom		Hold worst (nom)	判定
+v1	tapeout6	-14.97	-15.92	-16.84	-4286.12	-0.33		不合格
+v2	tapeout9	-7.74	-8.71	-9.62	-711.56		-0.24	不合格
+v3	tapeout10	-6.45	-7.19	-7.97	-637.46		-0.16	不合格
+v4	tapeout12	-6.63	-7.63	-8.44	-570.30		-0.45	不合格
+v5	tapeout13	+5.00	+4.03	+3.12	0.00		+0.43	合格
+
+v5 三 corner 明细（multi_corner_sta.summary.rpt）
+corner			WNS	TNS	setup worst	hold worst
+29-sta-rcx_min		0.00	0.00	+5.00 ns	+0.43 ns
+31-sta-rcx_max		0.00	0.00	+3.12 ns	+0.44 ns
+33-sta-rcx_nom		0.00	0.00	+4.03 ns	+0.43 ns
 
 功耗（nom corner）
 版本	Run		Internal	Switching	Leakage		Total
@@ -17,17 +24,16 @@ v1	tapeout6	7.52e-03 W	3.30e-03 W	1.52e-06 W	1.08e-02 W (10.8 mW)
 v2	tapeout9	1.08e-02 W	4.19e-03 W	5.28e-07 W	1.50e-02 W (15.0 mW)
 v3	tapeout10	1.10e-02 W	4.11e-03 W	5.21e-07 W	1.51e-02 W (15.1 mW)
 v4	tapeout12	1.21e-02 W	4.24e-03 W	5.20e-07 W	1.63e-02 W (16.3 mW)
+v5	tapeout13	4.67e-03 W	1.64e-03 W	5.30e-07 W	6.31e-03 W (6.31 mW)
 
-v4 功耗构成（nom）
-Sequential Power	7.93e-03 W	48.6%
-Combinational Power	3.81e-04 W	2.3%
-Clock Power		8.03e-03 W	49.1%
-Macro / Pad		0		0.0%
-Internal		1.21e-02 W	74.1%
-Switching		4.24e-03 W	25.9%
-Leakage			5.20e-07 W	0.0%
+v4 功耗构成（nom）			v5 功耗构成（nom）
+Sequential	7.93e-03 W 48.6%	Sequential	3.04e-03 W 48.2%
+Combinational	3.81e-04 W 2.3%	Combinational	1.77e-04 W 2.8%
+Clock		8.03e-03 W 49.1%	Clock		3.09e-03 W 49.0%
 
-结论：功耗 97.7% 集中在时钟树与触发器，组合逻辑仅 2.3%。
+结论：v4 功耗 97.7%、v5 功耗 97.2% 集中在时钟树与触发器，组合逻辑不足 3%。
 说明：58 MHz 边界来自工艺（寄存器 CK-to-Q + 布线 RC），优化组合逻辑既不提频也不省电。
-已知项：三 corner setup 余量均为负，hold 最差 -0.45 ns（v4 nom）；未做时序 ECO 与 hold fix。
+v5 解决方式：CLOCK_PERIOD 10.0 -> 26.0，加 setup 0.30 ns / hold 0.40 ns resizer 余量；
+	      RTL、die、综合策略均未改动，三 corner 时序全部转正。
+已知项：v5 功耗 6.31 mW 与 v4 16.3 mW 频率不同不可直比；未做 DFT 插入与更高频率加压收敛。
 =======================================================
