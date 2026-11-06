@@ -1,0 +1,33 @@
+SHA-256 加速器 · 三 PVT corner 时序与功耗签核汇总
+=======================================================
+来源：OpenLane 1.1.1 runs/<tag>/reports/signoff/{29-sta-rcx_min,31-sta-rcx_max,33-sta-rcx_nom}
+方法：RCX 寄生提取（SPEF）驱动的多角 STA（OpenROAD report_wns / report_tns / report_worst_slack）
+功耗：同目录 multi_corner_sta.power.rpt（Internal / Switching / Leakage / Total）
+
+时序（ns）
+版本	Run		WNS min	WNS nom	WNS max	TNS nom		Hold worst (nom)
+v1	tapeout6	-14.97	-15.92	-16.84	-4286.12	-0.33
+v2	tapeout9	-7.74	-8.71	-9.62	-711.56		-0.24
+v3	tapeout10	-6.45	-7.19	-7.97	-637.46		-0.16
+v4	tapeout12	-6.63	-7.63	-8.44	-570.30		-0.45
+
+功耗（nom corner）
+版本	Run		Internal	Switching	Leakage		Total
+v1	tapeout6	7.52e-03 W	3.30e-03 W	1.52e-06 W	1.08e-02 W (10.8 mW)
+v2	tapeout9	1.08e-02 W	4.19e-03 W	5.28e-07 W	1.50e-02 W (15.0 mW)
+v3	tapeout10	1.10e-02 W	4.11e-03 W	5.21e-07 W	1.51e-02 W (15.1 mW)
+v4	tapeout12	1.21e-02 W	4.24e-03 W	5.20e-07 W	1.63e-02 W (16.3 mW)
+
+v4 功耗构成（nom）
+Sequential Power	7.93e-03 W	48.6%
+Combinational Power	3.81e-04 W	2.3%
+Clock Power		8.03e-03 W	49.1%
+Macro / Pad		0		0.0%
+Internal		1.21e-02 W	74.1%
+Switching		4.24e-03 W	25.9%
+Leakage			5.20e-07 W	0.0%
+
+结论：功耗 97.7% 集中在时钟树与触发器，组合逻辑仅 2.3%。
+说明：58 MHz 边界来自工艺（寄存器 CK-to-Q + 布线 RC），优化组合逻辑既不提频也不省电。
+已知项：三 corner setup 余量均为负，hold 最差 -0.45 ns（v4 nom）；未做时序 ECO 与 hold fix。
+=======================================================
