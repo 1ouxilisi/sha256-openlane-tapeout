@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>作品集 · 1ouxilisi —— 驱动 AI 干活的人</title>
+<meta name="description" content="一个人的作品集：一个完整闭环（SHA-256 芯片从 RTL 到 GDS，七代迭代）、一套能被外人证伪的验收结构、一份写了自己踩过哪些坑的验收手册。">
+<style>
+:root{
+  --bg:#0e1116; --panel:#161a21; --panel2:#1c222b; --line:#2a323d;
+  --text:#e8edf4; --muted:#8d9aab; --accent:#4ade80; --accent2:#38bdf8; --warn:#fbbf24;
+  --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.9em;background:#0b0e13;border:1px solid var(--line);
+  padding:1px 5px;border-radius:4px}
+nav{border-bottom:1px solid var(--line);padding:14px 0;font-family:var(--mono);font-size:12.5px;
+  color:var(--muted);letter-spacing:.04em}
+nav .wrap{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+nav a{color:var(--muted)} nav a:hover{color:var(--accent)}
+header{border-bottom:1px solid var(--line);padding:64px 0 48px;
+  background:radial-gradient(1200px 400px at 20% -10%,rgba(74,222,128,.10),transparent 70%),var(--bg)}
+.tag{display:inline-block;font-family:var(--mono);font-size:12px;letter-spacing:.08em;
+  color:var(--accent);border:1px solid rgba(74,222,128,.35);border-radius:999px;padding:4px 12px;margin-bottom:20px}
+h1{font-size:40px;line-height:1.25;margin:0 0 16px;font-weight:700;letter-spacing:-.01em}
+h1 span{color:var(--accent)}
+.lead{font-size:17px;color:var(--muted);max-width:800px;margin:0}
+.kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:40px}
+.kpi div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 16px}
+.kpi b{display:block;font-size:24px;font-family:var(--mono);color:var(--accent);letter-spacing:-.02em}
+.kpi small{display:block;color:var(--muted);font-size:12px;margin-top:6px;letter-spacing:.04em}
+section{padding:56px 0;border-bottom:1px solid var(--line)}
+h2{font-size:22px;margin:0 0 8px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:4px;height:18px;background:var(--accent);border-radius:2px;display:inline-block}
+.sub{color:var(--muted);font-size:14px;margin:0 0 28px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border-radius:10px;overflow:hidden}
+th,td{padding:11px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:#1b222c;color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.04em}
+tr:last-child td{border-bottom:none}
+td b{color:var(--text)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.card h3{margin:0 0 10px;font-size:15px;color:var(--accent)}
+.card p{margin:0 0 8px;color:var(--muted);font-size:14px}
+.card p b{color:var(--text)}
+.card p:last-child{margin-bottom:0}
+pre{font-family:var(--mono);font-size:13px;background:#0b0e13;border:1px solid var(--line);
+  border-radius:8px;padding:14px 16px;color:var(--text);overflow-x:auto;margin:0}
+.note{border-left:3px solid var(--warn);background:rgba(251,191,36,.06);padding:14px 18px;border-radius:0 8px 8px 0}
+.note p{margin:6px 0;font-size:14px;color:#d9dee6}
+footer{padding:40px 0 64px;color:var(--muted);font-size:13px}
+footer p{margin:6px 0}
+@media(max-width:760px){
+  h1{font-size:28px} .kpi{grid-template-columns:1fr 1fr}
+  .grid3,.grid2{grid-template-columns:1fr} table{font-size:12px} th,td{padding:8px 8px}
+}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <span>1OUXILISI · PORTFOLIO</span>
+  <span><a href="index.html">项目详情 →</a> &nbsp;·&nbsp; <a href="VERIFYING.md">验收手册</a> &nbsp;·&nbsp; <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">GitHub</a></span>
+</div></nav>
+
+<header>
+  <div class="wrap">
+    <div class="tag">PORTFOLIO · 一个人 · 用 AI 干活</div>
+    <h1>我不是工程师，<br>我是<span>把事做成、并让它可被验证</span>的人</h1>
+    <p class="lead">
+      四年工业岗位之后离职，现在一个人做。我的工作不是亲手画版图、不是自己跑每一条命令——
+      那些重复劳动全部交给 AI 和脚本。我负责三件交不出去的事：<b>定目标与边界</b>、<b>判断交出来的东西是真是假</b>、<b>判断什么时候停</b>。
+      下面这个项目，就是我用一件事证明这三件事的方式。
+    </p>
+    <div class="kpi">
+      <div><b>1</b><small>完整闭环：RTL → GDS 全流程</small></div>
+      <div><b>7 代</b><small>每代只解决一个真问题</small></div>
+      <div><b>6 道</b><small>质量门，每次提交自动重跑</small></div>
+      <div><b>1 条</b><small>命令，外人不看文档就能证伪</small></div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>案例：一颗真的做出来了的 SHA-256 芯片</h2>
+    <p class="sub">没有商业 EDA 授权，没有流片预算，没有制造排期。OpenLane 1.1.1 + SkyWater sky130A，全开源工具链。</p>
+    <table>
+      <tr><th>项目</th><th>结果</th></tr>
+      <tr><td>最终工作点</td><td><b>55.56 MHz</b>（18 ns，三 corner setup/hold 全正）</td></tr>
+      <tr><td>面积 / 单元</td><td><b>0.4096 mm²</b>（640 × 640 µm die）· <b>11,475 cells</b> · 利用率 45.77%</td></tr>
+      <tr><td>物理验证</td><td><b>DRC 0</b>，七代全 0 违例；Magic 与 KLayout 双 GDS 逐层 XOR 零结构差异</td></tr>
+      <tr><td>第 7 代做了什么</td><td>换掉消息调度结构（16 深循环窗口 → 移位寄存器），同 die 从 41.67 MHz 提到 <b>55.56 MHz（+33%）</b>，cells 反而从 12,288 降到 11,475</td></tr>
+      <tr><td>被这个结果推翻的话</td><td>项目早期文档里写着「43.9 MHz 是这条 RTL 的上限」——那是旧架构的上限，不是工艺的上限</td></tr>
+    </table>
+    <div class="note" style="margin-top:22px">
+      <p><b>没做成的部分也在这页上。</b>v1–v4 时序没收敛（v4 nom setup 余量 -7.63 ns，按签核标准不合格）；裸综合对照与 OpenLane 结论符号相反；功耗角名一度标错（6.84 mW 是 Typical 不是 Fastest）。这些不是我丢人的地方，是我判断力的来源。</p>
+    </div>
+    <p style="margin-top:22px;font-size:14px"><a href="index.html">→ 项目完整页（七代数据、签字报告、版图）</a> &nbsp;·&nbsp; <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">→ GitHub 仓库</a></p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>这份交付凭什么可信</h2>
+    <p class="sub">不是「我写它通过它就通过」。三条互不依赖的证据链，任一条断了这个结论就站不住。</p>
+    <div class="grid3">
+      <div class="card">
+        <h3>① 结构可信</h3>
+        <p>仓库每次 push，在干净的 Ubuntu runner 上重跑 6 道门：功能回归 v6 / v7、独立向量校验、两代静态 lint、<b>驱动级三方对照</b>。</p>
+        <p>任何人都能看到跑没跑过、绿没绿。</p>
+      </div>
+      <div class="card">
+        <h3>② 数字可信</h3>
+        <p>期望摘要由 Python <code>hashlib</code> 独立算，不用我自己写的常量；两个版图工具出的 GDS 逐层 XOR，不一致就报错。</p>
+        <p>自己验自己这件事，被结构性地禁掉了。</p>
+      </div>
+      <div class="card">
+        <h3>③ 外人可证伪</h3>
+        <p>不需要懂芯片，也不需要白皮书。三条命令，跑不通就是假的：</p>
+        <pre>bash scripts/verify.sh
+bash scripts/verify_driver.sh
+python3 scripts/check_vectors.py</pre>
+      </div>
+    </div>
+    <p style="margin-top:22px;font-size:14px">最后一层，是把 C 主机驱动打进验证链：C 驱动打出寄存器写序列 → Verilog 主机模型原样发到真 RTL 的 AXI4-Lite 总线上 → hashlib 算期望值。三份实现互不依赖，四条消息全过。这一层同时回答了「别人能不能接手」。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>我负责什么，不负责什么</h2>
+    <p class="sub">边界写清楚，比能力写得漂亮更有用。</p>
+    <table>
+      <tr><th style="width:26%">我负责</th><th style="width:30%">我不负责</th><th>我的判据</th></tr>
+      <tr><td>定目标、划边界、切里程碑</td><td>具体版图细节、每一行 RTL</td><td>目标是否可被一句话说清，边界是否可被外人检查</td></tr>
+      <tr><td>判断交付物真假</td><td>把自己变成工程师</td><td>有没有一条外人能不看文档推翻它的命令</td></tr>
+      <tr><td>把重复劳动交给机器</td><td>亲手跑每一条命令、盯每一个日志</td><td>换台干净机器、换个人，结论是否还一样</td></tr>
+      <tr><td>判断什么时候停</td><td>无限逼近「更完美」</td><td>再推一代的收益，是否小于它带来的不确定性</td></tr>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>这套方法能搬去哪</h2>
+    <p class="sub">能迁移的不是知识，是验收结构：每件事都有它自己的「证据载体」。</p>
+    <table>
+      <tr><th style="width:24%">领域</th><th>证据载体</th></tr>
+      <tr><td>芯片</td><td>GDS + 多角 STA 报告 + DRC + 双工具 XOR</td></tr>
+      <tr><td>机器人动作包</td><td>关节轨迹 + 正运动学复算 + 真机/仿真同帧对比</td></tr>
+      <tr><td>短剧 / 内容</td><td>成片 + 分镜与成片逐镜一致 + 素材授权链</td></tr>
+      <tr><td>汽修手册</td><td>车型/年款/扭矩值可溯源 + 实车一步一验</td></tr>
+      <tr><td>财务分析</td><td>每格数字回原始报表 + 口径写明 + 可复算</td></tr>
+    </table>
+    <p style="margin-top:22px;font-size:14px">同一套六条验收动作（来源≥2 且互不依赖 / 换路径结论不变 / 单位口径写全 / 失败能定位到具体步骤 / 重跑稳定 / 存在外人能推翻它的命令）在五个领域都成立。这份东西写成了手册： <a href="VERIFYING.md">《外行验收手册》</a>。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>找我做什么</h2>
+    <p class="sub">只做能交付、且能被验证的事。</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>适合找我</h3>
+        <p>· 一件模糊的事，需要有人定目标、切里程碑，然后把它跑成<b>可验证的交付</b></p>
+        <p>· 你的团队已经在用 AI 干活，但<b>没人判断交付真假</b>——我帮你搭验收结构</p>
+        <p>· 需要一个「从零到能打开、能检查」的完整案例，而不是一份方案</p>
+      </div>
+      <div class="card">
+        <h3>不适合找我</h3>
+        <p>· 需要资质签字、需要承担法律责任的鉴定与认证</p>
+        <p>· 需要长期驻场、需要我假装是科班工程师</p>
+        <p>· 只需要「看起来很像」的素材，不需要真的能跑</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>署名 <b>1ouxilisi</b>（公众号：欧西1847）。一个人，不是团队。</p>
+    <p>联系：<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">GitHub</a> &nbsp;·&nbsp; <a href="https://gitee.com/beyond-invincibility/sha256-openlane-tapeout">Gitee</a> &nbsp;·&nbsp; <a href="index.html">项目页</a> &nbsp;·&nbsp; <a href="VERIFYING.md">验收手册</a></p>
+    <p style="color:#5f6b7a">本页所有数字均可在仓库对应日志里查到；跑不通的命令，欢迎直接说它是假的。</p>
+  </div>
+</footer>
+
+</body>
+</html>
