@@ -127,7 +127,7 @@ v7 三 corner 明细（数据取自 `logs/signoff/{29,31,33}-rcx_mcsta.{min,max,
 
 最紧 setup 余量因此是：v7@24ns **+6.44 ns**（max 角），v7@18ns **+0.56 ns**（max 角）。
 
-功耗（nom corner，SPEF 驱动）：
+功耗（nom corner，SPEF 驱动；下表合计取 **Typical 工艺角**，与 `metrics.csv` 的 `power_typical_*` 一致。同一次分析另两角：v6 Fastest 7.97 / Slowest 5.46 mW，v7@24ns 8.23 / 5.60 mW，v7@18ns 11.0 / 7.44 mW）：
 
 | 版本 | Internal | Switching | Leakage | Total |
 |---|---|---|---|---|

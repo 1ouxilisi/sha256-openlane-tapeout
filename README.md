@@ -201,7 +201,7 @@ bash scripts/synth_check.sh       # 裸 yosys + sky130 liberty，输出 cells �
 
 签核数据（SPEF/RCX 驱动三 PVT corner）：
 
-| 版本 | setup WNS min / nom / max | TNS nom | hold 最差 (nom) | 功耗 (nom) |
+| 版本 | setup WNS min / nom / max | TNS nom | hold 最差 (nom) | 功耗 (nom·Typical) |
 |---|---|---|---|---|
 | v1 | -14.97 / -15.92 / -16.84 | -4286.12 | -0.33 | 10.8 mW |
 | v2 | -7.74 / -8.71 / -9.62 | -711.56 | -0.24 | 15.0 mW |
@@ -216,7 +216,7 @@ bash scripts/synth_check.sh       # 裸 yosys + sky130 liberty，输出 cells �
 >
 > v5 功耗 6.31 mW 与 v4 的 16.3 mW 不可直接比较（频率不同），但两者结构一致：时钟树 49.0% + 触发器 48.2% = 97.2%，组合逻辑不足 3%。v6 为 6.84 mW，结构仍是时钟树 49.1% + 触发器 48.1% = 97.2%。这解释了为什么继续优化组合路径既不提频也不省电。
 >
-> **功耗口径**：表中“功耗 (nom)”指 nom corner 的 RC 提取（`33-rcx_mcsta.nom`）下 **Fastest 工艺角**（`ff_n40C_1v95.lib`）的总功耗——三组里最保守的那个。同一次分析中 v6 的 Typical / Slowest 为 5.46 / 7.97 mW，v7@24ns 为 5.60 / 8.23 mW，v7@18ns 为 7.44 / 11.0 mW。跨版本比较必须同角对同角，否则会把“换工艺角”误读成“功耗变化”。
+> **功耗口径**：表中“功耗 (nom·Typical)”指 nom corner 的 RC 提取（`33-rcx_mcsta.nom`）下 **Typical 工艺角** 的 Total，即标称工况。同一次分析的另两个角一并列出，免得口径混淆：v6 的 Fastest / Slowest 为 **7.97 / 5.46 mW**，v7@24ns 为 **8.23 / 5.60 mW**，v7@18ns 为 **11.0 / 7.44 mW**。若要以最保守（最高）口径引用，应取 Fastest 角——v7@18ns 即 11.0 mW。跨版本比较必须同角对同角，否则会把“换工艺角”误读成“功耗变化”。
 >
 > **v6 的定位**：v5 证明了"约束对就能签核"，v6 证明"余量还有多少"。v6 把周期从 26.0 ns 压到 24.0 ns，三 corner 余量由 +5.00/+4.03/+3.12 收窄为 +3.08/+2.12/+1.25 ns，仍全部为正。它不是更快的一代，而是把上一代的余量量化成一条边界：约 22.75 ns（43.9 MHz）是这条 RTL 在 sky130A 上的实际上限。
 
