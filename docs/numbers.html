@@ -236,7 +236,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
     <p class="note">为什么会多出来：版图里井与衬底是由 <b>5,496 个 <code>tapvpwrvgnd_1</code></b> 直接接到 <code>VPWR</code> / <code>VGND</code> 的，Magic 提取时把体端一律并到电源，所以版图侧根本没有 <code>VNB</code>/<code>VPB</code> 这两条网；而 <code>nl.v</code> 里这 5,496 个 tap 单元的引脚是空的（<code>();</code>），转换器整批丢掉（31,499 行），于是这两个网在网表侧成了「只在端口表里声明、没有任何器件脚连到电源」的悬空网。两边都不算错，差别只在<b>「井怎么接电源」这一层的表达方式</b>。</p>
     <p class="note">逐级验证，四个网表都真跑了：<code>pnr5</code>（原样）<b>47 行</b> → <code>pnr10</code>（只补 4 条 assign）<b>仍 47</b> → <code>pnr12</code>（只把 VNB→VGND、VPB→VPWR）<b>降到 4 个端口</b> → <code>pnr11</code>（两处都补）<b>0 行</b>。所以 <b>47 = 43 + 4</b>：43 个是 VNB/VPB 这条线上被牵连的，4 个是 assign 漏读的，两个缺口各占一段、缺一不可。</p>
     <p class="note">第 4 步的原文（判定依据）：<code>Cell pin lists are equivalent.</code> / <code>Number of devices: 166353</code> 两侧相等 / <code>Number of nets: 84178</code> 两侧相等 / <code>Netlists match uniquely.</code> / <code>Final result: Circuits match uniquely.</code> 全文 10,086 行、789,737 B，<code>(no matching pin)</code> 出现 <b>0 次</b>。</p>
-    <p class="note"><b>口径必须写在明处，不写成无条件通过</b>：① 采用 <code>VNB ≡ VGND</code>、<code>VPB ≡ VPWR</code>，依据是版图自己的事实（5,496 个 tap 把井接到电源，Magic 提取也把体端并到了这两条网）；② 比较发生在<b>展平之后</b>——叶子单元（decap 等）在这个口径下内部不逐管一致，netgen 自动展平，再按顶层 <b>166,353 个器件、84,178 条网</b>逐一对齐。所以这是「<b>顶层晶体管级等价</b>」，不是「每个标准单元内部逐管等价」；③ 另一条本该等价的路线（把 5,496 个 tap 补回网表再跑）本轮没做，如实留着。原文、四个网表的差异与复跑命令在 <a href="evidence/lvs_pass.txt">evidence/lvs_pass.txt</a>。</p>
+    <p class="note"><b>口径必须写在明处，不写成无条件通过</b>：① 采用 <code>VNB ≡ VGND</code>、<code>VPB ≡ VPWR</code>，依据是版图自己的事实（5,496 个 tap 把井接到电源，Magic 提取也把体端并到了这两条网）；② 比较发生在<b>展平之后</b>——叶子单元（decap 等）在这个口径下内部不逐管一致，netgen 自动展平，再按顶层 <b>166,353 个器件、84,178 条网</b>逐一对齐。所以这是「<b>顶层晶体管级等价</b>」，不是「每个标准单元内部逐管等价」；③ 另一条本该等价的路线（把 5,496 个 tap 补回网表再跑）<b>这一轮实跑了，做不成</b>：PDK 里 <code>tapvpwrvgnd_1</code> 的定义就两行——<code>.subckt ... VGND VPWR</code> 加空的 <code>.ends</code>，<b>没有任何器件，也没有 VNB/VPB 引脚</b>，它在 SPICE 里是电学空壳。把 5,496 个 tap 按定义补回网表重跑（3,731,922 B / 55,116 行）→ <b>仍是 47 行、Netlists do not match</b>；强行给它们加 VNB/VPB 两个脚再跑 → <b>仍是 47 行</b>。所以把井并入电源不是取巧，是这个单元定义下唯一能把「井接电源」写进网表的方式。原文、四个网表的差异、这两次对照与复跑命令在 <a href="evidence/lvs_pass.txt">evidence/lvs_pass.txt</a>。</p>
   </div>
 
   <div class="box bad">
@@ -296,7 +296,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
     <div class="fp" style="margin-top:14px">evidence/lvs_selfcheck.txt · 6,016 B<br>e2be16bc18b791c16b99030f0691d7c17f2b638748cdf4c7fdda2597cbce9bc0</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_pin_parity.txt · 7,491 B<br>42237b91ed66826eabb58405c2acedce88fa9c6262b6c7847c72e1af5a2b4a42</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_port_graph.txt · 5,278 B<br>db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13</div>
-    <div class="fp" style="margin-top:14px">evidence/lvs_pass.txt · 5,517 B<br>37329768afd8f27f5f0f900d9f0fb987973d18a2912e03c9a6fec439259c012c</div>
+    <div class="fp" style="margin-top:14px">evidence/lvs_pass.txt · 8,292 B<br>956ff1a4cc9d2db595a722be26ac7fa53b5af0f15e24af613eef56fd169aaf9f</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>
 </div></section>
