@@ -131,6 +131,11 @@ python3 scripts/check_vectors.py</pre>
       </div>
     </div>
     <p style="margin-top:22px;font-size:14px">最后一层，是把 C 主机驱动打进验证链：C 驱动打出寄存器写序列 → Verilog 主机模型原样发到真 RTL 的 AXI4-Lite 总线上 → hashlib 算期望值。三份实现互不依赖，四条消息全过。这一层同时回答了「别人能不能接手」。</p>
+    <div class="card" style="margin-top:20px;border-color:rgba(74,222,128,.35)">
+      <h3>不想开终端？</h3>
+      <p>浏览器里也能验一层：四个测试向量，硬件交付的结果和你的浏览器现算的，逐字节比对。<b>不用装任何东西，5 秒。</b></p>
+      <p style="margin-bottom:0"><a href="verify.html" style="font-family:var(--mono)">→ 打开在线自证</a></p>
+    </div>
   </div>
 </section>
 
