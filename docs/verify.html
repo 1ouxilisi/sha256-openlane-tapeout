@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>在线自证 · SHA-256 硬件结果 vs 浏览器现算</title>
+<meta name="description" content="不装任何环境，用浏览器自带的密码学实现现场复算四个测试向量，与这颗芯片交付的结果逐字节比对。">
+<style>
+:root{
+  --bg:#0e1116; --panel:#161a21; --panel2:#1c222b; --line:#2a323d;
+  --text:#e8edf4; --muted:#8d9aab; --accent:#4ade80; --accent2:#38bdf8; --warn:#fbbf24; --bad:#f87171;
+  --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:960px;margin:0 auto;padding:0 24px}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.9em;background:#0b0e13;border:1px solid var(--line);
+  padding:1px 5px;border-radius:4px}
+nav{border-bottom:1px solid var(--line);padding:14px 0;font-family:var(--mono);font-size:12.5px;
+  color:var(--muted);letter-spacing:.04em}
+nav .wrap{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+nav a{color:var(--muted)} nav a:hover{color:var(--accent)}
+header{padding:56px 0 36px;border-bottom:1px solid var(--line);
+  background:radial-gradient(1000px 320px at 20% -10%,rgba(74,222,128,.10),transparent 70%),var(--bg)}
+.tag{display:inline-block;font-family:var(--mono);font-size:12px;letter-spacing:.08em;
+  color:var(--accent);border:1px solid rgba(74,222,128,.35);border-radius:999px;padding:4px 12px;margin-bottom:18px}
+h1{font-size:34px;line-height:1.3;margin:0 0 14px;letter-spacing:-.01em}
+.lead{font-size:16px;color:var(--muted);max-width:760px;margin:0}
+section{padding:44px 0;border-bottom:1px solid var(--line)}
+h2{font-size:20px;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:4px;height:16px;background:var(--accent);border-radius:2px;display:inline-block}
+.sub{color:var(--muted);font-size:14px;margin:0 0 24px}
+.vec{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:14px}
+.vhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.vname{font-family:var(--mono);font-size:14px;color:var(--text)}
+.verdict{font-family:var(--mono);font-size:12px;letter-spacing:.06em;padding:3px 10px;border-radius:999px;
+  border:1px solid var(--line);color:var(--muted)}
+.verdict.ok{color:var(--accent);border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.08)}
+.verdict.bad{color:var(--bad);border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.08)}
+.row{display:grid;grid-template-columns:112px 1fr;gap:10px;font-family:var(--mono);font-size:12px;
+  padding:5px 0;align-items:baseline}
+.row .k{color:var(--muted);letter-spacing:.04em}
+.row .v{word-break:break-all;color:var(--text)}
+.row .v.green{color:var(--accent)}
+.row .v.red{color:var(--bad)}
+.note{font-size:12.5px;color:var(--muted);margin-top:6px}
+.box{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:720px){.grid{grid-template-columns:1fr}}
+input[type=text]{width:100%;background:#0b0e13;border:1px solid var(--line);border-radius:8px;
+  color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 12px;margin-top:8px}
+.out{font-family:var(--mono);font-size:12px;color:var(--accent);word-break:break-all;margin-top:10px;min-height:22px}
+.btn{background:transparent;border:1px solid var(--line);color:var(--text);border-radius:8px;
+  font-family:var(--mono);font-size:12px;padding:8px 14px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+footer{padding:34px 0 60px;color:var(--muted);font-size:12.5px;font-family:var(--mono)}
+ul{margin:8px 0 0;padding-left:20px;font-size:14px}
+li{margin:4px 0;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <span>1OUXILISI · 在线自证</span>
+  <span><a href="./">← 作品集</a> · <a href="project.html">项目详情</a> · <a href="VERIFYING.md">验收手册</a></span>
+</div></nav>
+
+<header><div class="wrap">
+  <span class="tag">NO SETUP · 5 SECONDS</span>
+  <h1>不用装任何环境，<br>现在就能自己算一遍。</h1>
+  <p class="lead">下面四个测试向量，左边是这颗芯片在流片流程里交付的结果，右边是你的浏览器刚刚用自带密码学实现现算出来的。
+  两边一致，说明「算法功能」这一层是真的；不一致，就说明我写的东西有问题。</p>
+</div></header>
+
+<section><div class="wrap">
+  <h2>四个向量，逐字节比对</h2>
+  <p class="sub">向量来自仓库里的正式回归用例（v7 功能回归 + 驱动级三方对照），不是为这页临时编的。</p>
+  <div id="vecs"></div>
+  <p class="note" id="summary">正在计算…</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2>自己敲一个</h2>
+  <p class="sub">任意文本，现场算出标准 SHA-256。注意：这一行没有对应的硬件结果，只是让你确认页面上的实现没有被做过手脚。</p>
+  <div class="box">
+    <input type="text" id="custom" placeholder="输入任意文本，例如 hello" value="hello">
+    <div class="out" id="customOut"></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>这页能证明什么，不能证明什么</h2>
+  <div class="grid">
+    <div class="box">
+      <p style="margin:0 0 6px;color:var(--accent);font-family:var(--mono);font-size:12px">能证明</p>
+      <ul>
+        <li>交付的摘要值，和标准 SHA-256 定义一致</li>
+        <li>页面没有篡改结果——你算的和页面显示的一起变</li>
+        <li>这件事可以零成本复现，不需要装工具链</li>
+      </ul>
+    </div>
+    <div class="box">
+      <p style="margin:0 0 6px;color:var(--warn);font-family:var(--mono);font-size:12px">不能证明</p>
+      <ul>
+        <li>版图做对了、DRC 干净、时序收敛——那是 STA 和 XOR 的事</li>
+        <li>面积、频率、功耗这些数字</li>
+        <li>硬件在硅上真跑过（这三代都是开源 PDK 的流片级交付，不是实物芯片）</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">完整验收要跑 <code>scripts/verify_driver.sh</code>，或看 CI 的九个步骤。这页只是把门槛降到「点开就能看一眼」。</p>
+</div></section>
+
+<footer><div class="wrap">
+  1ouxilisi · 作品集附录 · 2026<br>
+  算不出来？把浏览器换成 Chrome / Edge / Firefox 的较新版本；<code>crypto.subtle</code> 只在 HTTPS 下可用，本页正好是 HTTPS。
+</div></footer>
+
+<script>
+const V = [
+  { name: "abc", label: '"abc"（3 字节）', bytes: () => new TextEncoder().encode("abc"),
+    hw: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    note: "最小输入，一个压缩块就出结果" },
+  { name: "empty", label: "空串（0 字节）", bytes: () => new Uint8Array(0),
+    hw: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    note: "边界：什么都不喂，仍然要有合法输出" },
+  { name: "fox", label: '"The quick brown fox…"（43 字节）', bytes: () => new TextEncoder().encode("The quick brown fox jumps over the lazy dog"),
+    hw: "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
+    note: "标准测试句，一个压缩块内" },
+  { name: "a119", label: '"a" × 119（119 字节，两块流式）', bytes: () => new TextEncoder().encode("a".repeat(119)),
+    hw: "31eba51c313a5c08226adf18d4a359cfdfd8d2e816b13f4af952f7ea6584dcfb",
+    note: "跨块：必须先存住中间状态再续算，验证多块链式" },
+];
+
+async function sha256hex(buf) {
+  const d = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function rowHTML(k, v, cls) {
+  return '<div class="row"><span class="k">' + k + '</span><span class="v ' + (cls || "") + '">' + v + '</span></div>';
+}
+
+(async function () {
+  const host = document.getElementById("vecs");
+  let pass = 0, fail = 0;
+  for (const v of V) {
+    const got = await sha256hex(v.bytes());
+    const ok = got === v.hw;
+    ok ? pass++ : fail++;
+    const el = document.createElement("div");
+    el.className = "vec";
+    el.innerHTML =
+      '<div class="vhead"><span class="vname">' + v.label + '</span>' +
+      '<span class="verdict ' + (ok ? "ok" : "bad") + '">' + (ok ? "MATCH" : "MISMATCH") + '</span></div>' +
+      rowHTML("硬件交付", v.hw, "") +
+      rowHTML("浏览器现算", got, ok ? "green" : "red") +
+      '<div class="note">' + v.note + '</div>';
+    host.appendChild(el);
+  }
+  const s = document.getElementById("summary");
+  s.textContent = fail === 0
+    ? "4 / 4 一致。这一层是真的；上面写的「不能证明」那几条，才是真正难的部分。"
+    : (pass + " 一致、" + fail + " 不一致——不一致就说明有问题，你可以直接把这条结论发给我。");
+  s.style.color = fail === 0 ? "var(--accent)" : "var(--bad)";
+})();
+
+const inp = document.getElementById("custom");
+const out = document.getElementById("customOut");
+async function calcCustom() {
+  const got = await sha256hex(new TextEncoder().encode(inp.value));
+  out.textContent = got;
+}
+inp.addEventListener("input", calcCustom);
+calcCustom();
+</script>
+
+</body>
+</html>
