@@ -230,6 +230,15 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
     <p class="note">于是「47 是版图与网表的实际连接差异」这个归因也撤掉了：器件数相等、端口表相等、端口局部邻域 94/98 相等、4 个差异已查清且不影响结果。现在只剩一句：<b>在这份数据上 netgen 的顶层匹配没有收敛</b>，失败位置是 47 个端口的网配对，而不是任何一层可以逐条指出的网表错误。候选只剩两类（大规模重复结构上的图同构搜索 / 更深处确实不同），本页不做裁决。方法和复跑命令在 <a href="evidence/lvs_port_graph.txt">evidence/lvs_port_graph.txt</a>。</p>
   </div>
 
+  <div class="box">
+    <b style="color:var(--accent)">第五次：找到了——47 个端口的网没配上，卡在「井怎么接到电源」这一层，不在逻辑</b>
+    <p class="note">接着把两侧的<b>网名集合</b>做差：A 独有 2,376 个、B 独有 2,378 个。其中 <b>2,166 个只是转义写法不同</b>（<code>aw_addr_l\[0\]</code> 对 <code>aw_addr_l[0]</code>），去掉转义后完全重合；真正剩下的差：A 独有 210 个（<code>clkload0_X</code> 这类时钟负载缓冲的内部网），<b>B 独有 2 个——<code>VNB</code> 和 <code>VPB</code></b>。而 <b>15,647 − 15,645 = 2</b>，正好就是这两个网。</p>
+    <p class="note">为什么会多出来：版图里井与衬底是由 <b>5,496 个 <code>tapvpwrvgnd_1</code></b> 直接接到 <code>VPWR</code> / <code>VGND</code> 的，Magic 提取时把体端一律并到电源，所以版图侧根本没有 <code>VNB</code>/<code>VPB</code> 这两条网；而 <code>nl.v</code> 里这 5,496 个 tap 单元的引脚是空的（<code>();</code>），转换器整批丢掉（31,499 行），于是这两个网在网表侧成了「只在端口表里声明、没有任何器件脚连到电源」的悬空网。两边都不算错，差别只在<b>「井怎么接电源」这一层的表达方式</b>。</p>
+    <p class="note">逐级验证，四个网表都真跑了：<code>pnr5</code>（原样）<b>47 行</b> → <code>pnr10</code>（只补 4 条 assign）<b>仍 47</b> → <code>pnr12</code>（只把 VNB→VGND、VPB→VPWR）<b>降到 4 个端口</b> → <code>pnr11</code>（两处都补）<b>0 行</b>。所以 <b>47 = 43 + 4</b>：43 个是 VNB/VPB 这条线上被牵连的，4 个是 assign 漏读的，两个缺口各占一段、缺一不可。</p>
+    <p class="note">第 4 步的原文（判定依据）：<code>Cell pin lists are equivalent.</code> / <code>Number of devices: 166353</code> 两侧相等 / <code>Number of nets: 84178</code> 两侧相等 / <code>Netlists match uniquely.</code> / <code>Final result: Circuits match uniquely.</code> 全文 10,086 行、789,737 B，<code>(no matching pin)</code> 出现 <b>0 次</b>。</p>
+    <p class="note"><b>口径必须写在明处，不写成无条件通过</b>：① 采用 <code>VNB ≡ VGND</code>、<code>VPB ≡ VPWR</code>，依据是版图自己的事实（5,496 个 tap 把井接到电源，Magic 提取也把体端并到了这两条网）；② 比较发生在<b>展平之后</b>——叶子单元（decap 等）在这个口径下内部不逐管一致，netgen 自动展平，再按顶层 <b>166,353 个器件、84,178 条网</b>逐一对齐。所以这是「<b>顶层晶体管级等价</b>」，不是「每个标准单元内部逐管等价」；③ 另一条本该等价的路线（把 5,496 个 tap 补回网表再跑）本轮没做，如实留着。原文、四个网表的差异与复跑命令在 <a href="evidence/lvs_pass.txt">evidence/lvs_pass.txt</a>。</p>
+  </div>
+
   <div class="box bad">
     <b>更正一处：上一版我把 81/14 写成了 prBoundary，那是错的</b>
     <p class="note">查 PDK 图层名表：prBoundary 是 <code>235/4</code>；<code>81/14</code> 是 <code>areaid.lowTapDensity</code>。结论不变（它同样是不参与制造的 flow 标记层，流水线第 37 步也用 <code>-rd ignore=81/14</code> 排除），但层名以这一版为准。把这处错误写在页面上、而不是悄悄改掉，是因为这一页存在的意义就是让人能查出来。</p>
@@ -241,7 +250,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
       <li>「布线阶段违例计数为 0」——<b>成立</b>，见第一节最后一格。</li>
       <li>「两份 GDS 逐层一致」——<b>现在成立了</b>。42 个层里 <b>21 个制造层 XOR 全为 0</b>（nwell / diff / tap / poly / licon1 / li1 / mcon / met1–met5 / via–via4 / hvtp / nsdm / psdm / npc），pin 与 label 层也全 0；唯一差异是 <code>areaid.lowTapDensity</code>（81/14，A 有 1 个、B 有 0 个），flow 标记层，不参与制造，流水线第 37 步原本就带 <code>-rd ignore=81/14</code> 把它排除在外。</li>
       <li>「Magic signoff DRC 违例数为 0」——<b>现在成立了，但要打折扣</b>：0 条违例，不含天线与密度检查。这一项是拿 Magic 自己的 DRC 引擎跑出来的，不依赖那个崩掉的 Ruby 引擎。</li>
-      <li>仍然不成立的：<b>KLayout 的 signoff DRC 违例数</b>（metrics 里 <code>-1</code>）——KLayout 侧要 <code>.drc</code> 的 Ruby 引擎，本机就是起不来。<b>LVS 这一项从这一版起不再是「没跑」</b>，见上一段新增的那一条。</li>
+      <li>「LVS」——<b>在本页写明的口径下通过了</b>：器件级 15,593 = 15,593，展平后顶层 <b>166,353 个器件、84,178 条网</b>两侧完全相等，netgen 原文 <code>Circuits match uniquely</code>；口径是 <code>VNB≡VGND</code>、<code>VPB≡VPWR</code>（5,496 个 tap 把井接到电源），原文与四个网表的对照见上面第二段。<b>KLayout 侧的 signoff DRC 违例数</b>仍是 <code>-1</code>——那要 <code>.drc</code> 的 Ruby 引擎，本机就是起不来。</li>
     </ul>
     <p class="note">这一节前后差的就是一件事：上一版只能写「这一步没有结论」，这一版把结论拿回来了，并且说清它是什么、靠什么拿回来的、还有什么没拿到。</p>
   </div>
@@ -264,7 +273,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
     <ul>
       <li>这份 metrics.csv 不是我伪造的——这一点只能靠「文件在仓库里、指纹可核对、内容自洽」来逼近，不能靠数学证明。真要做到不可否认，得由第三方重跑一次 flow。</li>
       <li>Magic 的 signoff DRC 确实跑过一遍、结果 0 条违例（<b>不含天线与密度</b>），原文与命令都在；不是我在口头上说「检查通过」。</li>
-      <li><b>Magic / KLayout 的 signoff DRC 违例数</b>：Magic 那侧已补跑为 <b>0</b>（不含天线与密度检查），KLayout 那侧仍是 <b>-1</b>。<b>LVS 错误数同样是 -1</b>，但已经跑出来过：器件级 15,593 = 15,593 完全一致，连接级因 47 个顶层端口所连的网没配上而判不通过（端口名这一层 netgen 自己判定为 equivalent，重复行计数也证明了这一点）：四类变量（名字写法 / 行长度 / 定义顺序 / 自动匹配）逐个排除，再加上版图网表自比 0 问题、转换网表逐脚核对 15,381 个实例一致，可以确认卡点不在读取、不在折行、不在名字、不在格式，而在版图与网表的实际配对（时钟负载与常量类单元的特殊连接）；47,087 / 33,984 / 15,588 三个数字的差额也拆清了（13,103 全是 fill 与 tap）。所以「DRC 0」这句话：布线阶段成立、Magic 规则检查成立（有折扣），KLayout 侧不成立。XOR 一致只说明两份产出相同，不等于两份产出都满足设计规则。</li>
+      <li><b>LVS 的「通过」是有口径的通过</b>：netgen 在 <code>VNB≡VGND</code>、<code>VPB≡VPWR</code> 的前提下、把叶子单元展平之后，顶层 166,353 器件与 84,178 条网两侧完全相等（<code>Circuits match uniquely</code>）。它证明的是<b>顶层晶体管级连接等价</b>，不证明「每个标准单元内部逐管等价」；另一条本该给出同样结论的路线（把 5,496 个 tap 补回网表再跑）本轮没做。KLayout 侧的 signoff DRC 违例数仍是 <b>-1</b>。XOR 一致只说明两份产出相同，不等于两份产出都满足设计规则。</li>
       <li>功耗数字是 OpenLane 内部功耗估算（向量无关的活动率假设），不是硅上实测。</li>
       <li>时序基于 sky130 的 signoff 库与寄生提取，不等于流片后的硅结果。</li>
     </ul>
@@ -272,7 +281,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、十二份证据文件的指纹</h2>
+  <h2>五、十三份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -287,6 +296,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
     <div class="fp" style="margin-top:14px">evidence/lvs_selfcheck.txt · 6,016 B<br>e2be16bc18b791c16b99030f0691d7c17f2b638748cdf4c7fdda2597cbce9bc0</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_pin_parity.txt · 7,491 B<br>42237b91ed66826eabb58405c2acedce88fa9c6262b6c7847c72e1af5a2b4a42</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_port_graph.txt · 5,278 B<br>db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13</div>
+    <div class="fp" style="margin-top:14px">evidence/lvs_pass.txt · 5,517 B<br>37329768afd8f27f5f0f900d9f0fb987973d18a2912e03c9a6fec439259c012c</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>
 </div></section>

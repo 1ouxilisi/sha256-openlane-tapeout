@@ -1,0 +1,83 @@
+LVS 结案：47 个端口的网配不上，是两个口径缺口叠在一起——补掉之后 netgen 报 match uniquely
+========================================================================================
+对象：/tmp/lvs/sha256_axil.ext.spice（Magic 从 GDS 提取，33,984 顶层实例 / 98 端口 / 15,645 网）
+      /tmp/lvs/sha256_axil.pnr5.spice（PnR 网表经转换器转出，47,087 顶层实例 / 98 端口 / 15,647 网）
+工具：netgen 1.5.270（2024-06-02 编译）/ sky130A setup；python3 后处理
+时间：2026-11-07
+
+一、从「端口连着什么」追到两个网
+------------------------------
+上一轮量法：把每个端口挂到的（单元，引脚名）列表按各文件自己的单元定义翻译后比对，
+98 个端口里 94 个逐字相同，4 个不同（bresp/rresp，成因是 4 条 assign 别名被漏读）。
+这一轮再往里看一层：把两侧的网名集合做差。
+  A 独有 2,376 个名，B 独有 2,378 个名；
+  其中 A 的 2,166 个只是转义写法不同（aw_addr_l\[0\] 对 aw_addr_l[0]），去转义后完全重合；
+  真正的差：A 独有 210 个（clkload0_X 这类时钟负载缓冲的内部网），B 独有 2 个——
+  VNB 和 VPB。
+而 15,647 - 15,645 = 2，正好就是这两个网。
+
+二、为什么 B 侧会多出 VNB / VPB
+----------------------------
+Magic 从版图提取的网表里根本没有 VNB / VPB 这两个网：井与衬底在版图里是由
+5,496 个 sky130_fd_sc_hd__tapvpwrvgnd_1 直接接到 VPWR / VGND 的，提取器把体端一律
+并到电源网，所以 A 侧每个器件的体端都落在 VGND / VPWR 上。
+而 PnR 网表 sha256_axil.nl.v 里，这 5,496 个 tap 单元的引脚是空的（`();`），
+转换器把空引脚实例整批丢掉（31,499 行），于是 VNB / VPB 在 B 侧成了两个
+「只被声明、没被任何器件脚连到电源」的悬空网——它们只是顶层声明的两个端口。
+两侧都不算错，差别只在「井怎么接到电源」这一层的表达方式。
+
+三、把两处补上，逐级验证归因（每一步都跑了）
+---------------------------------------
+  序号   网表                          改动                       结果
+  1      pnr5.spice                    无                         47 行 no matching pin，不匹配
+  2      pnr10.spice                   补 4 条 assign 别名         仍是 47 行（assign 不是主因）
+  3      pnr12.spice                   只把 VNB->VGND、VPB->VPWR    降到 4 个端口（表里 12 行，去重 4 名）
+  4      pnr11.spice                   两处都补                    0 行，match uniquely
+
+所以 47 = 43（VNB/VPB 这条线上被牵连的端口）+ 4（bresp/rresp 的 assign 漏读）。
+两个缺口各占一段，缺一不可。
+
+四、第 4 步的原文（这是判定依据，不是我的话）
+------------------------------------
+  Cell pin lists are equivalent.
+  Device classes sha256_axil and sha256_axil are equivalent.
+  Subcircuit summary:
+    Circuit 1: sha256_axil                    |Circuit 2: sha256_axil
+    sky130_fd_pr__pfet_01v8_hvt (111233->83118|sky130_fd_pr__pfet_01v8_hvt (111233->83118
+    sky130_fd_pr__nfet_01v8 (111102->83231)   |sky130_fd_pr__nfet_01v8 (111102->83231)
+    sky130_fd_sc_hd__conb_1 (4)               |sky130_fd_sc_hd__conb_1 (4)
+    Number of devices: 166353                 |Number of devices: 166353
+    Number of nets: 84178                     |Number of nets: 84178
+  Netlists match uniquely.
+  Final result: Circuits match uniquely.
+全文 10,086 行、789,737 B，`(no matching pin)` 出现 0 次。
+
+五、这个「过」的口径必须写在明处（不写成无条件通过）
+----------------------------------------------
+1) 采用的口径：VNB 等同 VGND、VPB 等同 VPWR。依据是版图自己的事实——井/衬底由 5,496 个
+   tap 直接接电源，Magic 提取时也把体端并到了这两条网；网表侧这两个网没有任何器件脚，
+   只在顶层端口表里出现。若换成「把 tap 单元补回网表」的做法，结论应当一致，本轮没做。
+2) 比较发生在**展平之后**：两侧的叶子单元（decap_3/decap_6 等）在这个口径下内部不逐管一致
+   （Magic 提取的体端并到电源，PDK 库保留 VNB/VPB 脚），netgen 自动把这些单元展平，再按
+   顶层 166,353 个器件、84,178 条网逐一对齐。所以这是「顶层晶体管级等价」，
+   不是「每个标准单元内部逐管等价」。
+3) 器件数 15,593 = 15,593（顶层实例口径）与展平后 166,353 = 166,353 同时成立，
+   两层计数都对上了。
+
+六、复跑命令
+------------
+python3 - <<'PY'   # 生成 pnr11：把体端网并入电源网
+src=open('sha256_axil.pnr10.spice',errors='ignore').read()
+open('sha256_axil.pnr11.spice','w').write('\n'.join(
+ (' '.join('VGND' if x=='VNB' else 'VPWR' if x=='VPB' else x for x in l.split())
+  if l.split() and l.split()[0][:1]=='X' else l) for l in src.splitlines())+'\n')
+PY
+
+sudo chroot /home/user/openlane-rootfs /nix/store/306znyj77fv49kwnkpxmb0j2znqpa8bj-bash-5.2p26/bin/bash -c \
+ 'export PATH=/nix/store/b9kirpfkif1852bcy64f96np93xjalsi-netgen/bin:$PATH; \
+  export PDK_ROOT=/pdk PDK_PATH=/pdk/sky130A; cd /tmp/lvs; \
+  netgen -batch lvs "sha256_axil.ext.spice sha256_axil" "sha256_axil.pnr11.spice sha256_axil" \
+   /pdk/sky130A/libs.tech/netgen/sky130A_setup.tcl G.out'
+
+grep -c "no matching pin" G.out      # 0
+tail -2 G.out                        # Final result: Circuits match uniquely.
