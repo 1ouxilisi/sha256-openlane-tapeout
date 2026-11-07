@@ -1,0 +1,22 @@
+# 摘自 OpenLane signoff 多角 STA 日志（原样行，前缀为 文件名:行号）
+# run: designs/sha256_v7b/runs/tapeout16   CLOCK_PERIOD=18.0 ns
+# 每个 corner 日志里有 6 处：前 3 处属 Path Type: min（hold），后 3 处属 Path Type: max（setup）
+
+29-rcx_mcsta.min.log:98548:worst slack corner Fastest: 0.4021
+29-rcx_mcsta.min.log:163267:worst slack corner Slowest: 1.6439
+29-rcx_mcsta.min.log:227985:worst slack corner Typical: 0.7383
+29-rcx_mcsta.min.log:297954:worst slack corner Fastest: 11.9644
+29-rcx_mcsta.min.log:395382:worst slack corner Slowest: 1.0346
+29-rcx_mcsta.min.log:473839:worst slack corner Typical: 9.3462
+31-rcx_mcsta.max.log:98584:worst slack corner Fastest: 0.4060
+31-rcx_mcsta.max.log:163339:worst slack corner Slowest: 1.4977
+31-rcx_mcsta.max.log:228105:worst slack corner Typical: 0.7434
+31-rcx_mcsta.max.log:298645:worst slack corner Fastest: 11.8373
+31-rcx_mcsta.max.log:396067:worst slack corner Slowest: 0.5619
+31-rcx_mcsta.max.log:474803:worst slack corner Typical: 9.0831
+33-rcx_mcsta.nom.log:98557:worst slack corner Fastest: 0.4038
+33-rcx_mcsta.nom.log:163294:worst slack corner Slowest: 1.5729
+33-rcx_mcsta.nom.log:228042:worst slack corner Typical: 0.7403
+33-rcx_mcsta.nom.log:298158:worst slack corner Fastest: 11.8938
+33-rcx_mcsta.nom.log:395574:worst slack corner Slowest: 0.7981
+33-rcx_mcsta.nom.log:474121:worst slack corner Typical: 9.2157
