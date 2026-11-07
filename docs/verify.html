@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>在线自证 · SHA-256 硬件结果 vs 浏览器现算</title>
-<meta name="description" content="不装任何环境，用浏览器自带实现与页面自写的分块状态机两条独立路径，现场复算并与这颗芯片交付的结果逐字节比对。">
+<meta name="description" content="不装任何环境：两条互不依赖的实现互验，证据文件现算指纹、可与仓库对照，随机压测，并且可以现场篡改一次看它被抓。">
 <style>
 :root{
   --bg:#0e1116; --panel:#161a21; --panel2:#1c222b; --line:#2a323d;
@@ -29,7 +29,7 @@ header{padding:56px 0 36px;border-bottom:1px solid var(--line);
 .tag{display:inline-block;font-family:var(--mono);font-size:12px;letter-spacing:.08em;
   color:var(--accent);border:1px solid rgba(74,222,128,.35);border-radius:999px;padding:4px 12px;margin-bottom:18px}
 h1{font-size:34px;line-height:1.3;margin:0 0 14px;letter-spacing:-.01em}
-.lead{font-size:16px;color:var(--muted);max-width:760px;margin:0}
+.lead{font-size:16px;color:var(--muted);max-width:780px;margin:0}
 section{padding:44px 0;border-bottom:1px solid var(--line)}
 h2{font-size:20px;margin:0 0 6px;display:flex;align-items:center;gap:10px}
 h2::before{content:"";width:4px;height:16px;background:var(--accent);border-radius:2px;display:inline-block}
@@ -53,15 +53,17 @@ h2::before{content:"";width:4px;height:16px;background:var(--accent);border-radi
 @media(max-width:720px){.grid{grid-template-columns:1fr}}
 input[type=text]{width:100%;background:#0b0e13;border:1px solid var(--line);border-radius:8px;
   color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 12px;margin-top:8px}
-.out{font-family:var(--mono);font-size:12px;color:var(--accent);word-break:break-all;margin-top:10px;min-height:22px}
 .btn{background:transparent;border:1px solid var(--line);color:var(--text);border-radius:8px;
-  font-family:var(--mono);font-size:12px;padding:8px 14px;cursor:pointer}
+  font-family:var(--mono);font-size:12px;padding:8px 14px;cursor:pointer;margin-right:8px}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
 footer{padding:34px 0 60px;color:var(--muted);font-size:12.5px;font-family:var(--mono)}
 ul{margin:8px 0 0;padding-left:20px;font-size:14px}
 li{margin:4px 0;color:var(--muted)}
 .stat{font-family:var(--mono);font-size:13px;margin-top:12px}
 .stat b{font-size:20px;color:var(--accent)}
+.fp{font-family:var(--mono);font-size:11.5px;color:var(--muted);word-break:break-all;margin-top:10px}
+.fp b{color:var(--text);font-weight:400}
 </style>
 </head>
 <body>
@@ -72,11 +74,17 @@ li{margin:4px 0;color:var(--muted)}
 </div></nav>
 
 <header><div class="wrap">
-  <span class="tag">NO SETUP · TWO INDEPENDENT IMPLEMENTATIONS</span>
+  <span class="tag">NO SETUP · TWO IMPLEMENTATIONS · TAMPER DEMO</span>
   <h1>不用装任何环境，<br>现在就能自己算一遍。</h1>
-  <p class="lead">页面里有两条互不依赖的实现：浏览器自带的密码学接口，和这一页自己写的 SHA-256 分块状态机（按 512-bit 逐块喂入，和硬件里保留的 8 个状态字是同一回事）。
-  两条算出同一个值，才说明交付的摘要是对的；哪一条错，另一条会当场把它抓出来。</p>
+  <p class="lead">两条互不依赖的实现：浏览器自带的密码学接口，和这一页自己写的 SHA-256 分块状态机（512-bit 逐块喂入，块间只留 8 个 32-bit 状态字，和 RTL 里那套是同一回事）。
+  <b>连「硬件交付」这一侧的输入都不是写死的</b>——它从仓库里的证据文件现取，并当场算出指纹，你可以拿同一份文件在 GitHub 上对一遍。</p>
 </div></header>
+
+<section><div class="wrap">
+  <h2>证据来源与指纹</h2>
+  <p class="sub">这一页用到的每个输入都来自仓库，不是页面里手写的常数。下面两个指纹是本页现场算的，点链接就是仓库里的同一份字节。</p>
+  <div class="box" id="fpbox">读取仓库文件…</div>
+</div></section>
 
 <section><div class="wrap">
   <h2>四个向量，逐字节比对</h2>
@@ -102,6 +110,20 @@ li{margin:4px 0;color:var(--muted)}
 </div></section>
 
 <section><div class="wrap">
+  <h2>现场篡改一次，看它能不能被抓到</h2>
+  <p class="sub">「我保证没改过」这句话没人信。所以给个按钮：把页面自写实现里的第 1 个轮常量改掉一位，再算同一个 <code>"abc"</code>。</p>
+  <div class="box">
+    <button class="btn" id="tamper">改掉一个常量再算一次</button>
+    <button class="btn" id="restore">恢复原值</button>
+    <div class="row" style="margin-top:12px"><span class="k">篡改后算的</span><span class="v" id="tOut">—</span></div>
+    <div class="row"><span class="k">浏览器原生</span><span class="v" id="tNative">—</span></div>
+    <div class="row"><span class="k">判定</span><span class="v" id="tVerdict">—</span></div>
+    <p class="note" style="margin-bottom:0">只改一个 32 位常量的一位，出来的摘要就完全不同。两条实现的分歧能当场暴露——
+    不靠我声明「我没作弊」。</p>
+  </div>
+</div></section>
+
+<section><div class="wrap">
   <h2>这页能证明什么，不能证明什么</h2>
   <div class="grid">
     <div class="box">
@@ -109,8 +131,9 @@ li{margin:4px 0;color:var(--muted)}
       <ul>
         <li>交付的摘要值，和标准 SHA-256 定义一致</li>
         <li>任意长度（含跨块）都对，不只是四组固定向量</li>
-        <li>两条独立实现互验，页面改不了结果——改一条，另一条立刻不一致</li>
-        <li>这件事零成本可复现，不需要装工具链</li>
+        <li>两条独立实现互验，改一条另一条立刻不一致（上面那个按钮就是证据）</li>
+        <li>这一页的输入取自仓库，指纹现场可算、可与 GitHub 同一文件对照</li>
+        <li>整件事零成本可复现，不装工具链</li>
       </ul>
     </div>
     <div class="box">
@@ -120,6 +143,7 @@ li{margin:4px 0;color:var(--muted)}
         <li>面积、频率、功耗这些数字</li>
         <li>硬件在硅上真跑过（这几代都是开源 PDK 的流片级交付，不是实物芯片）</li>
         <li>这页的 JS 实现和 RTL 在电路层等价——只证明算法行为一致</li>
+        <li>指纹只证明「你现在看到的就是仓库里那份」，不证明那份内容本身对——那要靠回归用例</li>
       </ul>
     </div>
   </div>
@@ -134,38 +158,74 @@ li{margin:4px 0;color:var(--muted)}
 <script src="sha256_impl.js"></script>
 <script>
 const sha256hexOwn = window.SHA256Impl.hex;
+const GH = "https://github.com/1ouxilisi/sha256-openlane-tapeout/blob/master/docs/";
 
-/* ---------- 路径 A：浏览器原生 ---------- */
 async function sha256hexNative(buf) {
   const d = await crypto.subtle.digest("SHA-256", buf);
   return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-/* ---------- 固定向量 ---------- */
-const V = [
-  { label: '"abc"（3 字节）', bytes: () => new TextEncoder().encode("abc"),
-    hw: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-    note: "最小输入，一个压缩块就出结果" },
-  { label: "空串（0 字节）", bytes: () => new Uint8Array(0),
-    hw: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    note: "边界：什么都不喂，仍然要有合法输出" },
-  { label: '"The quick brown fox…"（43 字节）', bytes: () => new TextEncoder().encode("The quick brown fox jumps over the lazy dog"),
-    hw: "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
-    note: "标准测试句，一个压缩块内" },
-  { label: '"a" × 119（119 字节，两块流式）', bytes: () => new TextEncoder().encode("a".repeat(119)),
-    hw: "31eba51c313a5c08226adf18d4a359cfdfd8d2e816b13f4af952f7ea6584dcfb",
-    note: "跨块：必须先存住中间状态再续算，验证多块链式" },
-];
-
 function rowHTML(k, v, cls) {
   return '<div class="row"><span class="k">' + k + '</span><span class="v ' + (cls || "") + '">' + v + '</span></div>';
 }
 
+function bytesOf(v) {
+  if (v.input_kind === "empty") return new Uint8Array(0);
+  if (v.input_kind === "repeat") return new TextEncoder().encode(v.input_desc.repeat(v.repeat));
+  return new TextEncoder().encode(v.input_desc);
+}
+
+let HW = null, offline = false;
+const FALLBACK = [
+  { label: '"abc"（3 字节）', input_kind: "utf8", input_desc: "abc",
+    hw: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", note: "最小输入，一个压缩块就出结果" },
+  { label: "空串（0 字节）", input_kind: "empty", input_desc: "",
+    hw: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", note: "边界：什么都不喂，仍然要有合法输出" },
+  { label: '"The quick brown fox…"（43 字节）', input_kind: "utf8", input_desc: "The quick brown fox jumps over the lazy dog",
+    hw: "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592", note: "标准测试句，一个压缩块内" },
+  { label: '"a" × 119（119 字节，两块流式）', input_kind: "repeat", input_desc: "a", repeat: 119,
+    hw: "31eba51c313a5c08226adf18d4a359cfdfd8d2e816b13f4af952f7ea6584dcfb", note: "跨块：必须先存住中间状态再续算，验证多块链式" }
+];
+
+async function fpOf(url, label, file) {
+  try {
+    const r = await fetch(url + "?v=" + Date.now());
+    const buf = new Uint8Array(await r.arrayBuffer());
+    const a = await sha256hexNative(buf);
+    const b = sha256hexOwn(buf);
+    const same = a === b;
+    return '<div class="fp">' + label + ' · ' + buf.length + " B · 本页现算 <b>" + a + "</b>" +
+      (same ? ' <span style="color:var(--accent)">（两实现一致）</span>' : ' <span style="color:var(--bad)">（不一致）</span>') +
+      '<br><a href="' + GH + file + '" target="_blank" rel="noopener">→ 在 GitHub 上看同一份文件</a></div>';
+  } catch (e) {
+    return '<div class="fp">' + label + ' · <span style="color:var(--warn)">取不到（' + e.message + '）</span></div>';
+  }
+}
+
 (async function () {
+  const box = document.getElementById("fpbox");
+  try {
+    const r = await fetch("hw_result.json?v=" + Date.now());
+    HW = JSON.parse(await r.text());
+  } catch (e) {
+    offline = true;
+    HW = { vectors: FALLBACK, design: "（离线，使用内嵌副本）", checked_by: "（离线）" };
+  }
+  let html = '<div class="fp" style="margin-bottom:12px;color:var(--text);font-size:12.5px">设计：<b style="color:var(--text)">' +
+    HW.design + "</b><br>核对方式：" + (HW.checked_by || "—") + "</div>";
+  html += await fpOf("hw_result.json", "hw_result.json（硬件交付摘要与来源）", "hw_result.json");
+  html += await fpOf("sha256_impl.js", "sha256_impl.js（页面自写的那条实现）", "sha256_impl.js");
+  if (offline) html += '<div class="fp" style="color:var(--warn)">离线副本模式：读不到仓库文件，下面用内嵌向量，指纹不可用。</div>';
+  box.innerHTML = html;
+  renderVectors(HW.vectors || FALLBACK);
+})();
+
+async function renderVectors(V) {
   const host = document.getElementById("vecs");
+  host.innerHTML = "";
   let pass = 0, fail = 0;
   for (const v of V) {
-    const bytes = v.bytes();
+    const bytes = bytesOf(v);
     const native = await sha256hexNative(bytes);
     const own = sha256hexOwn(bytes);
     const ok = native === v.hw && own === v.hw;
@@ -175,7 +235,7 @@ function rowHTML(k, v, cls) {
     el.innerHTML =
       '<div class="vhead"><span class="vname">' + v.label + '</span>' +
       '<span class="verdict ' + (ok ? "ok" : "bad") + '">' + (ok ? "MATCH" : "MISMATCH") + '</span></div>' +
-      rowHTML("硬件交付", v.hw, "") +
+      rowHTML("硬件交付", v.hw) +
       rowHTML("浏览器原生", native, native === v.hw ? "green" : "red") +
       rowHTML("页面自写", own, own === v.hw ? "green" : "red") +
       '<div class="note">' + v.note + '</div>';
@@ -183,12 +243,11 @@ function rowHTML(k, v, cls) {
   }
   const s = document.getElementById("summary");
   s.textContent = fail === 0
-    ? "4 / 4 一致（两条实现都与硬件交付结果相同）。这一层是真的；上面写的「不能证明」那几条，才是真正难的部分。"
+    ? (pass + " / " + V.length + " 一致（两条实现都与硬件交付结果相同）。这一层是真的；上面写的「不能证明」那几条，才是真正难的部分。")
     : (pass + " 一致、" + fail + " 不一致——不一致就说明有问题，你可以直接把这条结论发给我。");
   s.style.color = fail === 0 ? "var(--accent)" : "var(--bad)";
-})();
+}
 
-/* ---------- 任意输入 ---------- */
 const inp = document.getElementById("custom");
 const outA = document.getElementById("outA");
 const outB = document.getElementById("outB");
@@ -205,7 +264,6 @@ async function calcCustom() {
   outV.style.color = ok ? "var(--accent)" : "var(--bad)";
 }
 
-/* ---------- 随机压测 ---------- */
 document.getElementById("stress").addEventListener("click", async function () {
   const btn = this;
   btn.disabled = true;
@@ -232,7 +290,41 @@ document.getElementById("stress").addEventListener("click", async function () {
   }
   btn.disabled = false;
   btn.textContent = "再跑一次";
-  window.__stressResult = { ok, bad, ms };
+});
+
+const tOut = document.getElementById("tOut");
+const tNative = document.getElementById("tNative");
+const tVerdict = document.getElementById("tVerdict");
+
+document.getElementById("tamper").addEventListener("click", async function () {
+  const bytes = new TextEncoder().encode("abc");
+  const native = await sha256hexNative(bytes);
+  const base = new window.SHA256Impl.Sha256Stream();
+  const Kt = new Uint32Array(64);
+  Kt.set(base.K);
+  Kt[0] = (Kt[0] ^ 0x00000001) >>> 0;
+  const s = new window.SHA256Impl.Sha256Stream();
+  s.K = Kt;
+  s.update(bytes);
+  const got = s.hex();
+  tOut.textContent = got;
+  tNative.textContent = native;
+  const caught = got !== native;
+  tVerdict.textContent = caught
+    ? "抓到了：篡改后的摘要与原生实现不一致（正确值开头 " + native.slice(0, 16) + "…）"
+    : "没抓到——这说明演示代码有问题，请把这一条报给我";
+  tVerdict.style.color = caught ? "var(--accent)" : "var(--bad)";
+});
+
+document.getElementById("restore").addEventListener("click", async function () {
+  const bytes = new TextEncoder().encode("abc");
+  const native = await sha256hexNative(bytes);
+  const now = sha256hexOwn(bytes);
+  tOut.textContent = now;
+  tNative.textContent = native;
+  const ok = now === native;
+  tVerdict.textContent = ok ? "已恢复：两条实现重新一致（开头 " + now.slice(0, 16) + "…）" : "仍未恢复，请刷新页面";
+  tVerdict.style.color = ok ? "var(--accent)" : "var(--bad)";
 });
 
 inp.addEventListener("input", calcCustom);

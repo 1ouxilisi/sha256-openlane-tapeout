@@ -21,6 +21,7 @@
     this.blen = 0;
     this.total = 0;
     this.w = new Uint32Array(64);
+    this.K = K;   /* 可替换，仅用于页面上演示「改一个常量会被另一条实现抓到」 */
   }
 
   Sha256Stream.prototype._block = function (b, off) {
@@ -36,10 +37,11 @@
       w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
     }
     let a = h[0], b1 = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g2 = h[6], hh = h[7];
+    const KK = this.K;
     for (let i = 0; i < 64; i++) {
       const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
       const ch = (e & f) ^ (~e & g2);
-      const t1 = (hh + S1 + ch + K[i] + w[i]) >>> 0;
+      const t1 = (hh + S1 + ch + KK[i] + w[i]) >>> 0;
       const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
       const maj = (a & b1) ^ (a & c) ^ (b1 & c);
       const t2 = (S0 + maj) >>> 0;

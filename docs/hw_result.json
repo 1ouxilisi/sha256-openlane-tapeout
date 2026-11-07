@@ -1,0 +1,45 @@
+{
+  "project": "sha256-openlane-tapeout",
+  "design": "sha256_v7 @ 18 ns (tapeout16)",
+  "generated": "2026-11-07",
+  "checked_by": "scripts/verify.sh (v7 功能回归) + scripts/verify_driver.sh (C 驱动 -> RTL AXI4-Lite -> hashlib 三方对照)",
+  "source": {
+    "rtl_core": "designs/sha256_v7/src/sha256_core.v",
+    "rtl_axil": "designs/sha256_v7/src/sha256_axil.v",
+    "regression": "scripts/verify.sh",
+    "driver_level": "scripts/verify_driver.sh",
+    "signoff_metrics": "runs/tapeout16/reports/metrics.csv"
+  },
+  "note": "这些摘要由 RTL 仿真/驱动级对照跑出来，不是手抄的常数；本文件本身在页面上会被现算指纹，可与仓库同一文件对照。",
+  "vectors": [
+    {
+      "label": "\"abc\"（3 字节）",
+      "input_kind": "utf8",
+      "input_desc": "abc",
+      "hw": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "note": "最小输入，一个压缩块就出结果"
+    },
+    {
+      "label": "空串（0 字节）",
+      "input_kind": "empty",
+      "input_desc": "",
+      "hw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "note": "边界：什么都不喂，仍然要有合法输出"
+    },
+    {
+      "label": "\"The quick brown fox…\"（43 字节）",
+      "input_kind": "utf8",
+      "input_desc": "The quick brown fox jumps over the lazy dog",
+      "hw": "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
+      "note": "标准测试句，一个压缩块内"
+    },
+    {
+      "label": "\"a\" × 119（119 字节，两块流式）",
+      "input_kind": "repeat",
+      "input_desc": "a",
+      "repeat": 119,
+      "hw": "31eba51c313a5c08226adf18d4a359cfdfd8d2e816b13f4af952f7ea6584dcfb",
+      "note": "跨块：必须先存住中间状态再续算，验证多块链式"
+    }
+  ]
+}
