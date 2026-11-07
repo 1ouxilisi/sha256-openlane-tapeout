@@ -1,0 +1,21 @@
+[ERROR]: during executing: "klayout -b -r /nix/store/xpc7xd67rslanlqh566s6jph53bn830w-openlane1-1.1.1/bin/scripts/klayout/xor.drc -rd a=/designs/sha256_v7b/runs/tapeout16/results/signoff/sha256_axil.gds -rd b=/designs/sha256_v7b/runs/tapeout16/results/signoff/sha256_axil.klayout.gds -rd jobs=1 -rd rdb_out=/designs/sha256_v7b/runs/tapeout16/reports/signoff/37-xor.xml -rd ignore=81/14 -rd rpt_out=/designs/sha256_v7b/runs/tapeout16/reports/signoff/37-xor.rpt |& tee /dev/null /designs/sha256_v7b/runs/tapeout16/logs/signoff/37-xor.log"
+[ERROR]: Exit code: 1
+[ERROR]: Last 10 lines:
+ERROR: ../../../src/tl/tl/tlFileUtils.cc,979,false
+ERROR: Internal error: ../../../src/tl/tl/tlFileUtils.cc:979 false was not true
+child process exited abnormally
+
+[ERROR]: Step 37 (gds_klayout) failed with error:
+-code 1 -level 0 -errorstack {INNER {invokeStk1 throw_error} CALL {try_exec klayout -b -r /nix/store/xpc7xd67rslanlqh566s6jph53bn830w-openlane1-1.1.1/bin/scripts/klayout/xor.drc -rd a=/designs/sha256_v7b/runs/tapeout16/results/signoff/sha256_axil.gds -rd b=/designs/sha256_v7b/runs/tapeout16/results/signoff/sha256_axil.klayout.gds -rd jobs=1 -rd rdb_out=/designs/sha256_v7b/runs/tapeout16/reports/signoff/37-xor.xml -rd ignore=81/14 -rd rpt_out=/designs/sha256_v7b/runs/tapeout16/reports/signoff/37-xor.rpt |& tee /dev/null /designs/sha256_v7b/runs/tapeout16/logs/signoff/37-xor.log} CALL run_klayout_gds_xor CALL run_klayout_step CALL {run_non_interactive_mode -design sha256_v7b -tag tapeout16}} -errorcode NONE -errorinfo {
+    while executing
+"throw_error"
+    (procedure "try_exec" line 15)
+    invoked from within
+"try_exec klayout  -b  -r $::env(SCRIPTS_DIR)/klayout/xor.drc  -rd a=$arg_values(-layout1)  -rd b=$arg_values(-layout2)  -rd jobs=$::env(KLAYOUT_XOR_TH..."
+    (procedure "run_klayout_gds_xor" line 23)
+    invoked from within
+"run_klayout_gds_xor"
+    (procedure "run_klayout_step" line 6)
+    invoked from within
+"run_klayout_step"} -errorline 1
+[ERROR]: Flow failed.
