@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数字溯源 · 作品集里每个数字的原文出处</title>
+<meta name="description" content="频率、面积、功耗、时序、违例计数——每一个数字都能追到 OpenLane 本次 run 里的一行原文；包括没跑成的那一步。">
+<style>
+:root{
+  --bg:#0e1116; --panel:#161a21; --panel2:#1c222b; --line:#2a323d;
+  --text:#e8edf4; --muted:#8d9aab; --accent:#4ade80; --accent2:#38bdf8; --warn:#fbbf24; --bad:#f87171;
+  --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:960px;margin:0 auto;padding:0 24px}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.9em;background:#0b0e13;border:1px solid var(--line);
+  padding:1px 5px;border-radius:4px}
+nav{border-bottom:1px solid var(--line);padding:14px 0;font-family:var(--mono);font-size:12.5px;
+  color:var(--muted);letter-spacing:.04em}
+nav .wrap{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+nav a{color:var(--muted)} nav a:hover{color:var(--accent)}
+header{padding:56px 0 36px;border-bottom:1px solid var(--line);
+  background:radial-gradient(1000px 320px at 20% -10%,rgba(56,189,248,.10),transparent 70%),var(--bg)}
+.tag{display:inline-block;font-family:var(--mono);font-size:12px;letter-spacing:.08em;
+  color:var(--accent2);border:1px solid rgba(56,189,248,.35);border-radius:999px;padding:4px 12px;margin-bottom:18px}
+h1{font-size:34px;line-height:1.3;margin:0 0 14px;letter-spacing:-.01em}
+.lead{font-size:16px;color:var(--muted);max-width:790px;margin:0}
+section{padding:44px 0;border-bottom:1px solid var(--line)}
+h2{font-size:20px;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:4px;height:16px;background:var(--accent2);border-radius:2px;display:inline-block}
+.sub{color:var(--muted);font-size:14px;margin:0 0 24px}
+.num{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:12px}
+.num .top{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.num .v{font-family:var(--mono);font-size:24px;color:var(--accent);letter-spacing:-.01em}
+.num .k{font-size:14px;color:var(--text)}
+.num .src{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:8px}
+.raw{font-family:var(--mono);font-size:11.5px;color:var(--text);background:#0b0e13;
+  border:1px solid var(--line);border-radius:6px;padding:9px 11px;margin-top:8px;
+  white-space:pre-wrap;word-break:break-all;overflow-x:auto}
+.note{font-size:12.5px;color:var(--muted);margin-top:6px}
+.box{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:14px}
+.box.bad{border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.05)}
+.box.warn{border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.05)}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;margin-top:10px}
+th,td{border:1px solid var(--line);padding:7px 9px;text-align:right}
+th{color:var(--muted);font-weight:400;background:#12161c;letter-spacing:.04em}
+td:first-child,th:first-child{text-align:left;color:var(--muted)}
+td.hi{color:var(--accent)}
+ul{margin:8px 0 0;padding-left:20px;font-size:14px}
+li{margin:5px 0;color:var(--muted)}
+.fp{font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all}
+footer{padding:34px 0 60px;color:var(--muted);font-size:12.5px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <span>1OUXILISI · 数字溯源</span>
+  <span><a href="./">← 作品集</a> · <a href="verify.html">在线自证</a> · <a href="project.html">项目详情</a></span>
+</div></nav>
+
+<header><div class="wrap">
+  <span class="tag">EVERY NUMBER HAS A LINE</span>
+  <h1>作品集里每个数字，<br>都能点开看它出自哪一行。</h1>
+  <p class="lead">这一页不解释设计，只做一件事：把作品集里说过的频率、面积、功耗、时序、违例计数，逐条追到 OpenLane 本次 run 的原文行，并给出文件指纹——你自己下载下来算一遍就能对上。
+  <b>连没跑成的那一步也在这页上</b>，因为一张只写成绩的清单，本身就不值得信。</p>
+</div></header>
+
+<section><div class="wrap">
+  <h2>一、七个数字，七处原文</h2>
+  <p class="sub">全部出自 <a href="evidence/metrics.csv">evidence/metrics.csv</a>（本次 run 的 OpenLane 指标汇总，原样未改）。它是两行 CSV：第一行列名，第二行就是这个设计。下面「列名 = 值」都能在这个文件里搜到。</p>
+
+  <div class="num">
+    <div class="top"><span class="v">55.56 MHz</span><span class="k">时钟频率</span></div>
+    <div class="src">列 suggested_clock_frequency 与 CLOCK_PERIOD</div>
+    <div class="raw">…,18.0,55.55555555555556,18.0,…</div>
+    <div class="note">1 / 18 ns = 55.555… MHz。这个数是「按 18 ns 约束跑完、时序有余量」反推出来的，不是我在别处算的。</div>
+  </div>
+
+  <div class="num">
+    <div class="top"><span class="v">11,475</span><span class="k">综合后标准单元数</span></div>
+    <div class="src">列 synth_cell_count</div>
+    <div class="raw">…,11475,0,0,0,0,…</div>
+    <div class="note">同一个文件里 TotalCells 是 <b>47,087</b>——它把 18,396 个 Decap、15,588 个 Fill 这些物理单元也算进去了。作品集写 11,475 用的是综合单元口径，写清楚口径比数字大更重要。</div>
+  </div>
+
+  <div class="num">
+    <div class="top"><span class="v">0.4096 mm²</span><span class="k">芯片面积</span></div>
+    <div class="src">列 DIEAREA_mm^2</div>
+    <div class="raw">…,0.4096,38056.640625,…</div>
+    <div class="note">0.64 mm × 0.64 mm = 0.4096 mm²。</div>
+  </div>
+
+  <div class="num">
+    <div class="top"><span class="v">45.77 %</span><span class="k">标准单元利用率</span></div>
+    <div class="src">列 Final_Util</div>
+    <div class="raw">…,45.7689,…</div>
+  </div>
+
+  <div class="num">
+    <div class="top"><span class="v">9.41 mW</span><span class="k">典型角功耗</span></div>
+    <div class="src">列 power_typical_internal_uW + switching + leakage（单位 µW）</div>
+    <div class="raw">…,0.00683,0.00258,1.76e-06,…   → 6.83 + 2.58 + 0.00176 ≈ 9.41 mW</div>
+    <div class="note">同三列还给出另外两个角：Fastest 0.0079+0.00307+1.89e-06 ≈ <b>11.0 mW</b>，Slowest 0.00533+0.002+0.00011 ≈ <b>7.44 mW</b>。三个都列，不挑好看的。</div>
+  </div>
+
+  <div class="num">
+    <div class="top"><span class="v">2.26 ns</span><span class="k">关键路径延迟</span></div>
+    <div class="src">列 critical_path_ns</div>
+    <div class="raw">…,2.26,18.0,55.55555555555556,…</div>
+  </div>
+
+  <div class="num">
+    <div class="top"><span class="v">0</span><span class="k">布线阶段违例</span></div>
+    <div class="src">列 tritonRoute_violations / Short / MetSpc / OffGrid / MinHole / Other</div>
+    <div class="raw">…,11475,0,0,0,0,0,0,…</div>
+    <div class="note"><b>口径要说清</b>：这 6 个 0 是布线阶段（TritonRoute）的违例计数。同一行的 Magic_violations、klayout_violations、lvs_total_errors 是 <code>-1</code>，意思是本次 run 里这几项<b>没有产出结果</b>，不是「检查通过」。下面第三节讲这件事的后果。</div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>二、时序：九个 setup 值全列，不只列三个</h2>
+  <p class="sub">出自 <a href="evidence/sta_worst_slack.txt">evidence/sta_worst_slack.txt</a>——那是三份 signoff 多角 STA 日志（各 33 MB）里 <code>worst slack corner</code> 行的原样摘录，带 <code>文件名:行号</code> 前缀。三份日志的分工是三种寄生参数提取角（min / max / nom），每份内部再跑三个工艺角。</p>
+
+  <table>
+    <tr><th>提取角 \ 工艺角</th><th>Fastest</th><th>Slowest</th><th>Typical</th></tr>
+    <tr><td>min（29-rcx_mcsta.min）</td><td>+11.9644</td><td>+1.0346</td><td>+9.3462</td></tr>
+    <tr><td>max（31-rcx_mcsta.max）</td><td class="hi">+11.8373</td><td>+0.5619</td><td>+9.0831</td></tr>
+    <tr><td>nom（33-rcx_mcsta.nom）</td><td class="hi">+11.8938</td><td class="hi">+0.7981</td><td>+9.2157</td></tr>
+  </table>
+  <p class="note">单位 ns，全部为正 = 全部满足 18 ns 约束（MET）。</p>
+
+  <div class="box warn">
+    <b>作品集那三个数分别在这里：</b>
+    <ul>
+      <li><b>+11.89</b> = nom 提取角 / Fastest 工艺角，<code>33-rcx_mcsta.nom.log:298158</code>，原值 <code>worst slack corner Fastest: 11.8938</code></li>
+      <li><b>+0.80</b> = nom 提取角 / Slowest 工艺角，<code>33-rcx_mcsta.nom.log:395574</code>，原值 <code>worst slack corner Slowest: 0.7981</code></li>
+      <li><b>+11.84</b> = max 提取角 / Fastest 工艺角，<code>31-rcx_mcsta.max.log:298645</code>，原值 <code>worst slack corner Fastest: 11.8373</code></li>
+    </ul>
+    <p class="note">这三条不是「最好看的三个」，而是我当初挑出来做代表的三条。上表里还有<b>更差的一个</b>：max 提取角 / Slowest 工艺角的 <b>+0.5619 ns</b>。要判断「余量到底有多少」，请看这一格，不要只看 +0.80。</p>
+  </div>
+
+  <div class="box">
+    <b>hold（建立/保持的另一侧）</b>
+    <div class="raw">29 min  : Fastest 0.4021   Slowest 1.6439   Typical 0.7383
+31 max  : Fastest 0.4060   Slowest 1.4977   Typical 0.7434
+33 nom  : Fastest 0.4038   Slowest 1.5729   Typical 0.7403</div>
+    <p class="note">作品集写的 hold <b>+0.40</b> 是其中最紧的 <code>29-rcx_mcsta.min.log:98548</code> → <code>worst slack corner Fastest: 0.4021</code>。三份日志每份都有 6 处 <code>worst slack corner</code>：前 3 处属于 <code>Path Type: min</code>（hold），后 3 处属于 <code>Path Type: max</code>（setup）。不知道这个结构的人会把同一份日志里的两组数看成互相矛盾——所以摘录文件开头直接写了这句说明。</p>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>三、这次 run 没跑完的那一步</h2>
+  <p class="sub"><a href="evidence/metrics.csv">metrics.csv</a> 里 <code>flow_status</code> 的值是 <code>flow failed</code>。原文在 <a href="evidence/errors.log">evidence/errors.log</a>。</p>
+
+  <div class="box bad">
+    <div class="raw">[ERROR]: Step 37 (gds_klayout) failed with error:
+ERROR: ../../../src/tl/tl/tlFileUtils.cc,979,false
+ERROR: Internal error: ../../../src/tl/tl/tlFileUtils.cc:979 false was not true
+child process exited abnormally
+[ERROR]: Flow failed.</div>
+    <p class="note">第 37 步是 KLayout 的 GDS-vs-GDS 逐层 XOR（把 Magic 出的 GDS 和 KLayout 出的 GDS 叠起来比，任何一层不一致都会报出来）。它崩在 <b>KLayout 自己的文件工具内部错误</b>，不是版图不一致，也不是设计错误——但结果是：<b>这一步没有产出结论</b>。</p>
+  </div>
+
+  <div class="box warn">
+    <b>所以下面这两句话必须分开读：</b>
+    <ul>
+      <li>「布线阶段违例计数为 0」——<b>成立</b>，见第一节最后一格，metrics.csv 里的 6 个 0。</li>
+      <li>「版图两份工具产物逐层一致已被证明」——<b>不成立</b>。本次 run 的 XOR 崩了，Magic/KLayout 违例列是 -1。这一条需要单独跑一次 XOR 才能补上，不能拿 DRC 0 顶替。</li>
+    </ul>
+    <p class="note">这一版页面的价值就在这里：它把「哪句话站得住、哪句话站不住」写在同一张纸的两面，而不是只把站得住的那面递给你。</p>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>四、这一页能证明什么、不能证明什么</h2>
+  <div class="box">
+    <b style="color:var(--accent)">能证明</b>
+    <ul>
+      <li>作品集里那 7 个数字，确实是 OpenLane 这次 run 报出来的，不是事后手写的。</li>
+      <li>时序的 9 个 setup 值、9 个 hold 值，都能对到具体日志的具体行号。</li>
+      <li>每个证据文件的指纹写在下面，你可以下载后自己 <code>sha256sum</code> 对一遍。</li>
+      <li>失败步骤的原文也在，包括它为什么失败。</li>
+    </ul>
+  </div>
+  <div class="box">
+    <b style="color:var(--warn)">不能证明</b>
+    <ul>
+      <li>这份 metrics.csv 不是我伪造的——这一点只能靠「文件在仓库里、指纹可核对、内容自洽」来逼近，不能靠数学证明。真要做到不可否认，得由第三方重跑一次 flow。</li>
+      <li>功耗数字是 OpenLane 内部功耗估算（向量无关的活动率假设），不是硅上实测。</li>
+      <li>时序基于 sky130 的 signoff 库与寄生提取，不等于流片后的硅结果。</li>
+      <li>本轮没有做 GDS XOR 的结论（见第三节）。</li>
+    </ul>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>五、三个证据文件的指纹</h2>
+  <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
+  <div class="box">
+    <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
+    <div class="fp" style="margin-top:14px">evidence/errors.log · 1,987 B<br>a4fad4c589dcd60a9ab8001bd255d89a0e59d3276690d01cb9f7c1a61e5274f5</div>
+    <div class="fp" style="margin-top:14px">evidence/sta_worst_slack.txt · 1,403 B<br>af0921bdabb0a663922e2ef1dbb703ecdf6779235d3198a1be37434f8bc21c80</div>
+  </div>
+  <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。</p>
+</div></section>
+
+<footer><div class="wrap">
+  1ouxilisi · 作品集附录 · 2026 · <a href="./">作品集</a> · <a href="verify.html">在线自证</a> · <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">GitHub</a>
+</div></footer>
+
+</body>
+</html>

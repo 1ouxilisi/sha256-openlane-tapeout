@@ -136,6 +136,11 @@ python3 scripts/check_vectors.py</pre>
       <p>浏览器里也能验：四个正式回归向量，<b>两条互不依赖的实现</b>（浏览器原生 + 页面自写的分块状态机）分别复算；证据文件从仓库现取并当场算指纹，可与 GitHub 同一文件对照；另有任意输入、200 组随机压测，以及一个「把常量改错一位」的现场演示。</p>
       <p style="margin-bottom:0"><a href="verify.html" style="font-family:var(--mono)">→ 打开在线自证（不用装任何东西，5 秒）</a></p>
     </div>
+    <div class="card" style="margin-top:14px;border-color:rgba(56,189,248,.35)">
+      <h3>上面那些数字，也都能点开看原文</h3>
+      <p>55.56 MHz、11,475 cells、0.4096 mm²、9.41 mW、setup 与 hold 的每一格，逐条追到 OpenLane 这次 run 的原文行和行号，附三个证据文件的指纹。<b>连本次 run 没跑成的那一步（GDS XOR 崩在工具内部错误）也写在上面</b>，并标明哪句话因此不成立。</p>
+      <p style="margin-bottom:0"><a href="numbers.html" style="font-family:var(--mono)">→ 打开数字溯源（每个数字一行出处）</a></p>
+    </div>
   </div>
 </section>
 
