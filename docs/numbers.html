@@ -68,7 +68,7 @@ footer{padding:34px 0 60px;color:var(--muted);font-size:12.5px;font-family:var(-
   <span class="tag">EVERY NUMBER HAS A LINE</span>
   <h1>作品集里每个数字，<br>都能点开看它出自哪一行。</h1>
   <p class="lead">这一页不解释设计，只做一件事：把作品集里说过的频率、面积、功耗、时序、违例计数，逐条追到 OpenLane 本次 run 的原文行，并给出文件指纹——你自己下载下来算一遍就能对上。
-  <b>连没跑成的那一步也在这页上</b>，因为一张只写成绩的清单，本身就不值得信。</p>
+  <b>流水线里没跑成的那一步（GDS 逐层 XOR），我也在这页上补跑了</b>，结论、逐层表和复现脚本一起放着。</p>
 </div></header>
 
 <section><div class="wrap">
@@ -155,8 +155,8 @@ footer{padding:34px 0 60px;color:var(--muted);font-size:12.5px;font-family:var(-
 </div></section>
 
 <section><div class="wrap">
-  <h2>三、这次 run 没跑完的那一步</h2>
-  <p class="sub"><a href="evidence/metrics.csv">metrics.csv</a> 里 <code>flow_status</code> 的值是 <code>flow failed</code>。原文在 <a href="evidence/errors.log">evidence/errors.log</a>。</p>
+  <h2>三、流水线没跑成的那一步，我单独补跑了</h2>
+  <p class="sub"><a href="evidence/metrics.csv">metrics.csv</a> 里 <code>flow_status</code> 的值是 <code>flow failed</code>；原文在 <a href="evidence/errors.log">evidence/errors.log</a>。</p>
 
   <div class="box bad">
     <div class="raw">[ERROR]: Step 37 (gds_klayout) failed with error:
@@ -164,16 +164,30 @@ ERROR: ../../../src/tl/tl/tlFileUtils.cc,979,false
 ERROR: Internal error: ../../../src/tl/tl/tlFileUtils.cc:979 false was not true
 child process exited abnormally
 [ERROR]: Flow failed.</div>
-    <p class="note">第 37 步是 KLayout 的 GDS-vs-GDS 逐层 XOR（把 Magic 出的 GDS 和 KLayout 出的 GDS 叠起来比，任何一层不一致都会报出来）。它崩在 <b>KLayout 自己的文件工具内部错误</b>，不是版图不一致，也不是设计错误——但结果是：<b>这一步没有产出结论</b>。</p>
+    <p class="note">第 37 步是 KLayout 的 GDS-vs-GDS 逐层 XOR。它崩在 <b>KLayout 自己的 Ruby 引擎初始化</b>（<code>tlFileUtils.cc:979</code>），不是版图不一致——我在同一台机器上连一个「只读 GDS、打印顶层单元名」的空脚本都跑不起来，报的是同一行。所以这是运行时环境的问题，不是设计的问题。</p>
+  </div>
+
+  <div class="box">
+    <b>补跑：绕开 Ruby，换一条路把同一件事做完</b>
+    <p class="note">用同一套 KLayout 0.29.1 库的 Python 接口（<code>klayout.db</code>），把两份 GDS 的顶层几何按 layer/datatype 展开，逐层做 XOR。比的是<b>几何覆盖</b>，不是多边形条数——KLayout 输出做过多边形合并，条数会不同，覆盖可以相同。</p>
+    <table>
+      <tr><th>结果</th><th>数值</th></tr>
+      <tr><td>参与比较的层</td><td>42</td></tr>
+      <tr><td>XOR 为 0 的层</td><td class="hi">41</td></tr>
+      <tr><td>有差异的层</td><td>1 —— <code>81/14</code>（prBoundary: A 1 个 / B 0 个）</td></tr>
+      <tr><td>TOTAL_XOR_POLYGONS</td><td class="hi">1</td></tr>
+    </table>
+    <p class="note">完整逐层表在 <a href="evidence/xor_layers.txt">evidence/xor_layers.txt</a>，复现脚本在 <a href="evidence/xor_layers.py">evidence/xor_layers.py</a>。几层（68/20、69/20、70/20、71/20、72/20）两边多边形条数差出几万，但 XOR 仍是 0，原因就是上面说的合并差异。</p>
   </div>
 
   <div class="box warn">
-    <b>所以下面这两句话必须分开读：</b>
+    <b>于是原来那两条判断可以改写了：</b>
     <ul>
-      <li>「布线阶段违例计数为 0」——<b>成立</b>，见第一节最后一格，metrics.csv 里的 6 个 0。</li>
-      <li>「版图两份工具产物逐层一致已被证明」——<b>不成立</b>。本次 run 的 XOR 崩了，Magic/KLayout 违例列是 -1。这一条需要单独跑一次 XOR 才能补上，不能拿 DRC 0 顶替。</li>
+      <li>「布线阶段违例计数为 0」——<b>成立</b>，见第一节最后一格。</li>
+      <li>「两份 GDS 逐层一致」——<b>现在成立了</b>。41 个制造相关层 XOR 全 0；唯一差异是 prBoundary（版图边界标记，A 有 1 个、B 有 0 个），而流水线第 37 步原本就带 <code>-rd ignore=81/14</code>，把这一层排除在外。</li>
+      <li>仍然不成立的：Magic 与 KLayout 的 <b>signoff DRC 违例数</b>（metrics 里是 <code>-1</code>）。那是真没跑过，不是跑过为零——这两个要 <code>.drc</code> 脚本，而 Ruby 引擎在本机就是起不来，我没有补成功。</li>
     </ul>
-    <p class="note">这一版页面的价值就在这里：它把「哪句话站得住、哪句话站不住」写在同一张纸的两面，而不是只把站得住的那面递给你。</p>
+    <p class="note">这一节前后差的就是一件事：上一版只能写「这一步没有结论」，这一版把结论拿回来了，并且说清它是什么、靠什么拿回来的、还有什么没拿到。</p>
   </div>
 </div></section>
 
@@ -184,30 +198,32 @@ child process exited abnormally
     <ul>
       <li>作品集里那 7 个数字，确实是 OpenLane 这次 run 报出来的，不是事后手写的。</li>
       <li>时序的 9 个 setup 值、9 个 hold 值，都能对到具体日志的具体行号。</li>
+      <li><b>两份 GDS 在 41 个制造相关层上逐层几何一致</b>（42 层中仅 prBoundary 一层有 1 处差异，而那一层流水线本身就排除）。</li>
       <li>每个证据文件的指纹写在下面，你可以下载后自己 <code>sha256sum</code> 对一遍。</li>
-      <li>失败步骤的原文也在，包括它为什么失败。</li>
+      <li>失败步骤的原文也在，包括它为什么失败；连「后来怎么补跑成功」的方法和脚本也一起给了。</li>
     </ul>
   </div>
   <div class="box">
     <b style="color:var(--warn)">不能证明</b>
     <ul>
       <li>这份 metrics.csv 不是我伪造的——这一点只能靠「文件在仓库里、指纹可核对、内容自洽」来逼近，不能靠数学证明。真要做到不可否认，得由第三方重跑一次 flow。</li>
+      <li><b>Magic / KLayout 的 signoff DRC 违例数仍是 -1</b>：这两个要跑 <code>.drc</code> 规则脚本，而本机 KLayout 的 Ruby 引擎起不来，我没补成功。所以「DRC 0」目前只覆盖布线阶段，不能读成「所有 DRC 都零」。XOR 一致只说明两份产出相同，不等于两份产出都满足设计规则。</li>
       <li>功耗数字是 OpenLane 内部功耗估算（向量无关的活动率假设），不是硅上实测。</li>
       <li>时序基于 sky130 的 signoff 库与寄生提取，不等于流片后的硅结果。</li>
-      <li>本轮没有做 GDS XOR 的结论（见第三节）。</li>
     </ul>
   </div>
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、三个证据文件的指纹</h2>
+  <h2>五、四份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
     <div class="fp" style="margin-top:14px">evidence/errors.log · 1,987 B<br>a4fad4c589dcd60a9ab8001bd255d89a0e59d3276690d01cb9f7c1a61e5274f5</div>
     <div class="fp" style="margin-top:14px">evidence/sta_worst_slack.txt · 1,403 B<br>af0921bdabb0a663922e2ef1dbb703ecdf6779235d3198a1be37434f8bc21c80</div>
+    <div class="fp" style="margin-top:14px">evidence/xor_layers.txt · 4,332 B<br>30a4e6032e61c961f165182d660576f274d398d8bf27405a3f74b66a9f25a4fc</div>
   </div>
-  <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。</p>
+  <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>
 </div></section>
 
 <footer><div class="wrap">
