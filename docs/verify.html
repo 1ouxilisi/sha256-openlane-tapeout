@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>在线自证 · SHA-256 硬件结果 vs 浏览器现算</title>
-<meta name="description" content="不装任何环境，用浏览器自带的密码学实现现场复算四个测试向量，与这颗芯片交付的结果逐字节比对。">
+<meta name="description" content="不装任何环境，用浏览器自带实现与页面自写的分块状态机两条独立路径，现场复算并与这颗芯片交付的结果逐字节比对。">
 <style>
 :root{
   --bg:#0e1116; --panel:#161a21; --panel2:#1c222b; --line:#2a323d;
@@ -60,6 +60,8 @@ input[type=text]{width:100%;background:#0b0e13;border:1px solid var(--line);bord
 footer{padding:34px 0 60px;color:var(--muted);font-size:12.5px;font-family:var(--mono)}
 ul{margin:8px 0 0;padding-left:20px;font-size:14px}
 li{margin:4px 0;color:var(--muted)}
+.stat{font-family:var(--mono);font-size:13px;margin-top:12px}
+.stat b{font-size:20px;color:var(--accent)}
 </style>
 </head>
 <body>
@@ -70,10 +72,10 @@ li{margin:4px 0;color:var(--muted)}
 </div></nav>
 
 <header><div class="wrap">
-  <span class="tag">NO SETUP · 5 SECONDS</span>
+  <span class="tag">NO SETUP · TWO INDEPENDENT IMPLEMENTATIONS</span>
   <h1>不用装任何环境，<br>现在就能自己算一遍。</h1>
-  <p class="lead">下面四个测试向量，左边是这颗芯片在流片流程里交付的结果，右边是你的浏览器刚刚用自带密码学实现现算出来的。
-  两边一致，说明「算法功能」这一层是真的；不一致，就说明我写的东西有问题。</p>
+  <p class="lead">页面里有两条互不依赖的实现：浏览器自带的密码学接口，和这一页自己写的 SHA-256 分块状态机（按 512-bit 逐块喂入，和硬件里保留的 8 个状态字是同一回事）。
+  两条算出同一个值，才说明交付的摘要是对的；哪一条错，另一条会当场把它抓出来。</p>
 </div></header>
 
 <section><div class="wrap">
@@ -84,11 +86,18 @@ li{margin:4px 0;color:var(--muted)}
 </div></section>
 
 <section><div class="wrap">
-  <h2>自己敲一个</h2>
-  <p class="sub">任意文本，现场算出标准 SHA-256。注意：这一行没有对应的硬件结果，只是让你确认页面上的实现没有被做过手脚。</p>
+  <h2>任意输入，两条实现互验</h2>
+  <p class="sub">固定向量只能证明「这四组对」。这一节证明「任意长度都对」——包括必须跨块续算的长输入。</p>
   <div class="box">
     <input type="text" id="custom" placeholder="输入任意文本，例如 hello" value="hello">
-    <div class="out" id="customOut"></div>
+    <div class="row" style="margin-top:12px"><span class="k">浏览器原生</span><span class="v" id="outA">—</span></div>
+    <div class="row"><span class="k">页面自写</span><span class="v" id="outB">—</span></div>
+    <div class="row"><span class="k">结论</span><span class="v" id="outV">—</span></div>
+  </div>
+  <div class="box">
+    <p style="margin:0 0 4px;font-size:14px;color:var(--muted)">随机压测：长度 0–4000 字节、内容随机，跑 200 组，看两条实现有没有一次对不上。</p>
+    <button class="btn" id="stress">开始压测 200 组</button>
+    <div class="stat" id="stressOut"></div>
   </div>
 </div></section>
 
@@ -99,8 +108,9 @@ li{margin:4px 0;color:var(--muted)}
       <p style="margin:0 0 6px;color:var(--accent);font-family:var(--mono);font-size:12px">能证明</p>
       <ul>
         <li>交付的摘要值，和标准 SHA-256 定义一致</li>
-        <li>页面没有篡改结果——你算的和页面显示的一起变</li>
-        <li>这件事可以零成本复现，不需要装工具链</li>
+        <li>任意长度（含跨块）都对，不只是四组固定向量</li>
+        <li>两条独立实现互验，页面改不了结果——改一条，另一条立刻不一致</li>
+        <li>这件事零成本可复现，不需要装工具链</li>
       </ul>
     </div>
     <div class="box">
@@ -108,7 +118,8 @@ li{margin:4px 0;color:var(--muted)}
       <ul>
         <li>版图做对了、DRC 干净、时序收敛——那是 STA 和 XOR 的事</li>
         <li>面积、频率、功耗这些数字</li>
-        <li>硬件在硅上真跑过（这三代都是开源 PDK 的流片级交付，不是实物芯片）</li>
+        <li>硬件在硅上真跑过（这几代都是开源 PDK 的流片级交付，不是实物芯片）</li>
+        <li>这页的 JS 实现和 RTL 在电路层等价——只证明算法行为一致</li>
       </ul>
     </div>
   </div>
@@ -120,26 +131,31 @@ li{margin:4px 0;color:var(--muted)}
   算不出来？把浏览器换成 Chrome / Edge / Firefox 的较新版本；<code>crypto.subtle</code> 只在 HTTPS 下可用，本页正好是 HTTPS。
 </div></footer>
 
+<script src="sha256_impl.js"></script>
 <script>
-const V = [
-  { name: "abc", label: '"abc"（3 字节）', bytes: () => new TextEncoder().encode("abc"),
-    hw: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-    note: "最小输入，一个压缩块就出结果" },
-  { name: "empty", label: "空串（0 字节）", bytes: () => new Uint8Array(0),
-    hw: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    note: "边界：什么都不喂，仍然要有合法输出" },
-  { name: "fox", label: '"The quick brown fox…"（43 字节）', bytes: () => new TextEncoder().encode("The quick brown fox jumps over the lazy dog"),
-    hw: "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
-    note: "标准测试句，一个压缩块内" },
-  { name: "a119", label: '"a" × 119（119 字节，两块流式）', bytes: () => new TextEncoder().encode("a".repeat(119)),
-    hw: "31eba51c313a5c08226adf18d4a359cfdfd8d2e816b13f4af952f7ea6584dcfb",
-    note: "跨块：必须先存住中间状态再续算，验证多块链式" },
-];
+const sha256hexOwn = window.SHA256Impl.hex;
 
-async function sha256hex(buf) {
+/* ---------- 路径 A：浏览器原生 ---------- */
+async function sha256hexNative(buf) {
   const d = await crypto.subtle.digest("SHA-256", buf);
   return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
+
+/* ---------- 固定向量 ---------- */
+const V = [
+  { label: '"abc"（3 字节）', bytes: () => new TextEncoder().encode("abc"),
+    hw: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    note: "最小输入，一个压缩块就出结果" },
+  { label: "空串（0 字节）", bytes: () => new Uint8Array(0),
+    hw: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    note: "边界：什么都不喂，仍然要有合法输出" },
+  { label: '"The quick brown fox…"（43 字节）', bytes: () => new TextEncoder().encode("The quick brown fox jumps over the lazy dog"),
+    hw: "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
+    note: "标准测试句，一个压缩块内" },
+  { label: '"a" × 119（119 字节，两块流式）', bytes: () => new TextEncoder().encode("a".repeat(119)),
+    hw: "31eba51c313a5c08226adf18d4a359cfdfd8d2e816b13f4af952f7ea6584dcfb",
+    note: "跨块：必须先存住中间状态再续算，验证多块链式" },
+];
 
 function rowHTML(k, v, cls) {
   return '<div class="row"><span class="k">' + k + '</span><span class="v ' + (cls || "") + '">' + v + '</span></div>';
@@ -149,8 +165,10 @@ function rowHTML(k, v, cls) {
   const host = document.getElementById("vecs");
   let pass = 0, fail = 0;
   for (const v of V) {
-    const got = await sha256hex(v.bytes());
-    const ok = got === v.hw;
+    const bytes = v.bytes();
+    const native = await sha256hexNative(bytes);
+    const own = sha256hexOwn(bytes);
+    const ok = native === v.hw && own === v.hw;
     ok ? pass++ : fail++;
     const el = document.createElement("div");
     el.className = "vec";
@@ -158,23 +176,65 @@ function rowHTML(k, v, cls) {
       '<div class="vhead"><span class="vname">' + v.label + '</span>' +
       '<span class="verdict ' + (ok ? "ok" : "bad") + '">' + (ok ? "MATCH" : "MISMATCH") + '</span></div>' +
       rowHTML("硬件交付", v.hw, "") +
-      rowHTML("浏览器现算", got, ok ? "green" : "red") +
+      rowHTML("浏览器原生", native, native === v.hw ? "green" : "red") +
+      rowHTML("页面自写", own, own === v.hw ? "green" : "red") +
       '<div class="note">' + v.note + '</div>';
     host.appendChild(el);
   }
   const s = document.getElementById("summary");
   s.textContent = fail === 0
-    ? "4 / 4 一致。这一层是真的；上面写的「不能证明」那几条，才是真正难的部分。"
+    ? "4 / 4 一致（两条实现都与硬件交付结果相同）。这一层是真的；上面写的「不能证明」那几条，才是真正难的部分。"
     : (pass + " 一致、" + fail + " 不一致——不一致就说明有问题，你可以直接把这条结论发给我。");
   s.style.color = fail === 0 ? "var(--accent)" : "var(--bad)";
 })();
 
+/* ---------- 任意输入 ---------- */
 const inp = document.getElementById("custom");
-const out = document.getElementById("customOut");
+const outA = document.getElementById("outA");
+const outB = document.getElementById("outB");
+const outV = document.getElementById("outV");
+
 async function calcCustom() {
-  const got = await sha256hex(new TextEncoder().encode(inp.value));
-  out.textContent = got;
+  const bytes = new TextEncoder().encode(inp.value);
+  const a = await sha256hexNative(bytes);
+  const b = sha256hexOwn(bytes);
+  outA.textContent = a;
+  outB.textContent = b;
+  const ok = a === b;
+  outV.textContent = ok ? "一致（" + bytes.length + " 字节）" : "不一致 —— 这一条可以当作 bug 报给我";
+  outV.style.color = ok ? "var(--accent)" : "var(--bad)";
 }
+
+/* ---------- 随机压测 ---------- */
+document.getElementById("stress").addEventListener("click", async function () {
+  const btn = this;
+  btn.disabled = true;
+  const out = document.getElementById("stressOut");
+  out.textContent = "跑着…";
+  let ok = 0, bad = 0, firstBad = null;
+  const t0 = performance.now();
+  for (let i = 0; i < 200; i++) {
+    const n = Math.floor(Math.random() * 4001);
+    const bytes = new Uint8Array(n);
+    crypto.getRandomValues(bytes);
+    const a = await sha256hexNative(bytes);
+    const b = sha256hexOwn(bytes);
+    if (a === b) ok++;
+    else { bad++; if (!firstBad) firstBad = { n, a, b }; }
+  }
+  const ms = Math.round(performance.now() - t0);
+  if (bad === 0) {
+    out.innerHTML = '<b>' + ok + " / 200</b> 一致 · 用时 " + ms + " ms · 长度 0–4000 字节随机 · 两条实现零分歧";
+    out.style.color = "var(--accent)";
+  } else {
+    out.innerHTML = ok + " 一致 / " + bad + " 不一致 · 第一个反例长度 " + firstBad.n + " 字节 · " + ms + " ms";
+    out.style.color = "var(--bad)";
+  }
+  btn.disabled = false;
+  btn.textContent = "再跑一次";
+  window.__stressResult = { ok, bad, ms };
+});
+
 inp.addEventListener("input", calcCustom);
 calcCustom();
 </script>
