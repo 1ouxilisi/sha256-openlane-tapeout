@@ -246,6 +246,8 @@ check_antennas -verbose
     <p class="note">为什么会这样，不猜：<code>config.tcl</code> 第 153 行 <code>GRT_REPAIR_ANTENNAS = 0</code>、第 154/155 行只给了 heuristic 阈值与插入模式，而 <code>metrics.csv</code> 的 <b><code>DiodeCells = 0</code></b>——整颗芯片一个二极管都没插。sky130 的天线规则要求长 net 上接了大量栅时，要在 net 的某处插二极管把电荷放掉；这一步在本 run 里没做，所以检查一补跑就报。</p>
     <p class="note"><b>口径</b>：这是补跑（流水线自己的引擎、同一份 ODB，但不是本 run 的原始记录）；67 个 net 相对本设计 15,647 个网约 0.43%，不算灾难，但按规则就是<b>不通过</b>。修法在流程里有现成路径（二极管插入 / <code>repair_antennas</code>），代价是要重跑布线之后的步骤并改动版图，这一轮<b>没有做</b>——所以这里写的是「查出来、没修」，不是「已解决」。它也与两套 DRC 的 0 条不构成互证：DRC 不管天线。</p>
     <p class="note">原文、第一条违例的形状、复跑命令在 <a href="evidence/antenna_check.txt">evidence/antenna_check.txt</a>。</p>
+    <p class="note"><b>修法我实跑验证了</b>（不是「理论上能修」）：在 ODB 的<b>副本</b>上跑 OpenLane 自己那条 <code>repair_antennas sky130_fd_sc_hd__diode_2</code>。第一次直接插，<code>Inserted 115 diodes</code> 之后卡在 <code>[WARNING DPL-0037] Use remove_fillers before detailed placement</code> → <code>DPL-0036</code>；按提示先删 fill 再来一次，三轮插入共 <b>147 个二极管（115 + 32）</b>，同一检查器复测 <b>0 net / 0 pin</b>。所以违例是可由二极管消掉的，不是设计不可修。</p>
+    <p class="note"><b>但这不等于版图已经修好</b>：插入发生在<b>详细布线之后</b>的数据库上，二极管没有连线、原布线没动；为腾位置先删了 fill；所以没有生成新 GDS，现有的 XOR、两套 DRC、LVS 全部仍指向旧版图。真修的顺序是「全局布线 → 插二极管 → 详细布线 → 重新出 GDS → 重跑 DRC / XOR / LVS」，等于把第 32 步之后全部重做一遍，本轮<b>只做到了「修法验证」</b>。两次尝试的原文与口径在 <a href="evidence/antenna_repair_attempt.txt">evidence/antenna_repair_attempt.txt</a>。</p>
   </div>
 
   <div class="box bad">
@@ -313,7 +315,7 @@ check_antennas -verbose
       <li>这份 metrics.csv 不是我伪造的——这一点只能靠「文件在仓库里、指纹可核对、内容自洽」来逼近，不能靠数学证明。真要做到不可否认，得由第三方重跑一次 flow。</li>
       <li>Magic 的 signoff DRC 跑过一遍、结果 0 条违例（<b>不含天线与密度</b>）；KLayout 侧的 218 类规则同样 0 条；密度 deck 六层空孔率全部在阈值之上、0 条。这三项都是事后补跑，各自都带了一个故意违规的正对照，证明引擎不是在空转。</li>
       <li><b>LVS 的「通过」是有口径的通过</b>：netgen 在 <code>VNB≡VGND</code>、<code>VPB≡VPWR</code> 的前提下、把叶子单元展平之后，顶层 166,353 器件与 84,178 条网两侧完全相等（<code>Circuits match uniquely</code>）。它证明的是<b>顶层晶体管级连接等价</b>，不证明「每个标准单元内部逐管等价」；另一条本该给出同样结论的路线（把 5,496 个 tap 补回网表再跑）也实跑过了，走不通——PDK 里那个单元只有两个脚、body 为空。</li>
-      <li><b>天线这一项没通过</b>：OpenROAD <code>check_antennas</code> 对布线后的 ODB 补跑，报 <b>67 个 net / 87 个 pin 越限</b>；本 run 的 <code>DiodeCells = 0</code>，一个二极管都没插，检查也没在流程里跑到。修法有现成路径，本轮没做，所以页面上写的是「查出来、没修」。</li>
+      <li><b>天线这一项没通过</b>：OpenROAD <code>check_antennas</code> 对布线后的 ODB 补跑，报 <b>67 个 net / 87 个 pin 越限</b>；本 run 的 <code>DiodeCells = 0</code>，一个二极管都没插，检查也没在流程里跑到。修法我实跑验证过——删 fill 后插 147 个二极管、复测 0/0，但那是在详细布线之后的数据库上做的，<b>没有重新出 GDS</b>，所以版图本身仍未修。</li>
       <li>功耗数字是 OpenLane 内部功耗估算（向量无关的活动率假设），不是硅上实测。</li>
       <li>时序基于 sky130 的 signoff 库与寄生提取，不等于流片后的硅结果。</li>
     </ul>
@@ -321,7 +323,7 @@ check_antennas -verbose
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、十八份证据文件的指纹</h2>
+  <h2>五、十九份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -341,6 +343,7 @@ check_antennas -verbose
     <div class="fp" style="margin-top:14px">evidence/density_check.txt · 1,954 B<br>18b9c39e614e6d0039441d064880607893f944f25a9d2ce666cfce09fabe147b</div>
     <div class="fp" style="margin-top:14px">evidence/density_report.xml · 465 B<br>6681d364b2c424d55a95ad4444cace1f7aac6012fb812dfbecf3eac51f4501ea</div>
     <div class="fp" style="margin-top:14px">evidence/antenna_check.txt · 3,635 B<br>a9403329a5963aa998f1b7c2711fa772c308298ab48111d949221818924647d6</div>
+    <div class="fp" style="margin-top:14px">evidence/antenna_repair_attempt.txt · 4,006 B<br>5f76607cf83cff7478f120c37d3536927e1662a54da1db2b91ae16ff74cce068</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_pass.txt · 8,292 B<br>956ff1a4cc9d2db595a722be26ac7fa53b5af0f15e24af613eef56fd169aaf9f</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>

@@ -1,0 +1,72 @@
+天线修复尝试：插二极管后复测归零，但版图还没重做
+====================================================
+对象：results/routing/sha256_axil.odb 的**副本**（原产物未改，32,013,664 B / 2026-11-06 20:10）
+引擎：OpenROAD 的 repair_antennas（正是 OpenLane 在 GRT_REPAIR_ANTENNAS=1 时调用的那条），
+      二极管单元取本 run 配置的 sky130_fd_sc_hd__diode_2（config.tcl 第 54 行）。
+
+一、第一次尝试（原样，直接插）
+------------------------------
+    read_liberty .../sky130_fd_sc_hd__tt_025C_1v80.lib
+    read_db /tmp/antfix/fix.odb
+    check_antennas -verbose
+    repair_antennas sky130_fd_sc_hd__diode_2 -iterations 15 -ratio_margin 10
+
+日志原文：
+    [INFO ANT-0002] Found 67 net violations.
+    [INFO ANT-0001] Found 87 pin violations.
+    [INFO GRT-0012] Found 80 antenna violations.
+    [INFO GRT-0015] Inserted 115 diodes.
+    [WARNING DPL-0037] Use remove_fillers before detailed placement.
+    [INFO DPL-0034] Detailed placement failed on the following 39 instances: …（FILLER_0_*）
+    [ERROR DPL-0036] Detailed placement failed.
+
+也就是：二极管插得进去（115 个），但插完要做合法化，而行里全是 fill 单元，没有空位，
+dpl 直接失败。**这不是规则问题，是流程顺序问题**——真实流程里 repair_antennas 发生在
+全局布线之后、详细布线之前，那时还没有 fill。
+
+二、第二次尝试（先 remove_fillers，再插）
+-----------------------------------------
+    read_db /tmp/antfix/fix2.odb
+    check_antennas -verbose        # 67 / 87（与补跑一致）
+    remove_fillers
+    repair_antennas sky130_fd_sc_hd__diode_2 -iterations 15 -ratio_margin 10
+    check_antennas -verbose
+
+日志原文：
+    [INFO ANT-0002] Found 67 net violations.
+    [INFO ANT-0001] Found 87 pin violations.
+    FILLERS_REMOVED
+    [INFO GRT-0012] Found 80 antenna violations.
+    [INFO GRT-0015] Inserted 115 diodes.
+    [INFO GRT-0012] Found 8 antenna violations.
+    [INFO GRT-0015] Inserted 32 diodes.
+    [INFO GRT-0012] Found 0 antenna violations.
+    REPAIR_DONE
+    [INFO ANT-0002] Found 0 net violations.
+    [INFO ANT-0001] Found 0 pin violations.
+    RECHECK_DONE
+
+三轮插入、共 147 个二极管（115 + 32），同一检查器复测 67 / 87 → 0 / 0。
+
+三、这条结论能说到哪、不能说到哪
+--------------------------------
+能说：**违例是可由二极管插入消掉的**，不是设计本身不可修；消掉之后同一引擎、同一份数据复测为 0。
+不能说：**版图已经修好了**。理由三条，必须写明白：
+  1) 这次插入发生在**详细布线之后**的数据库上，插进去的二极管**没有连线**，原有布线也没动过；
+     真实流程的次序是「全局布线 → 插二极管 → 详细布线」，本轮没有重跑详细布线。
+  2) 为了腾出合法位置，先删掉了 fill（真实流程会在最后重新插 fill），所以这份数据库不是
+     可交付的版图状态。
+  3) 因此**没有生成新 GDS**，现有的 XOR（两份 GDS 逐层比对）、两套 DRC（218 类 / Magic）、
+     LVS（Circuits match uniquely）**全部仍指向旧版图**，与新状态不构成互证。
+
+四、要真修好，还得做什么（代价写清楚，不含糊）
+------------------------------------------
+把 GRT_REPAIR_ANTENNAS 置 1（本 run 是 0）→ 重跑全局布线（会插二极管）→ 重跑详细布线 →
+重新 streamout GDS → 重跑 KLayout DRC（218 类）/ Magic DRC / XOR / LVS（Magic 提取约 18–20 分钟）。
+也就是说，天线这一项要修，等于把第 32 步之后的 signoff 全部重做一遍；本轮**只做到了「修法验证」**，
+没做「版图重做」。页面上因此仍写「查出来、未修版图」，后面补一句「修法已实跑验证：147 个二极管，
+复测 0」。
+
+五、复跑
+--------
+上面两条 tcl 原样可复跑（记得先 cp 一份 ODB，别在原产物上动手）。
