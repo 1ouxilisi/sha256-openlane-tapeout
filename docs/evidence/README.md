@@ -18,6 +18,7 @@
 | `lvs_rootcause.txt` | 6,079 B | LVS 卡点的逐轮排障：四次对照实验（头部折行 / 定义顺序 / 方括号改名 / `-auto`）全部仍为 47；端口表核对的硬证据；一处误报的更正 | 生成结果 |
 | `lvs_instance_audit.txt` | 6,312 B | 实例级对账：47,087 / 33,984 / 15,588 三个数字的关系，13,103 的差额拆成 fill 与 tap；**其中「1,795 行缺单元名」一节的结论已被 `lvs_selfcheck.txt` 证伪**，读到那节请以 selfcheck 为准；第二引擎（KLayout）假通过的记录 | 生成结果 |
 | `lvs_selfcheck.txt` | 6,016 B | 口径更正 + 三项对照实验：1,795 行是 SPICE `+` 续行（拼接后 33,984/33,984 都有单元名）；版图网表自比 0 个端口失配；转换网表逐脚与 `nl.v` 核对 15,381 个实例一致 | 生成结果 |
+| `lvs_pin_parity.txt` | 7,491 B | 端口层复核：两侧各删 32 个端口反应一致（32 唯一名 / 64 行）、两侧 header 折成每行 8 个后两个方向仍 47+1；**推翻「端口表整体错位一格」**，47 个名字只打印一遍说明端口两侧都在、失败在网这一层；netgen Tcl 通道的正确调用方式 | 生成结果 |
 
 三份 STA 原始日志（`logs/signoff/29-rcx_mcsta.min.log`、`31-rcx_mcsta.max.log`、`33-rcx_mcsta.nom.log`）各约 33 MB，一次性的，没有入库。
 
@@ -34,6 +35,7 @@ f97fe245883cc40871630f33f0146b3d0faa904e6463963bf24838471e69e561  gds_layers.txt
 8397535d6d8f3a804c7d4d320699f815764eb261d09a7a57117ef40df1eda35e  lvs_rootcause.txt
 23d7022ac3cb9136bed59ba43baf67adb5a137a0f5790ebe33549b12b6db1af9  lvs_instance_audit.txt
 e2be16bc18b791c16b99030f0691d7c17f2b638748cdf4c7fdda2597cbce9bc0  lvs_selfcheck.txt
+42237b91ed66826eabb58405c2acedce88fa9c6262b6c7847c72e1af5a2b4a42  lvs_pin_parity.txt
 ```
 
 ## 一个必须知道的读数陷阱
@@ -62,5 +64,7 @@ e2be16bc18b791c16b99030f0691d7c17f2b638748cdf4c7fdda2597cbce9bc0  lvs_selfcheck.
 再往下一层，卡点被具体到实例：版图网表顶层 33,984 行实例里，有 **1,795 行（5.3%）行尾不是单元名而是网名**（`X_20693_ VGND VPWR VPWR VGND clknet_leaf_41_clk net790 net193 u_core.W[3][23]`），netgen 判不出是什么单元，两边实例结构从这一层就不相等——这比「端口识别」具体。**但这一段后来被自己推翻了，见下一段。** 同一轮还把数字之间的关系拆干净了：PnR 放置的 47,087 个单元里 31,499 个是空引脚（fill / decap / tap），有引脚的 15,588 个正是 netgen 报的 15,593 的来源（差 5，未逐条对到）；版图提取的 33,984 与 47,087 的差 13,103 = fill_1 5,667 + fill_2 1,940 + tapvpwrvgnd_1 5,496，分毫不差。另有一个必须记下的失败：用 KLayout 的 `NetlistComparer` 当第二引擎时它**返回了 True，但 flatten 后两侧各只剩 8 个器件**，属假通过，不采用。详见 `lvs_instance_audit.txt`。
 
 **更正（这一版）**：上一段那个「1,795 行缺单元名」的结论是错的，已撤回。Magic 的 `exttospice` 走标准 SPICE 续行——超长实例行的下一行以 `+` 开头，单元名就在续行上（`+ sky130_fd_sc_hd__dfrtp_1`）。把续行拼回去再判，**33,984 / 33,984 全部有单元名，缺名 0 行**；全文件 1,813 行以 `+` 开头，顶层体内正好 1,795 行，与那 1,795 处「行末是网名」逐行对应。同时补了两项正面实验：① 版图网表复制一份和自己比，**0 行 `no matching pin`、98 个端口全对、`Circuits match uniquely.`**，说明读取侧无障碍（另做了单行 1,295 字符与 `+` 折行两份构造对照，也都匹配）；② 转换出的网表逐实例逐脚与 `nl.v` 核对，**15,381 个实例一致**，206 个例外是 `clkload0` 这类在 `nl.v` 里本就没有该引脚的实例，31,499 个空引脚单元无信号脚可比。于是归因改判为**真实的版图与网表差异**（时钟负载与常量类单元的特殊连接、两侧网名集合 212 / 11 处不对称），不是名字、折行或格式问题。**LVS 仍未通过**，这一点没变。详见 `lvs_selfcheck.txt`。
+
+**再更正（最新，第三次）**：上一段之后的「端口表整体错位一格」这个读法也不成立，撤回。三条依据：① 两侧端口表本来就是 98 / 98、名字逐字相同、顺序相同；② 两侧各删 32 个 `s_axil_rdata[n]` 端口后分别与原件比，版图侧与网表侧都报 **32 个唯一名 / 64 行**（每名重复两遍），反应一字不差，说明两侧读入等价；③ 把两侧 header 分别折成每行 8 个端口、两个方向各跑一次，仍是 **47 + 1**，pins 表起始行号都不变（162352）。关键的判别是行数：只有「某端口只在一侧存在」时 netgen 才把名字打印两遍，而真实比对里这 47 个名字**只打印一遍、无重复**——它们两侧端口表里都在，失败在**它们所连的网**。报告本身也把层次写清了：`Cell pin lists are equivalent.` + `Device classes ... are equivalent.` + `Final result: Netlists do not match.`。末行 `clk | s_axil_wdata[27] **Mismatch**` 是 netgen 自己改配对（`altered to match`）的痕迹，不是文件里的命名关系。当前只剩一句有依据的话：**47 个端口所连的网没配上，机制未定**。详见 `lvs_pin_parity.txt`（内含 netgen Tcl 通道的正确调用方式：`netgen -batch < 脚本` 不执行，须 `netgenexec -- -batch source <脚本>`）。
 
 仍然缺的：**KLayout 的 signoff DRC 违例数**（Ruby 引擎在本机 chroot 起不来，换 locale / HOME / TMPDIR 均无效）。XOR 一致只说明两份产出相同，不等于两份都满足设计规则。

@@ -1,0 +1,94 @@
+LVS 端口层复核：三个对照实验把「端口读不进来 / 端口表错位」这一整类解释排除
+============================================================================
+对象：/tmp/lvs/sha256_axil.ext.spice（Magic 提取，2,785,763 B，顶层 98 端口）
+      /tmp/lvs/sha256_axil.pnr5.spice（PnR 网表经转换器转出，顶层 98 端口）
+工具：netgen 1.5.270（2024-06-02 编译），setup=/pdk/sky130A/libs.tech/netgen/sky130A_setup.tcl
+时间：2026-11-07
+
+一、结论
+--------
+1) 三个对照实验的方向完全一致：端口声明的物理形态（单行约 1.5 千字符 / 每行 8 个 / Magic 每行 5 个）对结果零影响；
+   两个文件对「端口增减」的反应也完全一致。netgen 对这两份网表的顶层端口，是等量、完整地读进来的。
+2) 因此上一版的两个读法都要撤回：
+   - 「47 个 AXI 端口在网表侧没有建立对应关系」——不准确，端口名这一层 netgen 自己判定为 equivalent；
+   - 「netgen 把两侧端口表整体错位了一个位置」——不成立，那张 48 行表不是位置错位。
+3) 现在能站住的说法只有一句：48 行里 47 行是「端口存在、它所在的网没有配上」，另 1 行
+   （clk | s_axil_wdata[27] **Mismatch**）是 netgen 自动改配对（日志原文 altered to match）留下的痕迹。
+   失败发生在连接层，不在名字层。
+4) LVS 仍未通过。Final result: Netlists do not match.
+
+二、四个实验（全部可复跑）
+--------------------------
+实验 1：两侧各在 header 里删掉同样 32 个 s_axil_rdata[n] 端口，分别与各自原件比。
+  命令：
+    netgen -batch lvs "sha256_axil.ext.spice sha256_axil" "ext_nor.spice sha256_axil" \
+        /pdk/sky130A/libs.tech/netgen/sky130A_setup.tcl A.out
+    netgen -batch lvs "sha256_axil.pnr5.spice sha256_axil" "pnr_nor.spice sha256_axil" \
+        /pdk/sky130A/libs.tech/netgen/sky130A_setup.tcl B.out
+实验 2：把 PnR 侧 header 折成每行 8 个端口（130 行 -> 13 行），版图侧不动。
+    netgen -batch lvs "sha256_axil.ext.spice sha256_axil" "pnr8.spice sha256_axil" ... C.out
+实验 3：反向——把版图侧 header 折成每行 8 个，PnR 侧保持单行。
+    netgen -batch lvs "ext_one.spice sha256_axil" "sha256_axil.pnr5.spice sha256_axil" ... D.out
+实验 4：原样比对（历史结果，同一份文件）。
+    lvs8.out
+
+三、实验 1 结果：两个文件对「端口被删」的反应完全相同
+------------------------------------------------------
+A.out（版图侧 vs 删 32 端口的版图侧）：顶层 pins 表 32 个唯一名、共 64 行；
+B.out（PnR 侧 vs 删 32 端口的 PnR 侧）：顶层 pins 表 32 个唯一名、共 64 行。
+两边的行数、唯一名个数、出现位置一一对应，连「每个名字重复打印两行」这个细节都一样。
+两侧的最终判定也一致：Cell pin lists for sha256_axil and sha256_axil altered to match.
+                Final result: Top level cell failed pin matching.
+含义：同一处改动，两个文件给出同一份反应；说明二者被 netgen 读到的是同一种结构，不存在「一侧读不全」。
+
+四、实验 2 / 3 结果：折行与单行没有任何差别
+------------------------------------------
+C.out（PnR 侧折成 13 行）：no matching pin 47 行、Mismatch 1 行；
+D.out（版图侧折成 13 行）：no matching pin 47 行、Mismatch 1 行；
+与实验 4（两侧都用原样文件）的 47 + 1 完全相同，连 pins 表起始行号都是 162352。
+含义：header 是 1 行还是 13 行、每行 8 个还是每行 5 个，与结果无关。折行/超长行解释彻底排除。
+
+五、实验 4 的细节：47 行不重复，64 行是重复的——这个差别是判层次的关键
+------------------------------------------------------------------
+lvs8.out 顶层 pins 表：47 行 no matching pin，按左侧名去重后仍是 47（无重复行）。
+A/B 两个对照里：32 个唯一名对应 64 行，也就是每个名字出现两次。
+这个差别说明：A/B 那种「某端口只在其中一侧的端口表里存在」的情形，netgen 会连打两遍；
+而真实比对里 47 个名字只打一遍 => 这些端口在两侧的端口表里都存在，只是它们所连的网没配上。
+与之吻合的是同一份报告的两句：Cell pin lists are equivalent.（端口名层通过）
+                              Device classes ... are equivalent.（单元层通过）
+                              Final result: Netlists do not match.（连接层不通过）
+
+六、读法更正（这一版撤回的两句话）
+----------------------------------
+1) 上一版写「47 个顶层端口在网表侧没有建立对应关系」。按第五节，端口是建立了的。
+2) 上一版写「netgen 把两侧端口表整体错位一格：C1 的第 1 个对上了 C2 的第 48 个」。不成立。
+   依据：① 两侧端口表都是 98 个、名字逐字相同（cmp2.py 实测）；② 若真的整体错位，48 行里应出现成对的
+   名字对，而实际 47 行右侧全是 (no matching pin)、只有最后一行有一对；③ 实验 2/3 改变 header 形态后
+   行数与起始行号一字未变。
+   现在只保留可观察到的现象：最后一行 clk 被挂到了 s_axil_wdata[27] 上，且带 **Mismatch**，
+   这一行是 netgen 自动改配对的结果，不是文件里的命名关系。
+
+七、工具事实（踩坑与通道）
+--------------------------
+1) netgen -batch 从 stdin 读 Tcl 这条通道不成立：`netgen -batch < script.tcl` 只打出
+   "Netgen 1.5.270 compiled on ..." 与两条 Warning: netgen command 'format'/'global' use fully-qualified name，
+   脚本内容不执行（输出文件未生成）。
+2) 可用的通道是 netgenexec 本身（chroot 内）：
+   /nix/store/b9kirpfkif1852bcy64f96np93xjalsi-netgen/lib/netgen/tcl/netgenexec -- -batch source <脚本>
+   这是包装脚本 /nix/store/...-netgen/bin/netgen 在 -batch 模式下最终 exec 的程序。
+   注意 -- 之后每个参数必须是独立 word（它 eval 拼起来的 argv，加引号会被当成一个命令名）。
+3) 该通道下可用的 Tcl 命令（实测 `info commands ::netgen::*`）：
+   readnet ports cells compare describe convert flatten lvs writenet properties 等；
+   签名实测：readnet ?format? file ?filenum? / ports valid_cellname / compare [hierarchical] cell1 cell2。
+   本次 `::netgen::ports sha256_axil` 返回 0（readnet 之后仍未取到该 cell），未打通；
+   所以本文件的全部结论只来自 lvs 报告文本，不来自 tcl API 的返回值。
+4) netgen -h 会挂住不返回，不要用。
+
+八、仍未定论 / 下一步
+--------------------
+1) 47 个端口各自所连的网，在另一侧为何找不到对应——仍未知。下一步需要把 98 个端口两侧的 net 名与扇出
+   逐个取出对比；这需要第七节 (3) 那条 tcl 通道先打通，或从 lvs 报告里把 pins 段与 net 段抽出来对齐。
+2) 顶层的 VPWR/VGND/VPB/VNB 器件计数 31,186（版图侧）对 15,593（网表侧）是 2 倍关系，尚未解释；
+   与「两侧总器件数相等（15,593 = 15,593）」并不矛盾，但需要单独查。
+3) 网络数 15,645（版图侧）vs 15,647（网表侧）、版图独有 212 个网、网表独有 11 个网——这三条数字仍在。
+4) 本文件只做排除与更正，不改变任何既有结论的方向：LVS 未通过这一条不变。
