@@ -1,0 +1,60 @@
+新版（天线修好后）GDS 的 LVS：卡在顶层，不在叶子单元
+生成时间 2026-11-08，全部数字来自 vm /home/user/openlane-rootfs/tmp/lvsfix 下的原始报告
+
+一、结论
+1. 新版 LVS 没有通过：netgen 最终仍是 "Netlists do not match"。
+2. 但失败位置已经定位：150 个叶子单元全部 "Netlists match uniquely"，器件数与网数逐单元相等；
+   不通过只发生在顶层（sha256_axil）。
+3. 顶层差异有两处，且都不是逻辑不等价：
+   a) 顶层器件/网数差来自"物理单元"（tap / decap / diode）两端口径不一致：
+      版图侧顶层实例 16,472 个，网表侧 21,968 个，差 5,496 —— 正好等于网表里
+      sky130_fd_sc_hd__tapvpwrvgnd_1 的实例数（5,496，grep -c "tapvpwrvgnd_1$" = 5496）。
+      tap 单元没有器件，因此它只改实例数与网数，不改器件数结论。
+   b) 衬底网命名口径：版图侧是"每实例一份"的 VPB / VNB 全局脚网（报告里出现
+      sky130_fd_sc_hd__inv_2_71/VPB 这样的网名），网表侧是一个全局 VNB / VPB 网。
+      PDK 的 netgen setup（sky130A_setup.tcl，19,712 B）没有任何针对 VNB/VPB 的规则。
+4. 之前那版"逐单元网数 +2（nets 14 vs 12）"是实验方法造成的，不是版图问题：
+   把网表里的 VNB->VGND、VPB->VPWR 全量替换时，连 PDK 单元定义内部的体端网也一起被合并，
+   于是每个单元内部少 2 个网。保留 VNB/VPB 原样后，同一批单元两侧都是 14 网、12 器件，
+   逐单元 "Netlists match uniquely"。
+
+二、四组对照（同一份版图，四种口径）
+A 合并衬底网（VNB->VGND、VPB->VPWR，带 fill 版图 vs 无 fill 网表）
+   报告 fixed_lvs.out 1,082,026 B / md5 88a677cd0a3b4feafdaa79397e53d0f9
+   结果 Netlists do not match；逐单元 "器件数相等、网数多 2"
+B 不合并衬底网（带 fill 版图 fixed.ext.spice vs 无 fill 网表 sha256_axil.pnr.spice）
+   报告 nomerge_lvs.out 14,763,078 B / md5 7a044d97a7f7d6987be8f4f0eaa105bf
+   结果 Netlists do not match；顶层 nets 15,645 vs 15,444 Mismatch（第 4148 行）；
+        叶子单元 150 次 "Netlists match uniquely"，2 次不匹配
+C 不合并 + 同内容（无 fill 版图 fixed15.gds 提取的 fixed15.ext.spice 3,175,109 B vs 无 fill 网表）
+   报告 nofill_lvs.out 1,502,407 B / md5 f54fe8f9d7e4e514d0252c2e1cf26cc1
+   结果 Netlists do not match；顶层 devices 16,063 vs 15,839、nets 16,695 vs 15,444（第 4141-4142 行）
+        叶子单元 150 次 "Netlists match uniquely"，2 次不匹配
+D 不合并 + 两侧都删掉物理单元（tap / decap / diode / fill）
+   输入 ext_phy.spice 3,089,951 B、pnr_phy.spice 1,687,705 B
+   报告 phy_lvs.out 42,340,789 B / md5 05bb15d34d1e5682842aaff6bafb12ea
+   结果 Netlists do not match；顶层 devices 89,038 vs 89,242、nets 50,408 vs 49,431（第 4141-4142 行）
+        叶子单元 149 次 "Netlists match uniquely"
+
+三、这组数是怎么来的（可复现）
+1. 无 fill 版图：从 fixed15.def（14,207,304 B）用 KLayout stream_out 流 fixed15.gds（16,621,738 B）
+   命令通道 /openlane/openlane/scripts/klayout/stream_out.py（chroot 内真实路径）
+2. 版图提取：Magic ext4.tcl（drc off / tech load sky130A.tech / gds flatten true /
+   extract no capacitance|coupling|resistance|adjust / extract / ext2spice lvs）
+   -> fixed15.ext.spice 3,175,109 B / 18,680 行 X
+3. 网表侧：fixed2.nl.v（2,179,152 B / 21,968 实例，从 fixed15.odb 导出）
+   经 mk_lvs_net.py 拼 PDK sky130_fd_sc_hd.spice 转成 sha256_axil.pnr.spice（2,156,276 B / 151 类）
+4. netgen 调用：lvs "<file> <cell>" "<file> <cell>" $setup $logfile
+   setup = /pdk/sky130A/libs.tech/netgen/sky130A_setup.tcl
+5. 物理单元剔除：按实例行的单元名过滤（tapvpwrvgnd_1 / decap_* / diode_2 / fill_*）
+
+四、口径边界（不能拿这些数说什么）
+1. 不能说"新版 LVS 通过"。四组对照全部 do not match。
+2. 不能说"版图与网表逻辑等价已被证明"。叶子单元相等只证明单元级一致，顶层仍未对齐。
+3. 不能把旧版 pnr11 的口径（47 = 43 + 4、devices 166,353 / nets 84,178 两侧相等）套到新版。
+4. 新版仍未跑 RCX / STA / 功耗 / XOR；天线只到"布线级修好"，不是可交付流片版本。
+
+五、下一步
+1. 顶层对齐先解决端口/实例口径：把 tap / decap / diode 在两侧用同一规则剔除或同一规则保留。
+2. 衬底网按 netgen 的 global 网声明处理，而不是靠 sed 全量替换（后者会改动单元内部定义）。
+3. 或用 hcell / 层次化比对（逐单元已通过，顶层可按子块逐个收口）。
