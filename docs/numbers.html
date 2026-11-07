@@ -216,7 +216,36 @@ exec $BIN -b -zz -r /pdk/sky130A/libs.tech/klayout/drc/sky130A_mr.drc \
   -rd feol=true -rd beol=true -rd floating_metal=false -rd seal=true -rd offgrid=true -rd thread=4</div>
     <p class="note">一次就过。同一份 signoff GDS、同一个 PDK deck（release <code>2023.6.14_01.08</code>）、与 OpenLane 里 <code>run_klayout_drc_sky130</code> 等价的参数（本 run 的配置是 <code>beol 1 feol 1 floating_metal 0 seal 1 offgrid 1</code>）：报告里 <b><code>&lt;categories&gt;</code> 218 类、<code>&lt;items&gt;</code> 0 条</b>。不传 offgrid 的对照是 143 类、同样 0 条。</p>
     <p class="note"><b>0 条不是空跑，我加了个故意违规的正对照</b>：用 <code>klayout.db</code> 画一个只有两条 met1、间距 0.10 µm 的小版图（规则要求 ≥0.14），同一 deck 同一参数跑 → <b>1 条，类别 <code>m1.2</code></b>。引擎确实在读图形、在套规则；同一套参数下真芯片得到 0 条，是真的 0 条。</p>
-    <p class="note">口径照旧收着说：这是<b>补跑</b>，不是流水线原始记录（<code>metrics.csv</code> 里那一列仍是 -1，因为原 run 的第 37 步是 <b>GDS XOR</b> 崩的，KLayout DRC 这一步在本次 run 里根本没执行到）；覆盖的是该 deck 的 218 类（feol + beol + seal + offgrid，floating_metal 按本 run 配置关闭）；<b>天线检查不在这个 deck 里</b>，密度类检查在 PDK 单独的 <code>met_min_ca_density.lydrc</code>，本轮没跑。命令、正对照、报告原文在 <a href="evidence/klayout_drc.txt">evidence/klayout_drc.txt</a>，报告本体是 <a href="evidence/klayout_drc_report.xml">evidence/klayout_drc_report.xml</a>（数一下 <code>&lt;items&gt;</code> 就知道是不是 0）。</p>
+    <p class="note">口径照旧收着说：这是<b>补跑</b>，不是流水线原始记录（<code>metrics.csv</code> 里那一列仍是 -1，因为原 run 的第 37 步是 <b>GDS XOR</b> 崩的，KLayout DRC 这一步在本次 run 里根本没执行到）；覆盖的是该 deck 的 218 类（feol + beol + seal + offgrid，floating_metal 按本 run 配置关闭）；<b>天线与密度不在这个 deck 里</b>，它们各自单独跑，见下面两段。命令、正对照、报告原文在 <a href="evidence/klayout_drc.txt">evidence/klayout_drc.txt</a>，报告本体是 <a href="evidence/klayout_drc_report.xml">evidence/klayout_drc_report.xml</a>（数一下 <code>&lt;items&gt;</code> 就知道是不是 0）。</p>
+  </div>
+
+  <div class="box bad">
+    <b style="color:var(--bad)">密度检查：六层空孔率全部在阈值之上，0 条违例（含正对照）</b>
+    <p class="note">PDK 里密度是单独的 deck：<code>met_min_ca_density.lydrc</code>，算的是每层「空孔率」（<code>1 − 金属覆盖率</code>），阈值 li1/m1–m4 ≥ 0.4、m5 ≥ 0.24。用同一份 signoff GDS、同一套 KLayout 通道跑：</p>
+    <div class="raw">li1_ca_density is 0.498813235168457
+m1_ca_density  is 0.7280385026855469
+m2_ca_density  is 0.9060715728149414
+m3_ca_density  is 0.9292928115234376
+m4_ca_density  is 0.9469742029418945
+m5_ca_density  is 0.9731959375
+&lt;items&gt; 0 条</div>
+    <p class="note"><b>正对照</b>：造一个把 met1 铺满整个 die 的版图（同时画 235/4 边界），同一 deck 同一参数 → <code>m1_ca_density is 0.0</code>、<b>报 1 条 <code>m1.pd.1d</code></b>。说明「金属铺满 → 空孔率 0 → 报违例」这条链是通的，真芯片那 6 个数字和 0 条都是真的。</p>
+    <p class="note">口径：这是 PDK 里<b>「最小空孔率」这一份</b> deck，不是全部密度规则（各层的金属密度窗口是另一套检查）；它查的是「金属太密」，不查「金属太稀」。同样属补跑。原文与正对照在 <a href="evidence/density_check.txt">evidence/density_check.txt</a>，报告在 <a href="evidence/density_report.xml">evidence/density_report.xml</a>。</p>
+  </div>
+
+  <div class="box bad">
+    <b style="color:var(--bad)">天线检查：这一项没通过——67 个 net、87 个 pin 越限</b>
+    <p class="note">本 run 的配置里 <code>USE_ARC_ANTENNA_CHECK = 1</code>，也就是天线这一项走 OpenROAD 的 <code>check_antennas</code>，不是 Magic 的 antennacheck。流程在第 37 步就断了，这一步没执行到，所以 <code>metrics.csv</code> 里 <code>pin_antenna_violations</code> / <code>net_antenna_violations</code> 都是 -1。我用同一个引擎、对同一份布线后的 <code>sha256_axil.odb</code> 补跑了一遍，结果不是 0：</p>
+    <div class="raw">read_liberty .../sky130_fd_sc_hd__tt_025C_1v80.lib
+read_db .../results/routing/sha256_axil.odb
+check_antennas -verbose
+  ...
+[INFO ANT-0002] Found 67 net violations.
+[INFO ANT-0001] Found 87 pin violations.</div>
+    <p class="note">日志逐条打印了 67 个 net、367 个 pin 的比值明细（met1 367 段 / met2 342 / met3 320 / met4 247），越限的是摘要里那 67 与 87。第一条原文：<code>Net: _02246_ / Pin: _15933_/A (sky130_fd_sc_hd__buf_4)</code>，met4 该段 Partial area ratio 39.65、met3 以上依次 6.30 / 1.14 / 1.12。</p>
+    <p class="note">为什么会这样，不猜：<code>config.tcl</code> 第 153 行 <code>GRT_REPAIR_ANTENNAS = 0</code>、第 154/155 行只给了 heuristic 阈值与插入模式，而 <code>metrics.csv</code> 的 <b><code>DiodeCells = 0</code></b>——整颗芯片一个二极管都没插。sky130 的天线规则要求长 net 上接了大量栅时，要在 net 的某处插二极管把电荷放掉；这一步在本 run 里没做，所以检查一补跑就报。</p>
+    <p class="note"><b>口径</b>：这是补跑（流水线自己的引擎、同一份 ODB，但不是本 run 的原始记录）；67 个 net 相对本设计 15,647 个网约 0.43%，不算灾难，但按规则就是<b>不通过</b>。修法在流程里有现成路径（二极管插入 / <code>repair_antennas</code>），代价是要重跑布线之后的步骤并改动版图，这一轮<b>没有做</b>——所以这里写的是「查出来、没修」，不是「已解决」。它也与两套 DRC 的 0 条不构成互证：DRC 不管天线。</p>
+    <p class="note">原文、第一条违例的形状、复跑命令在 <a href="evidence/antenna_check.txt">evidence/antenna_check.txt</a>。</p>
   </div>
 
   <div class="box bad">
@@ -275,15 +304,16 @@ exec $BIN -b -zz -r /pdk/sky130A/libs.tech/klayout/drc/sky130A_mr.drc \
       <li>时序的 9 个 setup 值、9 个 hold 值，都能对到具体日志的具体行号。</li>
       <li><b>两份 GDS 在 21 个制造层上逐层几何一致</b>（42 层中仅 areaid.lowTapDensity 一层有 1 处差异，那是 flow 标记层，流水线本身就排除）。层号已对到 PDK 的图层名表。</li>
       <li>每个证据文件的指纹写在下面，你可以下载后自己 <code>sha256sum</code> 对一遍。</li>
-      <li>失败步骤的原文也在，包括它为什么失败；连「后来怎么补跑成功」的方法和脚本也一起给了。</li>
+      <li>失败步骤的原文也在，包括它为什么失败；连「后来怎么补跑成功」的方法和脚本也一起给了——以及<b>补跑之后没过的那一项（天线）</b>也在这页上，没有只摆好消息。</li>
     </ul>
   </div>
   <div class="box">
     <b style="color:var(--warn)">不能证明</b>
     <ul>
       <li>这份 metrics.csv 不是我伪造的——这一点只能靠「文件在仓库里、指纹可核对、内容自洽」来逼近，不能靠数学证明。真要做到不可否认，得由第三方重跑一次 flow。</li>
-      <li>Magic 的 signoff DRC 确实跑过一遍、结果 0 条违例（<b>不含天线与密度</b>），原文与命令都在；不是我在口头上说「检查通过」。</li>
-      <li><b>LVS 的「通过」是有口径的通过</b>：netgen 在 <code>VNB≡VGND</code>、<code>VPB≡VPWR</code> 的前提下、把叶子单元展平之后，顶层 166,353 器件与 84,178 条网两侧完全相等（<code>Circuits match uniquely</code>）。它证明的是<b>顶层晶体管级连接等价</b>，不证明「每个标准单元内部逐管等价」；另一条本该给出同样结论的路线（把 5,496 个 tap 补回网表再跑）本轮没做。KLayout 侧的 signoff DRC 违例数仍是 <b>-1</b>。XOR 一致只说明两份产出相同，不等于两份产出都满足设计规则。</li>
+      <li>Magic 的 signoff DRC 跑过一遍、结果 0 条违例（<b>不含天线与密度</b>）；KLayout 侧的 218 类规则同样 0 条；密度 deck 六层空孔率全部在阈值之上、0 条。这三项都是事后补跑，各自都带了一个故意违规的正对照，证明引擎不是在空转。</li>
+      <li><b>LVS 的「通过」是有口径的通过</b>：netgen 在 <code>VNB≡VGND</code>、<code>VPB≡VPWR</code> 的前提下、把叶子单元展平之后，顶层 166,353 器件与 84,178 条网两侧完全相等（<code>Circuits match uniquely</code>）。它证明的是<b>顶层晶体管级连接等价</b>，不证明「每个标准单元内部逐管等价」；另一条本该给出同样结论的路线（把 5,496 个 tap 补回网表再跑）也实跑过了，走不通——PDK 里那个单元只有两个脚、body 为空。</li>
+      <li><b>天线这一项没通过</b>：OpenROAD <code>check_antennas</code> 对布线后的 ODB 补跑，报 <b>67 个 net / 87 个 pin 越限</b>；本 run 的 <code>DiodeCells = 0</code>，一个二极管都没插，检查也没在流程里跑到。修法有现成路径，本轮没做，所以页面上写的是「查出来、没修」。</li>
       <li>功耗数字是 OpenLane 内部功耗估算（向量无关的活动率假设），不是硅上实测。</li>
       <li>时序基于 sky130 的 signoff 库与寄生提取，不等于流片后的硅结果。</li>
     </ul>
@@ -291,7 +321,7 @@ exec $BIN -b -zz -r /pdk/sky130A/libs.tech/klayout/drc/sky130A_mr.drc \
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、十五份证据文件的指纹</h2>
+  <h2>五、十八份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -308,6 +338,9 @@ exec $BIN -b -zz -r /pdk/sky130A/libs.tech/klayout/drc/sky130A_mr.drc \
     <div class="fp" style="margin-top:14px">evidence/lvs_port_graph.txt · 5,278 B<br>db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13</div>
     <div class="fp" style="margin-top:14px">evidence/klayout_drc.txt · 4,190 B<br>ffd427b546a5e60aa4af17e5adaf183c5efab2bdaee123f661f41ce98e6f361b</div>
     <div class="fp" style="margin-top:14px">evidence/klayout_drc_report.xml · 34,074 B<br>36045191fa8549ad8a29e232e0885978acf99bd793ba144e6351a5e2778f60d2</div>
+    <div class="fp" style="margin-top:14px">evidence/density_check.txt · 1,954 B<br>18b9c39e614e6d0039441d064880607893f944f25a9d2ce666cfce09fabe147b</div>
+    <div class="fp" style="margin-top:14px">evidence/density_report.xml · 465 B<br>6681d364b2c424d55a95ad4444cace1f7aac6012fb812dfbecf3eac51f4501ea</div>
+    <div class="fp" style="margin-top:14px">evidence/antenna_check.txt · 3,635 B<br>a9403329a5963aa998f1b7c2711fa772c308298ab48111d949221818924647d6</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_pass.txt · 8,292 B<br>956ff1a4cc9d2db595a722be26ac7fa53b5af0f15e24af613eef56fd169aaf9f</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>

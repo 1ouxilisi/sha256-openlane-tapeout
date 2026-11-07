@@ -1,0 +1,54 @@
+天线检查（OpenROAD Antenna Rule Checker）：67 个 net / 87 个 pin 越限
+==============================================================
+对象：/designs/sha256_v7b/runs/tapeout16/results/routing/sha256_axil.odb（布线后的 ODB）
+命令（与 OpenLane 的 run_or_antenna_check 同一引擎、同一脚本逻辑）：
+    openroad -no_init -no_splash -exit /tmp/ant/arc2.tcl
+  arc2.tcl 内容：
+    read_liberty /pdk/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+    read_db /designs/sha256_v7b/runs/tapeout16/results/routing/sha256_axil.odb
+    check_antennas -verbose
+说明：OpenLane 本 run 的配置是 USE_ARC_ANTENNA_CHECK=1，也就是这条天线检查本来就走 OpenROAD
+      的 check_antennas（不是 Magic 那套 antennacheck）。这里不加载 SDC，因为天线比值与时序无关。
+
+结果（日志原文，两行）：
+    [INFO ANT-0002] Found 67 net violations.
+    [INFO ANT-0001] Found 87 pin violations.
+日志同时逐条打印了 67 个 net、367 个 pin 的比值明细（met1 367 段 / met2 342 / met3 320 / met4 247），
+这 367 条是"被检查的 pin"，越限的是摘要里那 87 个。
+
+第一条违例原文（形状，便于对照）：
+    Net: _02246_
+      Pin: _15933_/A (sky130_fd_sc_hd__buf_4)
+        Layer: met4   Partial area ratio 39.65 / Required ratio 3236.16 (Side area)
+        Layer: met3   Partial area ratio  6.30 / Required ratio 400.00 (Side area)
+        Layer: met2   Partial area ratio  1.14 / Required ratio 400.00 (Side area)
+        Layer: met1   Partial area ratio  1.12 / Required ratio 400.00 (Side area)
+
+一、这是真违例，不是引擎没跑
+------------------------------
+它报的是非零值，而且明细里给出了每层每段金属的面积比、要求的比值、以及具体 net / pin / 单元名，
+说明检查确实在读布线后的几何与器件栅面积。这一点和"D MRC 报 0 条"的性质相反：0 条需要正对照证明
+不是空跑，非零不需要。
+
+二、为什么会有这些违例（本 run 的配置事实）
+------------------------------------------
+1) config.tcl 第 153 行 GRT_REPAIR_ANTENNAS = 0，第 373 行 USE_ARC_ANTENNA_CHECK = 1，
+   第 154/155 行 HEURISTIC_ANTENNA_THRESHOLD = 90、插入模式 source。
+2) metrics.csv 的 DiodeCells = 0 —— 整颗芯片没有插入一个二极管。
+3) 流程在第 37 步（GDS XOR）就 failed 中断，天线检查这一步在本 run 里没有跑到，
+   所以 metrics.csv 里 pin_antenna_violations / net_antenna_violations 都是 -1（"没产出"，不是"通过"）。
+
+换句话说：这些违例是"把检查补跑出来以后才第一次看到"的，不是新出现的问题；
+按 sky130 的天线规则，长 net 上接了大量栅，需要在 net 的某个位置插二极管把电荷放掉——本 run 没做这一步。
+
+三、口径（不要过度解读，也不要把这句省略）
+-------------------------------------
+1) 这是补跑，用的是流水线自己的引擎与同一份布线后 ODB，但不是本 run 的原始记录（那一步没执行）。
+2) 67 个 net 相对本设计 15,647 个网（LVS 侧口径）约 0.43%；不是"大面积不可用"，但足以被判不通过。
+3) 修法在流程里有现成路径（二极管插入 / repair_antennas），代价是重跑布线后的步骤并改变版图，
+   这一轮没有做——所以页面写的是"查出、未修"，不是"已解决"。
+4) 与 Magic DRC / KLayout DRC 的 0 条不构成互证：那两项不管天线。
+
+四、复跑
+------
+上面两条命令原样可复跑；判读只看最后两行 ANT-0002 / ANT-0001 的数字。

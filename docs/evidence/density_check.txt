@@ -1,0 +1,31 @@
+密度检查（PDK met_min_ca_density.lydrc）：六层全部高于阈值，0 条违例
+=========================================================
+deck：/pdk/sky130A/libs.tech/klayout/drc/met_min_ca_density.lydrc
+对象：/designs/sha256_v7b/runs/tapeout16/results/signoff/sha256_axil.gds（39,965,858 B）
+引擎：KLayout 0.29.1，命令与 sky130A_mr.drc 那次相同（走 /proc/<pid>/exe 修复后的 Ruby 通道）：
+    klayout -b -zz -r met_min_ca_density.lydrc \
+      -rd input=.../sha256_axil.gds -rd top_cell=sha256_axil -rd report=/tmp/kl/density.xml
+
+这个 deck 算的是"空孔率"（ca = clearance area），即 1 - 该层金属覆盖率，阈值：
+    li1 / m1 / m2 / m3 / m4 >= 0.4，m5 >= 0.24
+
+实算结果（日志原文）：
+    li1_ca_density is 0.498813235168457
+    m1_ca_density  is 0.7280385026855469
+    m2_ca_density  is 0.9060715728149414
+    m3_ca_density  is 0.9292928115234376
+    m4_ca_density  is 0.9469742029418945
+    m5_ca_density  is 0.9731959375
+报告 <items> 0 条，六层全部高于阈值（最接近阈值的是 li1 的 0.4988，余量约 0.0988）。
+
+正对照（证明不是空跑）：
+  造一个把 met1 铺满整个 die（同时画 235/4 边界）的 ctl_dens.gds，同一 deck 同一参数：
+    m1_ca_density is 0.0 → <items> 1 条，类别 m1.pd.1d
+  也就是"金属铺满 → 空孔率 0 → 报违例"这条链是通的；真芯片同参数 0 条是真的 0 条。
+
+口径：
+1) 这是 PDK 里"最小空孔率"这一个 deck，不是全部密度规则；PDK 还带别的检查（如 gf180 的
+   density 界面、以及各层的 min/max 金属密度窗口），本轮只跑了这一份。
+2) 它算的是"空孔率"不是"金属密度"，两者互补：空孔率过低＝金属太密，过高＝金属太稀，本 deck 查前一种。
+3) 与 DRC 的 0 条不互证：DRC 查几何间距/宽度，密度查面积占比，两套规则。
+4) 同样是补跑，不是流水线原始记录。
