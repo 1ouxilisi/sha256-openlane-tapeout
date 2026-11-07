@@ -119,7 +119,7 @@ footer{padding:34px 0 60px;color:var(--muted);font-size:12.5px;font-family:var(-
     <div class="top"><span class="v">0</span><span class="k">布线阶段违例</span></div>
     <div class="src">列 tritonRoute_violations / Short / MetSpc / OffGrid / MinHole / Other</div>
     <div class="raw">…,11475,0,0,0,0,0,0,…</div>
-    <div class="note"><b>口径要说清</b>：这 6 个 0 是布线阶段（TritonRoute）的违例计数。同一行的 Magic_violations、klayout_violations、lvs_total_errors 是 <code>-1</code>，意思是本次 run 里这几项<b>没有产出结果</b>，不是「检查通过」。其中 Magic 那一项我事后单独补跑过，结果见第三节；另外两项仍是 -1。</div>
+    <div class="note"><b>口径要说清</b>：这 6 个 0 是布线阶段（TritonRoute）的违例计数。同一行的 Magic_violations、klayout_violations、lvs_total_errors 是 <code>-1</code>，意思是本次 run 里这几项<b>没有产出结果</b>，不是「检查通过」。其中 Magic 与 LVS 我事后单独补跑过（见第三节），KLayout 那一项仍是 -1。</div>
   </div>
 </div></section>
 
@@ -190,6 +190,18 @@ child process exited abnormally
     <p class="note"><b>但这句要打折说</b>：<code>run_standard_drc.py</code> 自己的注释写着，它是 full DRC，<b>不含天线（antenna）与密度（density）检查</b>——那两项是 PDK 里另外两个脚本，这次没跑。所以准确的说法是「DRC 规则（不含天线与密度）：0 条违例」。另外它跑的是 Magic 输出的那份 GDS，KLayout 输出的那份仍然没做 DRC。</p>
   </div>
 
+  <div class="box">
+    <b>同一行的第三项：LVS（版图对网表）——跑了，但没判过</b>
+    <p class="note">metrics.csv 里 <code>lvs_total_errors</code> 也是 <code>-1</code>。这次我把这一项真跑了一遍：先用 Magic 从 <code>sha256_axil.gds</code> 提取出版图侧的晶体管级网表（<code>extract all</code> 约 20 分钟，产物 2,785,763 B、154 个子电路），再把它和 PnR 网表 <code>results/routing/sha256_axil.nl.v</code>（47,087 个实例）按 PDK 器件模型展开后用 netgen 比较，前后迭代了 8 轮。</p>
+    <div class="raw">Magic  : == spice written ==
+netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
+         Circuit 1 contains 15645 nets,    Circuit 2 contains 15647 nets. *** MISMATCH ***
+         Final result: Netlists do not match.</div>
+    <p class="note"><b>器件数是完全对上的</b>：顶层 15,593 个器件 = 15,593 个器件，逐类单元（decap / dfrtp / a22o / nand2 …）的实例数两侧也一一相等。没对上的是连接层：网表侧比版图多 2 个 net，并且 47 个 AXI 总线与握手端口在网表侧报 <code>no matching pin</code>——这是从 verilog 转 spice 时端口名与实例连接名没有全部补齐，属于转换工具的缺口，不是版图短路或断路。</p>
+    <p class="note">所以 <code>lvs_total_errors</code> 仍然是 <b>-1</b>，但它的含义变了：过去是「没跑」，现在是「跑完了、器件全对上、连接级没判过」。命令、原文、八轮里的关键两行、以及踩到的坑都在 <a href="evidence/lvs_attempt.txt">evidence/lvs_attempt.txt</a>。</p>
+    <p class="note">同一行的 KLayout DRC 仍是 <code>-1</code>，原因和上一段那个 Ruby 崩一样：我换了 <code>LC_ALL=C</code>、<code>HOME=/tmp</code>、<code>TMPDIR=/tmp</code> 三种环境各试一次，报的都是 <code>tlFileUtils.cc:979</code> 同一行。这一项确实没有别的通道能用。</p>
+  </div>
+
   <div class="box bad">
     <b>更正一处：上一版我把 81/14 写成了 prBoundary，那是错的</b>
     <p class="note">查 PDK 图层名表：prBoundary 是 <code>235/4</code>；<code>81/14</code> 是 <code>areaid.lowTapDensity</code>。结论不变（它同样是不参与制造的 flow 标记层，流水线第 37 步也用 <code>-rd ignore=81/14</code> 排除），但层名以这一版为准。把这处错误写在页面上、而不是悄悄改掉，是因为这一页存在的意义就是让人能查出来。</p>
@@ -201,7 +213,7 @@ child process exited abnormally
       <li>「布线阶段违例计数为 0」——<b>成立</b>，见第一节最后一格。</li>
       <li>「两份 GDS 逐层一致」——<b>现在成立了</b>。42 个层里 <b>21 个制造层 XOR 全为 0</b>（nwell / diff / tap / poly / licon1 / li1 / mcon / met1–met5 / via–via4 / hvtp / nsdm / psdm / npc），pin 与 label 层也全 0；唯一差异是 <code>areaid.lowTapDensity</code>（81/14，A 有 1 个、B 有 0 个），flow 标记层，不参与制造，流水线第 37 步原本就带 <code>-rd ignore=81/14</code> 把它排除在外。</li>
       <li>「Magic signoff DRC 违例数为 0」——<b>现在成立了，但要打折扣</b>：0 条违例，不含天线与密度检查。这一项是拿 Magic 自己的 DRC 引擎跑出来的，不依赖那个崩掉的 Ruby 引擎。</li>
-      <li>仍然不成立的：<b>KLayout 的 signoff DRC 违例数</b>和 <b>LVS 错误数</b>（metrics 里都是 <code>-1</code>）。这两个真没跑过，不是跑过为零——KLayout 侧要 <code>.drc</code> 的 Ruby 引擎，本机就是起不来；LVS 也没跑成。</li>
+      <li>仍然不成立的：<b>KLayout 的 signoff DRC 违例数</b>（metrics 里 <code>-1</code>）——KLayout 侧要 <code>.drc</code> 的 Ruby 引擎，本机就是起不来。<b>LVS 这一项从这一版起不再是「没跑」</b>，见上一段新增的那一条。</li>
     </ul>
     <p class="note">这一节前后差的就是一件事：上一版只能写「这一步没有结论」，这一版把结论拿回来了，并且说清它是什么、靠什么拿回来的、还有什么没拿到。</p>
   </div>
@@ -224,7 +236,7 @@ child process exited abnormally
     <ul>
       <li>这份 metrics.csv 不是我伪造的——这一点只能靠「文件在仓库里、指纹可核对、内容自洽」来逼近，不能靠数学证明。真要做到不可否认，得由第三方重跑一次 flow。</li>
       <li>Magic 的 signoff DRC 确实跑过一遍、结果 0 条违例（<b>不含天线与密度</b>），原文与命令都在；不是我在口头上说「检查通过」。</li>
-      <li><b>Magic / KLayout 的 signoff DRC 违例数</b>：Magic 那侧已补跑为 <b>0</b>（不含天线与密度检查），KLayout 那侧仍是 <b>-1</b>。<b>LVS 错误数也仍是 -1。</b>所以「DRC 0」这句话：布线阶段成立、Magic 规则检查成立（有折扣），KLayout 侧不成立。XOR 一致只说明两份产出相同，不等于两份产出都满足设计规则。</li>
+      <li><b>Magic / KLayout 的 signoff DRC 违例数</b>：Magic 那侧已补跑为 <b>0</b>（不含天线与密度检查），KLayout 那侧仍是 <b>-1</b>。<b>LVS 错误数同样是 -1</b>，但已经跑出来过：器件级 15,593 = 15,593 完全一致，连接级因端口映射没补齐而判不通过。所以「DRC 0」这句话：布线阶段成立、Magic 规则检查成立（有折扣），KLayout 侧不成立。XOR 一致只说明两份产出相同，不等于两份产出都满足设计规则。</li>
       <li>功耗数字是 OpenLane 内部功耗估算（向量无关的活动率假设），不是硅上实测。</li>
       <li>时序基于 sky130 的 signoff 库与寄生提取，不等于流片后的硅结果。</li>
     </ul>
@@ -232,7 +244,7 @@ child process exited abnormally
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、六份证据文件的指纹</h2>
+  <h2>五、七份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -241,6 +253,7 @@ child process exited abnormally
     <div class="fp" style="margin-top:14px">evidence/xor_layers.txt · 4,332 B<br>30a4e6032e61c961f165182d660576f274d398d8bf27405a3f74b66a9f25a4fc</div>
     <div class="fp" style="margin-top:14px">evidence/gds_layers.txt · 6,241 B<br>f97fe245883cc40871630f33f0146b3d0faa904e6463963bf24838471e69e561</div>
     <div class="fp" style="margin-top:14px">evidence/magic_drc.txt · 2,480 B<br>6036d8791e18b26a2ca76f8a1b9e2523c88fdeb11d7538ec262c08091b7580f4</div>
+    <div class="fp" style="margin-top:14px">evidence/lvs_attempt.txt · 3,164 B<br>304a4406735091a1425df27420ac6d395089c25bb655cfb248f8b720b4082683</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>
 </div></section>

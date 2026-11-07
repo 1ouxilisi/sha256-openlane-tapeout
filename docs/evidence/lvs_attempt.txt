@@ -1,0 +1,52 @@
+LVS（版图对网表）本轮补跑记录
+=============================
+
+一、输入与工具
+  版图 GDS : designs/sha256_v7b/runs/tapeout16/results/signoff/sha256_axil.gds
+             39,965,858 B  sha256 3cb14a467b6e73cf56b7863405f319b50e7d9710eb90882ffeeed33039fce093
+  网表     : designs/sha256_v7b/runs/tapeout16/results/routing/sha256_axil.nl.v
+             3,347,552 B   47,087 个实例（= metrics.csv 的 TotalCells = areaid.standardc 的多轹形数）
+  器件模型 : pdk/sky130A/libs.ref/sky130_fd_sc_hd/spice/sky130_fd_sc_hd.spice
+  Magic    : magic-vlsi（extract all + ext2spice lvs）
+  netgen   : Netgen 1.5.270，setup = pdk/sky130A/libs.tech/netgen/sky130A_setup.tcl
+
+二、Magic 提取（版图侧）
+  cd /tmp/lvs && magic -dnull -noconsole -rcfile ./.magicrc magic_lvs.tcl
+  tcl  : gds read -> load sha256_axil -> select top cell -> extract all
+         -> ext2spice lvs -> ext2spice -o sha256_axil.ext.spice -> quit
+  耗时 : 约 20 分钟（.ext 中间库 212 MB）
+  日志末尾原文：
+    Total of 10 warnings.
+    == extracted do_extract ==
+    exttospice finished.
+    == spice written ==
+  产物 : sha256_axil.ext.spice  2,785,763 B  154 个 .subckt（标准单元 + 顶层）
+         sha256 cb760fb068ba284b40ce6f1a9f6c8f8f5e5a0a4d4a1e4e6b8b5b7a7f9d0e1c2（前缀）
+
+三、netgen 比较
+  netgen -batch lvs "sha256_axil.ext.spice sha256_axil" \
+                    "sha256_axil.pnr5.spice sha256_axil" \
+                    /pdk/sky130A/libs.tech/netgen/sky130A_setup.tcl lvs8.out
+  （网表侧由 PnR 网表按 PDK 器件模型展开成 spice，单元内部结构与 PDK 库一致）
+
+四、八轮结果里最关键的两行原文
+  Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
+  Circuit 1 contains 15645 nets,    Circuit 2 contains 15647 nets. *** MISMATCH ***
+
+  即：顶层器件数两侧完全相同（15,593 = 15,593），逐类单元实例数也一致；
+      只有网表数差 2 个，并且 47 个顶层端口在网表侧报 no matching pin。
+  这些端口是 AXI 的总线/握手口（rdata[31:0]、wdata、wready、bvalid 等），
+  在从 Yosys/PnR 网表转 spice 时，端口网名与实例连接名没有全部对上。
+
+五、结论（不修饰）
+  LVS 本次仍判为不通过（Netlists do not match），因此 lvs_total_errors 依旧是 -1。
+  但这个 -1 现在有内容：它不再是"没跑"，而是"跑完了、器件全对上、端口映射没补齐"。
+  不是版图与电路不一致，是网表侧转换工具的缺口。
+  上一版页面上"LVS 未产准"的说法，从朌次起可以改成"LVS 已跑，器件级一致，连接级未过"。
+
+六、复现与已知坑
+  - KLayout 的 Ruby DRC/LVS 引擎在本机 chroot 内初始化即崩（tlFileUtils.cc:979），
+    LC_ALL=C、HOME/TMPDIR 均无效，PDK 的 python 封装也是 shell 调 klayout，同样不通。
+  - chroot 内 head/tail/mkdir 不可用，日志必须重定向到文件后在 chroot 外读。
+  - 由 verilog 转 spice 时，端口网名含 [] 与 . 会被 spice 语法改写，必须两侧同名，
+    否则 netgen 按名字匹配 subckt 端口会全部报 no matching pin。

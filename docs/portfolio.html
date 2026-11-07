@@ -96,7 +96,7 @@ footer p{margin:6px 0}
       <tr><th>项目</th><th>结果</th></tr>
       <tr><td>最终工作点</td><td><b>55.56 MHz</b>（18 ns，三 corner setup/hold 全正）</td></tr>
       <tr><td>面积 / 单元</td><td><b>0.4096 mm²</b>（640 × 640 µm die）· <b>11,475 cells</b> · 利用率 45.77%</td></tr>
-      <tr><td>物理验证</td><td><b>DRC 0</b>，七代全 0 违例；Magic 与 KLayout 双 GDS 逐层 XOR 零结构差异</td></tr>
+      <tr><td>物理验证</td><td><b>DRC 0</b>（Magic signoff 规则，不含天线与密度）· Magic 与 KLayout 双 GDS 逐层 XOR：<b>21 个制造层全 0</b> · LVS 已跑：<b>器件级 15,593 = 15,593</b>，连接级未判过</td></tr>
       <tr><td>第 7 代做了什么</td><td>换掉消息调度结构（16 深循环窗口 → 移位寄存器），同 die 从 41.67 MHz 提到 <b>55.56 MHz（+33%）</b>，cells 反而从 12,288 降到 11,475</td></tr>
       <tr><td>被这个结果推翻的话</td><td>项目早期文档里写着「43.9 MHz 是这条 RTL 的上限」——那是旧架构的上限，不是工艺的上限</td></tr>
     </table>
@@ -138,7 +138,7 @@ python3 scripts/check_vectors.py</pre>
     </div>
     <div class="card" style="margin-top:14px;border-color:rgba(56,189,248,.35)">
       <h3>上面那些数字，也都能点开看原文</h3>
-      <p>55.56 MHz、11,475 cells、0.4096 mm²、9.41 mW、setup 与 hold 的每一格，逐条追到 OpenLane 这次 run 的原文行和行号，附证据文件的指纹。<b>流水线里没跑成的那两步（GDS 逐层 XOR、Magic signoff DRC），也在这一页上补跑了</b>：42 个层逐一比对，<b>21 个制造层（nwell 到 met5、via、via4 等）XOR 全部为 0</b>，唯一差异是一个不参与制造的 flow 标记层，流水线本身也把它排除；Magic DRC 跑完<b>零条违例</b>（不含天线与密度检查，原文只有两行表头）。层号已对到 PDK 的图层名表，逐层表、命令与复现脚本一并给出。</p>
+      <p>55.56 MHz、11,475 cells、0.4096 mm²、9.41 mW、setup 与 hold 的每一格，逐条追到 OpenLane 这次 run 的原文行和行号，附证据文件的指纹。<b>流水线里没跑成的那三步，也在这一页上补跑了</b>：42 个层逐一比对，<b>21 个制造层（nwell 到 met5、via、via4 等）XOR 全部为 0</b>，唯一差异是一个不参与制造的 flow 标记层，流水线本身也把它排除；Magic DRC 跑完<b>零条违例</b>（不含天线与密度检查，原文只有两行表头）；<b>LVS 也跑了</b>——Magic 从版图提取晶体管级网表、netgen 对比到第八轮，顶层器件数两侧完全相等（15,593 = 15,593），只剩 47 个 AXI 端口在网表侧映射没补齐，所以那一列仍写 -1，不写成 0。层号已对到 PDK 的图层名表，逐层表、命令与复现脚本一并给出。</p>
       <p style="margin-bottom:0"><a href="numbers.html" style="font-family:var(--mono)">→ 打开数字溯源（每个数字一行出处）</a></p>
     </div>
   </div>
