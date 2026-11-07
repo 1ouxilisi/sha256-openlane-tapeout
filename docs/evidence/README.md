@@ -20,6 +20,8 @@
 | `lvs_selfcheck.txt` | 6,016 B | 口径更正 + 三项对照实验：1,795 行是 SPICE `+` 续行（拼接后 33,984/33,984 都有单元名）；版图网表自比 0 个端口失配；转换网表逐脚与 `nl.v` 核对 15,381 个实例一致 | 生成结果 |
 | `lvs_pin_parity.txt` | 7,491 B | 端口层复核：两侧各删 32 个端口反应一致（32 唯一名 / 64 行）、两侧 header 折成每行 8 个后两个方向仍 47+1；**推翻「端口表整体错位一格」**，47 个名字只打印一遍说明端口两侧都在、失败在网这一层；netgen Tcl 通道的正确调用方式 | 生成结果 |
 | `lvs_port_graph.txt` | 5,278 B | 端口级连通性对账：把每个端口连到的（单元，引脚名）列表按各自文件的单元定义翻译后比对，**98 个端口里 94 个逐字相同**；4 个差异（bresp / rresp）成因是转换器漏读网表末尾 4 条 `assign` 别名；**推翻「47 是版图与网表的实际连接差异」** | 生成结果 |
+| `klayout_drc.txt` | 4,190 B | KLayout 侧 signoff DRC 补跑：同一份 GDS、PDK deck `sky130A_mr.drc`（2023.6.14_01.08）、与 OpenLane 等价参数 → **218 个规则类 / 0 条违例**；含「四次必崩」真实原因（`tlFileUtils.cc:979` = 找不到 `/proc/<pid>/exe` 的断言，chroot 里 `/proc` 是空目录）、绕过办法（造路径 + 同 pid exec）、故意违规的 met1 正对照（1 条 `m1.2`）与口径边界 | 生成结果 |
+| `klayout_drc_report.xml` | 34,074 B | 上面那次 DRC 的 KLayout RDB 原文（`<categories>` 218 类 / `<items>` 0 条），可直接数条目核对 | 生成结果 |
 | `lvs_pass.txt` | 8,292 B | **LVS 结案**：两侧网名集合做差，真正多出的只有 `VNB`/`VPB` 两个网（井/衬底由 5,496 个 tap 接电源，Magic 提取时体端并入电源，而网表里 tap 引脚为空被整批丢掉）；`47 = 43 + 4`，两处都补后展平顶层 **166,353 器件 / 84,178 网**两侧相等，`Circuits match uniquely`；第 7 节记两次对照实跑：tap 单元在 PDK 里只有 `VGND VPWR` 两脚、body 为空，补回 5,496 个 tap 仍 47 行，强加 VNB/VPB 脚仍 47 行——另一条路线做不到，口径由定义决定 | 生成结果 |
 
 三份 STA 原始日志（`logs/signoff/29-rcx_mcsta.min.log`、`31-rcx_mcsta.max.log`、`33-rcx_mcsta.nom.log`）各约 33 MB，一次性的，没有入库。
@@ -33,6 +35,8 @@ af0921bdabb0a663922e2ef1dbb703ecdf6779235d3198a1be37434f8bc21c80  sta_worst_slac
 30a4e6032e61c961f165182d660576f274d398d8bf27405a3f74b66a9f25a4fc  xor_layers.txt
 f97fe245883cc40871630f33f0146b3d0faa904e6463963bf24838471e69e561  gds_layers.txt
 6036d8791e18b26a2ca76f8a1b9e2523c88fdeb11d7538ec262c08091b7580f4  magic_drc.txt
+ffd427b546a5e60aa4af17e5adaf183c5efab2bdaee123f661f41ce98e6f361b  klayout_drc.txt
+36045191fa8549ad8a29e232e0885978acf99bd793ba144e6351a5e2778f60d2  klayout_drc_report.xml
 304a4406735091a1425df27420ac6d395089c25bb655cfb248f8b720b4082683  lvs_attempt.txt
 8397535d6d8f3a804c7d4d320699f815764eb261d09a7a57117ef40df1eda35e  lvs_rootcause.txt
 23d7022ac3cb9136bed59ba43baf67adb5a137a0f5790ebe33549b12b6db1af9  lvs_instance_audit.txt
@@ -53,13 +57,15 @@ db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13  lvs_port_graph
 
 ## 本次 run 的状态
 
-`metrics.csv` 的 `flow_status` = `flow failed`。失败在第 37 步 `gds_klayout`（KLayout GDS-vs-GDS XOR），原因是 KLayout 自身的 `tlFileUtils.cc:979` 内部错误（Ruby 引擎在本机 chroot 内初始化即崩），不是版图不一致。
+`metrics.csv` 的 `flow_status` = `flow failed`。失败在第 37 步 `gds_klayout`（KLayout GDS-vs-GDS XOR），原因是 KLayout 报 `tlFileUtils.cc:979` 内部错误，不是版图不一致。**这一条的真因后来查清了**：979 行是 `get_app_path_internal()` 的兜底断言，Linux 分支只检查 `/proc/<当前 pid>/exe` 是否存在，不存在就 `tl_assert(false)`；本机 chroot 的 `/proc` 是空目录，所以必崩——与版图无关、与 locale 无关。在 chroot 内先 `mkdir -p /proc/$$` 并把 `proc/$$/exe` 链到 klayout 二进制、再用同一个 pid `exec` 启动，Ruby 引擎即可正常运行（见 `klayout_drc.txt`）。
 
 由此：`tritonRoute_violations` 等 6 个 `0` 只覆盖布线阶段；`Magic_violations`、`klayout_violations`、`lvs_total_errors` 为 `-1`（未产出）。
 
 第 37 步要证明的事，已用另一条路径补做：`xor_layers.py` 用同一套 KLayout 0.29.1 库的 Python 接口逐层 XOR，结果见 `xor_layers.txt`，层名对照见 `gds_layers.txt`——**42 层中 41 层几何完全一致，唯一差异在 81/14（areaid.lowTapDensity）**，而这一层流水线自己也用 `-rd ignore=81/14` 排除。**21 个制造层 XOR 全为 0。**
 
 `Magic_violations` 这一项事后补跑成功：PDK 自带的 `run_standard_drc.py` 对着 `sha256_axil.gds` 跑 `drc(full)`，输出只有两行表头、**零条违例**，见 `magic_drc.txt`。注意 `run_standard_drc.py` 不含天线与密度检查。
+
+`klayout_violations` 这一项也补跑成功：`klayout -b -zz -r sky130A_mr.drc`（release 2023.6.14_01.08），同一份 GDS，参数与 OpenLane 的 `run_klayout_drc_sky130` 等价（`beol 1 feol 1 floating_metal 0 seal 1 offgrid 1`），报告 **218 个规则类 / 0 条违例**，见 `klayout_drc.txt` 与 `klayout_drc_report.xml`。0 条不是空跑：故意造一个 met1 间距 0.10 µm 的小版图做正对照，同一 deck 立刻报 1 条 `m1.2`。口径：这是补跑不是流水线原始记录（`metrics.csv` 那列仍为 -1，因为本次 run 的第 37 步是 XOR 崩的、KLayout DRC 没执行到）；不含天线，密度类检查在 PDK 单独的 `.lydrc` 里，本轮没跑。
 
 `lvs_total_errors` 这一项也补跑过，结论是**没过**：Magic 从版图提取出晶体管级网表（2,785,763 B / 154 个子电路），与 PnR 网表按 PDK 器件模型展开后用 netgen 对比，迭代八轮后顶层**器件数两侧完全相等（15,593 = 15,593）**，但网数差 2（15,645 vs 15,647）且有 47 个 AXI 顶层端口在网表侧报 `no matching pin`，最终 `Netlists do not match.`。卡点在 verilog→spice 的端口/网名映射这一侧，不是版图与电路不一致。详见 `lvs_attempt.txt`。
 
@@ -75,4 +81,4 @@ db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13  lvs_port_graph
 
 **结案（最新）**：`lvs_pass.txt`。两侧网名集合做差，真正多出来的只有 `VNB` / `VPB` 两个网——版图里井与衬底由 5,496 个 `tapvpwrvgnd_1` 直接接到 VPWR/VGND，Magic 提取时体端一律并到电源，而 `nl.v` 里这些 tap 单元引脚是空的、被转换器整批丢掉，于是这两个网在网表侧悬空。`47 = 43 + 4`（43 归 VNB/VPB，4 归 assign 漏读），两处都补之后：展平顶层 **166,353 个器件、84,178 条网两侧完全相等**，netgen 原文 `Netlists match uniquely` / `Final result: Circuits match uniquely`，全文 `(no matching pin)` 出现 0 次。口径写在明处：`VNB≡VGND`、`VPB≡VPWR`，叶子单元由 netgen 展平后再比，因此是「顶层晶体管级等价」。第 7 节把「把 tap 补回网表」这条等价路线**实跑完了**：PDK 的 `tapvpwrvgnd_1` 只有 `VGND VPWR` 两个脚、body 为空，补回 5,496 个之后仍是 47 行 `Netlists do not match`；强加 VNB/VPB 脚仍是 47 行。所以这条路线做不到，口径不是可选项而是由单元定义决定的唯一写法。
 
-仍然缺的：**KLayout 的 signoff DRC 违例数**（Ruby 引擎在本机 chroot 起不来，换 locale / HOME / TMPDIR 均无效）。XOR 一致只说明两份产出相同，不等于两份都满足设计规则。
+仍然缺的：**天线检查与密度检查**（PDK 里是另外的脚本/`.lydrc`，本轮没跑）；以及**每个标准单元内部逐管等价**（LVS 的口径是展平后的顶层晶体管级等价）。XOR 一致只说明两份产出相同，不等于两份都满足设计规则——DRC 那两份是各自单独跑的。

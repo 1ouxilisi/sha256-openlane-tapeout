@@ -1,0 +1,62 @@
+KLayout 侧 signoff DRC 补跑：218 个规则类，0 条违例
+=============================================
+对象：/designs/sha256_v7b/runs/tapeout16/results/signoff/sha256_axil.gds（39,965,858 B）
+deck：/pdk/sky130A/libs.tech/klayout/drc/sky130A_mr.drc（release 2023.6.14_01.08）
+引擎：KLayout 0.29.1（/nix/store/zdin7gzr638czb3isvn7hf2vrnm3k289-klayout/bin/klayout）
+参数：与 OpenLane 的 run_klayout_drc_sky130 等价（本 run 的 KLAYOUT_DRC_OPTIONS = "beol 1 feol 1
+      floating_metal 0 seal 1 offgrid 1"），即 feol/beol/seal/offgrid 全开、floating_metal 关
+结果：violations_offgrid.xml 34,074 B / sha256 36045191fa8549ad8a29e232e0885978acf99bd793ba144e6351a5e2778f60d2
+      <categories> 218 类；<items> 0 条。没有一条违规项。
+      对照（不传 offgrid）violations.xml 22,957 B / 143 类 / 0 条。
+
+一、为什么之前四次都"必崩"，而且都崩在同一行
+--------------------------------
+前几轮把 `klayout -b -r *.drc` / 任意 `.rb` 的崩溃归因于"Ruby 引擎在本机 chroot 下初始化即死"，
+结论错了。这一轮把 0.29.1 的源码拉到本地，`tlFileUtils.cc` 第 979 行是：
+
+    std::string pf = tl::sprintf ("/proc/%d/exe", getpid ());
+    if (tl::file_exists (pf)) { return pf; }
+    ...
+    tl_assert (false);            // ← 979 行就在这
+
+也就是 get_app_path_internal() 在 Linux 上的兜底分支：它只**检查 /proc/<当前 pid>/exe 是否存在**，
+不存在就 `tl_assert(false)`，进程立刻报 `Internal error: ...tlFileUtils.cc:979 false was not true`。
+本机 chroot 的 /proc 是个空目录（不是内核挂载的 procfs），所以 `/proc/<pid>/exe` 永远不存在——
+与版图无关、与 locale 无关、与 Ruby 版本无关；`klayout -b -v` 不查这个路径，所以能正常打印版本。
+
+二、绕过办法（一次就过，不需要重装、不需要宿主侧跑）
+------------------------------------
+在 chroot 内先造出这个路径，再用**同一个 pid** exec 启动（exec 不换 pid）：
+
+    export LANG=C LC_ALL=C HOME=/tmp/kl
+    BIN=/nix/store/zdin7gzr638czb3isvn7hf2vrnm3k289-klayout/bin/klayout
+    P=$$; mkdir -p /proc/$P; ln -sfn $BIN /proc/$P/exe
+    exec $BIN -b -zz -r /pdk/sky130A/libs.tech/klayout/drc/sky130A_mr.drc \
+      -rd topcell=sha256_axil \
+      -rd input=/designs/sha256_v7b/runs/tapeout16/results/signoff/sha256_axil.gds \
+      -rd report=/tmp/kl/violations_offgrid.xml \
+      -rd feol=true -rd beol=true -rd floating_metal=false -rd seal=true -rd offgrid=true -rd thread=4
+
+验证引擎起来了的最短判据：`-b -r` 一个只写 `puts "ruby ok"` 的 .rb 脚本，输出 ruby ok 与
+`RBA::Application` 即正常（原先这行就是 979 崩溃点）。
+
+三、0 条违例不是空跑：一个故意违规的正对照
+-----------------------------
+用 klayout.db 造一个只有两条 met1、间距 0.10 um 的版图（ctl.gds），同一 deck 同一参数跑：
+  <categories> 218 类，<items> 1 条，类别 m1.2
+证明引擎确实在读图形并套规则；同一套参数下 sha256_axil.gds 得到 0 条，是真的 0 条。
+
+四、口径（不要过度解读这个 0）
+---------------------
+1) 这是**补跑**，不是流水线原始记录：metrics.csv 里 klayout_violations 仍是 -1，因为原 run 的第 37 步
+   (gds_klayout) 是 **GDS XOR** 那一步崩的，KLayout DRC 这一步在本 run 里根本没执行到（不是跑了得到 -1）。
+2) 覆盖范围 = 该 deck 的 218 个规则类（feol + beol + seal + offgrid）；floating_metal 按本 run 配置关闭。
+3) 天线检查不在这个 deck 里，由 flow 另外的步骤承担；密度类检查在 PDK 的独立 .lydrc
+   （met_min_ca_density.lydrc 等），本轮没有跑。所以这 0 条只声明"这套 deck 的这些规则没有违例"。
+4) 与 Magic DRC 的口径并列写：Magic 那侧 0 条明确不含天线与密度；KLayout 这侧 0 条是 218 类，
+   两套引擎、两套规则，互不替代，也互不背书。
+
+五、复跑
+--------
+上面第二节的命令原样可复跑；报告是 KLayout RDB 的 XML，直接数 <items> 里的条目即可核对
+（在线：evidence/klayout_drc_report.xml）。

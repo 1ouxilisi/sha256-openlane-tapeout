@@ -119,7 +119,7 @@ footer{padding:34px 0 60px;color:var(--muted);font-size:12.5px;font-family:var(-
     <div class="top"><span class="v">0</span><span class="k">布线阶段违例</span></div>
     <div class="src">列 tritonRoute_violations / Short / MetSpc / OffGrid / MinHole / Other</div>
     <div class="raw">…,11475,0,0,0,0,0,0,…</div>
-    <div class="note"><b>口径要说清</b>：这 6 个 0 是布线阶段（TritonRoute）的违例计数。同一行的 Magic_violations、klayout_violations、lvs_total_errors 是 <code>-1</code>，意思是本次 run 里这几项<b>没有产出结果</b>，不是「检查通过」。其中 Magic 与 LVS 我事后单独补跑过（见第三节），KLayout 那一项仍是 -1。</div>
+    <div class="note"><b>口径要说清</b>：这 6 个 0 是布线阶段（TritonRoute）的违例计数。同一行的 Magic_violations、klayout_violations、lvs_total_errors 是 <code>-1</code>，意思是本次 run 里这几项<b>没有产出结果</b>，不是「检查通过」。其中 Magic、LVS 与 KLayout DRC 我事后都单独补跑过（见第三节）。</div>
   </div>
 </div></section>
 
@@ -206,7 +206,17 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
     <p class="note"><b>再往下，连「端口读不进来」这个前提也被推翻了</b>：两个对照——① 两侧各在 header 里删掉同样 32 个 <code>s_axil_rdata[n]</code> 端口，再跟各自原件比，版图侧与网表侧都报 <b>32 个唯一名 / 64 行</b>（每个名字重复打印两遍），反应一字不差；② 把两侧 header 分别折成每行 8 个端口、<b>两个方向各跑一次</b>，结果仍是 <b>47 + 1</b>，连 pins 表的起始行号都一样（第 162352 行）。也就是说 header 是单行 1,585 字符还是 13 行、每行 5 个还是 8 个，对结果零影响。更关键的是行数差：只有「某端口只在一侧存在」时 netgen 才把名字打印两遍，而真实比对里这 47 个名字<b>只打印一遍、无重复</b>——它们两侧的端口表里都在，失败在它们所连的网。详见 <a href="evidence/lvs_pin_parity.txt">evidence/lvs_pin_parity.txt</a>。</p>
     <p class="note">另外试了第二个引擎：KLayout 的 Python 接口 <code>klayout.db</code> 里有 <code>NetlistComparer</code>，不依赖那个崩掉的 Ruby 引擎。它<b>返回了 True，但那个 True 是假的</b>——flatten 之后两侧各只剩 8 个器件，8 个器件当然等价。原因是 KLayout 的 SPICE 读取器把带参数的器件当成子电路、参数编进电路名，展开后没还原成器件。所以这条不采用，也不写进结论；但「差点被一个假通过骗过去」这件事记在 <a href="evidence/lvs_instance_audit.txt">evidence/lvs_instance_audit.txt</a>。</p>
     <p class="note">所以 <code>lvs_total_errors</code> 仍然是 <b>-1</b>，但它的含义变了：过去是「没跑」，现在是「跑完了、器件全对上、连接级没判过、卡点已定位到转换工具这一侧」。命令与原文在 <a href="evidence/lvs_attempt.txt">evidence/lvs_attempt.txt</a>，逐轮排障在 <a href="evidence/lvs_rootcause.txt">evidence/lvs_rootcause.txt</a>。</p>
-    <p class="note">同一行的 KLayout DRC 仍是 <code>-1</code>，原因和上一段那个 Ruby 崩一样：我换了 <code>LC_ALL=C</code>、<code>HOME=/tmp</code>、<code>TMPDIR=/tmp</code> 三种环境各试一次，报的都是 <code>tlFileUtils.cc:979</code> 同一行。这一项确实没有别的通道能用。</p>
+    <p class="note"><b>同一行的 KLayout DRC：也补跑成了，218 个规则类、0 条违例。</b>但我先把「为什么必崩」查错了两次——换 <code>LC_ALL=C</code>、<code>HOME=/tmp</code>、<code>TMPDIR=/tmp</code> 各试一次，报的都是 <code>tlFileUtils.cc:979</code>；直到把 KLayout 0.29.1 的源码拉到本地看那一行，才发现它是 <code>get_app_path_internal()</code> 的兜底分支：<b>它只检查 <code>/proc/&lt;当前 pid&gt;/exe</code> 在不在，不在就直接 <code>tl_assert(false)</code></b>。本机 chroot 的 <code>/proc</code> 是个空目录（不是内核挂载的 procfs），所以这个路径永远不存在——与版图无关、与 locale 无关。<code>klayout -b -v</code> 不查这个路径，所以能打印版本号，这一直在误导我。</p>
+    <div class="raw"># chroot 内：先把这个路径造出来，再用同一个 pid exec 启动
+export LANG=C LC_ALL=C HOME=/tmp/kl
+BIN=/nix/store/zdin...-klayout/bin/klayout
+P=$$; mkdir -p /proc/$P; ln -sfn $BIN /proc/$P/exe
+exec $BIN -b -zz -r /pdk/sky130A/libs.tech/klayout/drc/sky130A_mr.drc \
+  -rd topcell=sha256_axil -rd input=.../sha256_axil.gds -rd report=/tmp/kl/violations_offgrid.xml \
+  -rd feol=true -rd beol=true -rd floating_metal=false -rd seal=true -rd offgrid=true -rd thread=4</div>
+    <p class="note">一次就过。同一份 signoff GDS、同一个 PDK deck（release <code>2023.6.14_01.08</code>）、与 OpenLane 里 <code>run_klayout_drc_sky130</code> 等价的参数（本 run 的配置是 <code>beol 1 feol 1 floating_metal 0 seal 1 offgrid 1</code>）：报告里 <b><code>&lt;categories&gt;</code> 218 类、<code>&lt;items&gt;</code> 0 条</b>。不传 offgrid 的对照是 143 类、同样 0 条。</p>
+    <p class="note"><b>0 条不是空跑，我加了个故意违规的正对照</b>：用 <code>klayout.db</code> 画一个只有两条 met1、间距 0.10 µm 的小版图（规则要求 ≥0.14），同一 deck 同一参数跑 → <b>1 条，类别 <code>m1.2</code></b>。引擎确实在读图形、在套规则；同一套参数下真芯片得到 0 条，是真的 0 条。</p>
+    <p class="note">口径照旧收着说：这是<b>补跑</b>，不是流水线原始记录（<code>metrics.csv</code> 里那一列仍是 -1，因为原 run 的第 37 步是 <b>GDS XOR</b> 崩的，KLayout DRC 这一步在本次 run 里根本没执行到）；覆盖的是该 deck 的 218 类（feol + beol + seal + offgrid，floating_metal 按本 run 配置关闭）；<b>天线检查不在这个 deck 里</b>，密度类检查在 PDK 单独的 <code>met_min_ca_density.lydrc</code>，本轮没跑。命令、正对照、报告原文在 <a href="evidence/klayout_drc.txt">evidence/klayout_drc.txt</a>，报告本体是 <a href="evidence/klayout_drc_report.xml">evidence/klayout_drc_report.xml</a>（数一下 <code>&lt;items&gt;</code> 就知道是不是 0）。</p>
   </div>
 
   <div class="box bad">
@@ -281,7 +291,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、十三份证据文件的指纹</h2>
+  <h2>五、十五份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -296,6 +306,8 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
     <div class="fp" style="margin-top:14px">evidence/lvs_selfcheck.txt · 6,016 B<br>e2be16bc18b791c16b99030f0691d7c17f2b638748cdf4c7fdda2597cbce9bc0</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_pin_parity.txt · 7,491 B<br>42237b91ed66826eabb58405c2acedce88fa9c6262b6c7847c72e1af5a2b4a42</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_port_graph.txt · 5,278 B<br>db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13</div>
+    <div class="fp" style="margin-top:14px">evidence/klayout_drc.txt · 4,190 B<br>ffd427b546a5e60aa4af17e5adaf183c5efab2bdaee123f661f41ce98e6f361b</div>
+    <div class="fp" style="margin-top:14px">evidence/klayout_drc_report.xml · 34,074 B<br>36045191fa8549ad8a29e232e0885978acf99bd793ba144e6351a5e2778f60d2</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_pass.txt · 8,292 B<br>956ff1a4cc9d2db595a722be26ac7fa53b5af0f15e24af613eef56fd169aaf9f</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>
