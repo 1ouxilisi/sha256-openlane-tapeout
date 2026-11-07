@@ -224,6 +224,13 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
   </div>
 
   <div class="box bad">
+    <b>更正四：再比一层——98 个端口里有 94 个，连到哪个器件的哪个脚都逐字相同</b>
+    <p class="note">这一版换了个量法：不比端口名，比端口<b>连着什么</b>。对每个端口收集所有挂在它上面的器件脚，记成（单元名，引脚名）的列表，排序后整体比对。关键是引脚名必须按<b>每个文件自己声明的单元定义</b>翻译——Magic 生成的网表自带一套单元定义，引脚顺序与 PDK 官方库不同（<code>conb_1</code> 在 Magic 里是 <code>LO HI VPB VNB VGND VPWR</code>，在 PDK 里是 <code>VGND VNB VPB VPWR HI LO</code>；<code>clkbuf_1</code> 也一样）。我第一版脚本按位置比，一口报出 94 个不一致——那是方法错，不是网表错。</p>
+    <p class="note">按名字翻译后重跑：<b>98 个端口里 94 个的邻域逐字相同</b>，包括全部 <code>rdata[n]</code>、<code>wdata[n]</code>、<code>wstrb[n]</code>、握手信号、<code>clk</code>、<code>reset_n</code>。真正的差异只有 4 个：<code>bresp[0..1]</code> 与 <code>rresp[0..1]</code>——版图侧挂在常量单元 <code>conb_1</code> 的 <code>LO</code> 脚上，网表侧零引用。成因也查清了：<code>nl.v</code> 末尾有 4 条 <code>assign s_axil_bresp[0] = net389;</code> 这样的别名语句，转换器只读器件实例、不读 <code>assign</code>，于是这 4 个端口在网表侧悬空。把别名补进去重跑，<b>仍是 47</b>——所以它是转换器的一个真缺口（可修），但不是 47 的成因。</p>
+    <p class="note">于是「47 是版图与网表的实际连接差异」这个归因也撤掉了：器件数相等、端口表相等、端口局部邻域 94/98 相等、4 个差异已查清且不影响结果。现在只剩一句：<b>在这份数据上 netgen 的顶层匹配没有收敛</b>，失败位置是 47 个端口的网配对，而不是任何一层可以逐条指出的网表错误。候选只剩两类（大规模重复结构上的图同构搜索 / 更深处确实不同），本页不做裁决。方法和复跑命令在 <a href="evidence/lvs_port_graph.txt">evidence/lvs_port_graph.txt</a>。</p>
+  </div>
+
+  <div class="box bad">
     <b>更正一处：上一版我把 81/14 写成了 prBoundary，那是错的</b>
     <p class="note">查 PDK 图层名表：prBoundary 是 <code>235/4</code>；<code>81/14</code> 是 <code>areaid.lowTapDensity</code>。结论不变（它同样是不参与制造的 flow 标记层，流水线第 37 步也用 <code>-rd ignore=81/14</code> 排除），但层名以这一版为准。把这处错误写在页面上、而不是悄悄改掉，是因为这一页存在的意义就是让人能查出来。</p>
   </div>
@@ -265,7 +272,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、十一份证据文件的指纹</h2>
+  <h2>五、十二份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -279,6 +286,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
     <div class="fp" style="margin-top:14px">evidence/lvs_instance_audit.txt · 6,312 B<br>23d7022ac3cb9136bed59ba43baf67adb5a137a0f5790ebe33549b12b6db1af9</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_selfcheck.txt · 6,016 B<br>e2be16bc18b791c16b99030f0691d7c17f2b638748cdf4c7fdda2597cbce9bc0</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_pin_parity.txt · 7,491 B<br>42237b91ed66826eabb58405c2acedce88fa9c6262b6c7847c72e1af5a2b4a42</div>
+    <div class="fp" style="margin-top:14px">evidence/lvs_port_graph.txt · 5,278 B<br>db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>
 </div></section>

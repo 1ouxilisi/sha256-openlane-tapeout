@@ -1,0 +1,79 @@
+端口级连通性对账：98 个端口的局部连接有 94 个逐字相同，47 的第四个归因也被推翻
+==========================================================================
+对象：/tmp/lvs/sha256_axil.ext.spice（Magic 提取，33,984 个顶层实例，98 端口）
+      /tmp/lvs/sha256_axil.pnr5.spice（PnR 网表经转换器转出，47,087 个顶层实例，98 端口）
+工具：netgen 1.5.270；python3 文本解析（par3.py）
+时间：2026-11-07
+
+一、这次换了量法：不比"端口名"，比"端口连着什么"
+----------------------------------------------
+前面几轮都在比端口名（98 / 98、逐字相同），这轮改成比端口在网表里的邻域：
+  对每个顶层端口 p，收集所有挂着 p 的器件脚，记成 (单元名, 引脚名) 的列表，
+  再按 (单元名, 引脚名) 排序后整体比对。
+关键点：引脚名必须按"每个文件自己声明的 .subckt"翻译，不能按 token 位置——
+Magic 生成的 ext.spice 自带一套单元定义，它的引脚顺序与 PDK 官方 spice 库不同：
+  sky130_fd_sc_hd__conb_1   ext: LO HI VPB VNB VGND VPWR   PDK: VGND VNB VPB VPWR HI LO
+  sky130_fd_sc_hd__clkbuf_1 ext: VGND VPWR X A VPB VNB     PDK: A VGND VNB VPB VPWR X
+所以任何"按位置逐位比较两份 spice"的做法都必然误判。我的第一版脚本（par2.py，按位置比）
+就报出 94 / 98 不一致——那是方法错，不是网表错。按名字翻译后重跑（par3.py）才得到下面的数。
+
+二、结果：98 个端口里 94 个逐字相同
+--------------------------------
+par3.py 输出：ports 98，sig_mismatch 6（其中 VGND / VPWR 两条是电源网，差异只是"挂了多少个脚"的
+计数不同，按集合比不算差异），真正的连接差异只有 4 个：
+  s_axil_bresp[0]  版图侧挂在 conb_1 的 LO 脚；网表侧零引用
+  s_axil_bresp[1]  同上
+  s_axil_rresp[0]  同上
+  s_axil_rresp[1]  同上
+其余 94 个端口——包括全部 s_axil_rdata[n]、wdata[n]、wstrb[n]、握手信号、clk、reset_n——
+两侧的邻域是同一个 (单元, 引脚) 列表，逐项相同。
+
+三、这 4 个的成因查清了：转换器漏读末尾的 assign
+------------------------------------------
+sha256_axil.nl.v 第 99345–99348 行有 4 条语句：
+  assign s_axil_bresp[0] = net389;
+  assign s_axil_bresp[1] = net390;
+  assign s_axil_rresp[0] = net391;
+  assign s_axil_rresp[1] = net392;
+也就是说：网表里 conb_1 的 LO 输出接到 net389，端口 bresp[0] 只是 net389 的别名。
+转换器（mk_lvs_net.py 系列）只读器件实例、不读 assign，于是 4 个端口在网表侧成了悬空，
+版图侧则实打实挂在 conb_1 的 LO 上。
+把 4 个别名补进网表（pnr10.spice，逐行 token 级替换 net389→s_axil_bresp[0] 等），
+重跑：no matching pin 仍是 47 行、Mismatch 1 行、Final result: Netlists do not match.
+——所以这 4 个是转换器的一个真缺口（已记下，可以修），但它不是 47 的成因。
+
+四、于是「版图与网表的实际连接差异」这个归因也撤掉
+--------------------------------------------
+到此为止已经量过的东西：
+  器件数        15,593 = 15,593   （相等）
+  端口表        98 / 98，名字逐字相同、无重复
+  端口局部邻域  94 / 98 逐字相同，4 个差异成因已查清且不影响结果
+  折行形态      两侧各折成每行 8 个、双向重跑，47 + 1 一字不变
+  端口增减      两侧各删 32 个，报数反应完全一致
+能说的只剩一句：在这份数据上，netgen 的顶层匹配没有收敛，
+它失败的位置是 47 个端口的"网配对"，而不是任何一层可以逐条指出的网表错误。
+不能再说「47 是版图与网表的实际连接差异」——这句话现在没有证据支撑。
+
+五、仍未定论 / 下一步（如实留着）
+----------------------------
+1) 47 个端口所连的网为什么配不上，机制仍未知。已知的候选只有两类，本文件不做裁决：
+   (a) netgen 在 47,087 个实例、9,344 个 decap_12 这类高度重复结构上的图同构搜索；
+   (b) 某处更深的连接（非端口邻域）确实不同。
+2) 下一步可以做但现在没做：把 98 个端口各自的"到 2 跳/3 跳的邻域"也算出来比较，
+   看差异是不是出现在更远的一层；或者截取一个小层次（例如单个 clkload 分支）单独 LVS。
+3) 转换器的 4 条 assign 缺口：成因已查清，修法明确（union-find 合并别名），
+   本轮只做了补丁版验证（pnr10.spice），没回改生成脚本本身。
+
+六、复跑命令
+------------
+python3 /home/user/lvswk/par3.py \
+  /home/user/openlane-rootfs/tmp/lvs/sha256_axil.ext.spice \
+  /home/user/openlane-rootfs/tmp/lvs/sha256_axil.pnr5.spice
+
+sudo chroot /home/user/openlane-rootfs /nix/store/306znyj77fv49kwnkpxmb0j2znqpa8bj-bash-5.2p26/bin/bash -c \
+ 'export PATH=/nix/store/b9kirpfkif1852bcy64f96np93xjalsi-netgen/bin:$PATH; \
+  export PDK_ROOT=/pdk PDK_PATH=/pdk/sky130A; cd /tmp/lvs; \
+  netgen -batch lvs "sha256_axil.ext.spice sha256_axil" "sha256_axil.pnr10.spice sha256_axil" \
+   /pdk/sky130A/libs.tech/netgen/sky130A_setup.tcl E.out'
+
+输出 E.out：47 行 no matching pin、1 行 Mismatch、Netlists do not match.
