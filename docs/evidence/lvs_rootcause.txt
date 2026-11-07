@@ -1,0 +1,119 @@
+LVS 逐轮排障记录 —— 47 个顶层端口为什么配不上
+=================================================
+生成时间：2026-11-07
+工具：netgen 1.5.270（2024-06-02 编译）、Magic VLSI（sky130A 1.0.466-0-gbdc9412）
+现场：/home/user/openlane-rootfs/tmp/lvs/
+
+这份文件只回答一个问题：为什么 LVS 里「器件数完全对上」，
+但连接级仍然判不通过。不修饰，不把没判过的写成判过。
+
+--------------------------------------------------
+一、两侧输入
+--------------------------------------------------
+版图侧（Circuit 1）
+  sha256_axil.ext.spice      2,785,763 B
+  Magic 从 sha256_axil.gds（39,965,858 B）提取，
+  `extract all` + `ext2spice lvs`，154 个子电路，
+  顶层 .subckt sha256_axil 有 98 个端口，
+  顶层实例 33,983 条，顶层 net 15,645 个。
+
+网表侧（Circuit 2）
+  sha256_axil.pnr5.spice     3,452,700 B
+  由 results/routing/sha256_axil.nl.v（3,347,552 B，47,087 个实例）
+  经自写 python 转换器把 "cell inst (.PIN(net));" 转成
+  "Xinst net... cell"，并把用到的 156 个 PDK 单元原型附在文件里。
+  顶层 .subckt sha256_axil 同样 98 个端口，顶层 net 15,647 个。
+
+--------------------------------------------------
+二、八次比较的共同结论（lvs4 ~ lvs12，原文）
+--------------------------------------------------
+  Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
+  Circuit 1 contains 15645 nets,    Circuit 2 contains 15647 nets. *** MISMATCH ***
+  47 行 (no matching pin)
+  末行：clk | s_axil_wdata[27] **Mismatch**
+  Cell pin lists are equivalent.
+  Device classes sha256_axil and sha256_axil are equivalent.
+  Final result: Netlists do not match.
+
+器件级：15,593 = 15,593，逐类单元实例数也一一相等。
+连接级：net 多 2 个，47 个顶层端口报 no matching pin。
+
+--------------------------------------------------
+三、这一版新做的四次对照（各跑一次，结果全是 47）
+--------------------------------------------------
+1) 顶层 .subckt 头是单行 1,585 字符
+   -> sha256_axil.pnr6.spice：折成 20 行、每行 <=88 字符（+ 续行）
+   -> lvs9.out：仍然 47 行 no matching pin
+   排除：头部单行过长。
+
+2) 156 个单元原型写在顶层之后
+   netgen 日志对每个单元刷
+     Call to undefined subcircuit ... / Creating placeholder cell definition.
+   -> sha256_axil.pnr7.spice：单元原型全部前移、顶层 .subckt 放到文件末尾
+   -> lvs10.out：仍然 47
+   排除：定义顺序。
+
+3) 端口名带 [n] 方括号（spice 总线位写法）
+   -> ext_norm.spice 2,785,599 B / pnr_norm.spice 3,443,842 B
+      两侧用同一规则把 [n] 改成 _n（公平，不偏一侧）
+   -> lvs11.out：仍然 47
+      此时表里名字已显示为 s_axil_rdata_18 这种形式，c2 列仍是 (no matching pin)
+   排除：方括号转义 / 总线位解析。
+
+4) netgen 自动 pin 匹配
+   -> netgen -batch lvs ... -auto  (lvs12.out)
+   -> 仍然 47
+   排除：pin 顺序错位可以靠自动匹配纠正。
+
+--------------------------------------------------
+四、端口表本身的核对（这一版新增的硬证据）
+--------------------------------------------------
+- 两侧顶层端口数：98 / 98；唯一名 98 / 98；无重复名。
+- 名字逐字相同：例如 s_axil_rdata[0]、s_axil_awready、reset_n 在两侧都存在。
+- 47 个被报 no matching pin 的名字，在 c2 的实例行里确实出现并被驱动，例如：
+    Xoutput52 net52 VGND VNB VPB VPWR s_axil_awready sky130_fd_sc_hd__buf_2
+    Xoutput54 net54 VGND VNB VPB VPWR s_axil_rdata[0] sky130_fd_sc_hd__buf_2
+  也就是说：端口既在 .subckt 声明里，也在 body 里接到缓冲器输出，不是空挂。
+- 另有 8 个端口在 c2 的 body 里零引用（按名字子串核对）：
+    s_axil_araddr[0]  s_axil_araddr[1]
+    s_axil_awaddr[0]  s_axil_awaddr[1]
+    s_axil_bresp[0]   s_axil_bresp[1]
+    s_axil_rresp[0]   s_axil_rresp[1]
+  更正：早前用正则  统计出「84 个端口未被引用」，那是边界判断错误（[ ] 后接非词字符不构成 ），
+  真实数字是这 8 个。这处错误在此更正，不改写前面的结论（47 与 8 是两件事）。
+
+--------------------------------------------------
+五、结论（不修饰）
+--------------------------------------------------
+1. 器件级：两侧完全相等（15,593 = 15,593），逐类单元实例数一致。这一条可以写。
+2. 连接级：net 15,645 vs 15,647；47 个顶层端口无对应 pin；netgen 判 Netlists do not match。
+3. 四类变量（头部长度 / 定义顺序 / 方括号命名 / 自动匹配）都排除后，
+   继续改 c2 文本已无意义。剩余候选只有两条：
+   (a) netgen 对这份手工转出的 spice 的顶层端口识别本身；
+   (b) 需要一个第二引擎复核，而本机 KLayout 的 Ruby 引擎必崩（tlFileUtils.cc:979，已四次确认）。
+4. 因此：既不写「LVS 通过」，也不写「版图与电路不一致」。
+   目前能写的只有：器件级对上，连接级未判过，卡点已定位到网表转换/端口识别这一侧。
+
+--------------------------------------------------
+六、没有做的（如实列出）
+--------------------------------------------------
+- 没有在 KLayout 的 LVS deck 上做第二引擎复核（本机 Ruby 引擎起不来）。
+- 没有对这 8 个零引用端口回到 RTL 核查它们是否真的未被使用。
+
+--------------------------------------------------
+七、复现
+--------------------------------------------------
+命令（chroot 内）：
+  netgen -batch lvs \
+    "sha256_axil.ext.spice sha256_axil" \
+    "sha256_axil.pnr5.spice sha256_axil" \
+    /pdk/sky130A/libs.tech/netgen/sky130A_setup.tcl lvs8.out
+
+对照实验把第二参数依次换成：
+  pnr6.spice / pnr7.spice / pnr_norm.spice（配 ext_norm.spice）
+并分别加 -auto。
+
+输出文件（同目录）：
+  lvs4.out ~ lvs8.out   各 14 MB 级
+  lvs9.out / lvs10.out / lvs11.out / lvs12.out
+  netgen4.log ~ netgen12.log

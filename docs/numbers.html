@@ -198,7 +198,10 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
          Circuit 1 contains 15645 nets,    Circuit 2 contains 15647 nets. *** MISMATCH ***
          Final result: Netlists do not match.</div>
     <p class="note"><b>器件数是完全对上的</b>：顶层 15,593 个器件 = 15,593 个器件，逐类单元（decap / dfrtp / a22o / nand2 …）的实例数两侧也一一相等。没对上的是连接层：网表侧比版图多 2 个 net，并且 47 个 AXI 总线与握手端口在网表侧报 <code>no matching pin</code>——这是从 verilog 转 spice 时端口名与实例连接名没有全部补齐，属于转换工具的缺口，不是版图短路或断路。</p>
-    <p class="note">所以 <code>lvs_total_errors</code> 仍然是 <b>-1</b>，但它的含义变了：过去是「没跑」，现在是「跑完了、器件全对上、连接级没判过」。命令、原文、八轮里的关键两行、以及踩到的坑都在 <a href="evidence/lvs_attempt.txt">evidence/lvs_attempt.txt</a>。</p>
+    <p class="note"><b>这一版把「端口没补齐」这句话查到了底</b>：四个对照各跑一次，结果都是同一份 47。① 顶层 <code>.subckt</code> 头原本是单行 1,585 字符，折成 20 行、每行 ≤88 字符再跑——还是 47；② 156 个单元原型原本写在顶层之后（netgen 日志一路刷 <code>Creating placeholder cell definition.</code>），全部前移、顶层放到文件末尾——还是 47；③ 端口名里的 <code>[n]</code> 方括号，两侧用同一规则改成 <code>_n</code>——还是 47；④ 加 <code>-auto</code> 让 netgen 自己找 pin 对应——还是 47。</p>
+    <p class="note">同时核对了端口表本身：两侧顶层都是 <b>98 个端口</b>、名字逐字相同、无重复；被报 <code>no matching pin</code> 的名字在网表 body 里确实接着缓冲器，例如 <code>Xoutput52 net52 VGND VNB VPB VPWR s_axil_awready sky130_fd_sc_hd__buf_2</code>——不是空挂。另有 <b>8 个端口</b>（<code>araddr[0..1]</code>、<code>awaddr[0..1]</code>、<code>bresp[0..1]</code>、<code>rresp[0..1]</code>）在 body 里零引用，这条也如实记下；顺带更正一处：早前按正则边界统计出的「84 个未引用」是误报，真实是这 8 个。</p>
+    <p class="note">四类变量排除之后，能说的只有一句：<b>卡点不在名字、不在行长度、不在定义顺序，在 netgen 对这份手工转出 spice 的顶层端口识别</b>。要判过就得换第二引擎复核，而本机 KLayout 的 Ruby 引擎起不来。逐轮记录、四条对照命令、lvs9–lvs12 都在 <a href="evidence/lvs_rootcause.txt">evidence/lvs_rootcause.txt</a>。</p>
+    <p class="note">所以 <code>lvs_total_errors</code> 仍然是 <b>-1</b>，但它的含义变了：过去是「没跑」，现在是「跑完了、器件全对上、连接级没判过、卡点已定位到转换工具这一侧」。命令与原文在 <a href="evidence/lvs_attempt.txt">evidence/lvs_attempt.txt</a>，逐轮排障在 <a href="evidence/lvs_rootcause.txt">evidence/lvs_rootcause.txt</a>。</p>
     <p class="note">同一行的 KLayout DRC 仍是 <code>-1</code>，原因和上一段那个 Ruby 崩一样：我换了 <code>LC_ALL=C</code>、<code>HOME=/tmp</code>、<code>TMPDIR=/tmp</code> 三种环境各试一次，报的都是 <code>tlFileUtils.cc:979</code> 同一行。这一项确实没有别的通道能用。</p>
   </div>
 
@@ -236,7 +239,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
     <ul>
       <li>这份 metrics.csv 不是我伪造的——这一点只能靠「文件在仓库里、指纹可核对、内容自洽」来逼近，不能靠数学证明。真要做到不可否认，得由第三方重跑一次 flow。</li>
       <li>Magic 的 signoff DRC 确实跑过一遍、结果 0 条违例（<b>不含天线与密度</b>），原文与命令都在；不是我在口头上说「检查通过」。</li>
-      <li><b>Magic / KLayout 的 signoff DRC 违例数</b>：Magic 那侧已补跑为 <b>0</b>（不含天线与密度检查），KLayout 那侧仍是 <b>-1</b>。<b>LVS 错误数同样是 -1</b>，但已经跑出来过：器件级 15,593 = 15,593 完全一致，连接级因端口映射没补齐而判不通过。所以「DRC 0」这句话：布线阶段成立、Magic 规则检查成立（有折扣），KLayout 侧不成立。XOR 一致只说明两份产出相同，不等于两份产出都满足设计规则。</li>
+      <li><b>Magic / KLayout 的 signoff DRC 违例数</b>：Magic 那侧已补跑为 <b>0</b>（不含天线与密度检查），KLayout 那侧仍是 <b>-1</b>。<b>LVS 错误数同样是 -1</b>，但已经跑出来过：器件级 15,593 = 15,593 完全一致，连接级因 47 个顶层端口的对应关系没建立而判不通过；四类变量（名字写法 / 行长度 / 定义顺序 / 自动匹配）逐个排除后，卡点落在网表转换与端口识别这一侧，不是版图与电路的电气差异。所以「DRC 0」这句话：布线阶段成立、Magic 规则检查成立（有折扣），KLayout 侧不成立。XOR 一致只说明两份产出相同，不等于两份产出都满足设计规则。</li>
       <li>功耗数字是 OpenLane 内部功耗估算（向量无关的活动率假设），不是硅上实测。</li>
       <li>时序基于 sky130 的 signoff 库与寄生提取，不等于流片后的硅结果。</li>
     </ul>
@@ -244,7 +247,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、七份证据文件的指纹</h2>
+  <h2>五、八份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -254,6 +257,7 @@ netgen : Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices.
     <div class="fp" style="margin-top:14px">evidence/gds_layers.txt · 6,241 B<br>f97fe245883cc40871630f33f0146b3d0faa904e6463963bf24838471e69e561</div>
     <div class="fp" style="margin-top:14px">evidence/magic_drc.txt · 2,480 B<br>6036d8791e18b26a2ca76f8a1b9e2523c88fdeb11d7538ec262c08091b7580f4</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_attempt.txt · 3,164 B<br>304a4406735091a1425df27420ac6d395089c25bb655cfb248f8b720b4082683</div>
+    <div class="fp" style="margin-top:14px">evidence/lvs_rootcause.txt · 6,079 B<br>8397535d6d8f3a804c7d4d320699f815764eb261d09a7a57117ef40df1eda35e</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>
 </div></section>
