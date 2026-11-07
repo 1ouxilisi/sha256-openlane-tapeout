@@ -248,6 +248,7 @@ check_antennas -verbose
     <p class="note">原文、第一条违例的形状、复跑命令在 <a href="evidence/antenna_check.txt">evidence/antenna_check.txt</a>。</p>
     <p class="note"><b>修法我实跑验证了</b>（不是「理论上能修」）：在 ODB 的<b>副本</b>上跑 OpenLane 自己那条 <code>repair_antennas sky130_fd_sc_hd__diode_2</code>。第一次直接插，<code>Inserted 115 diodes</code> 之后卡在 <code>[WARNING DPL-0037] Use remove_fillers before detailed placement</code> → <code>DPL-0036</code>；按提示先删 fill 再来一次，三轮插入共 <b>147 个二极管（115 + 32）</b>，同一检查器复测 <b>0 net / 0 pin</b>。所以违例是可由二极管消掉的，不是设计不可修。</p>
     <p class="note"><b>但这不等于版图已经修好</b>：插入发生在<b>详细布线之后</b>的数据库上，二极管没有连线、原布线没动；为腾位置先删了 fill；所以没有生成新 GDS，现有的 XOR、两套 DRC、LVS 全部仍指向旧版图。真修的顺序是「全局布线 → 插二极管 → 详细布线 → 重新出 GDS → 重跑 DRC / XOR / LVS」，等于把第 32 步之后全部重做一遍，本轮<b>只做到了「修法验证」</b>。两次尝试的原文与口径在 <a href="evidence/antenna_repair_attempt.txt">evidence/antenna_repair_attempt.txt</a>。</p>
+    <p class="note"><b>我试过把这条路走通，五次尝试都因工具报错停住，这点我也写进了证据里</b>：① 从详细布线后的库插完二极管再跑详细布线，报 <code>DRT-0218 Guide is not connected to design</code>；② 先重跑全局布线再详细布线，仍报 <code>DRT-0218</code>；③ 改从全局布线后的检查点 <code>22-global.odb</code> 出发，插 114 个二极管后报 <code>GRT-0226 Type2 ripup not type L.</code>；④ 改从布线前的检查点 <code>20-sha256_axil.odb</code> 出发，同样报 <code>GRT-0226</code>；⑤ 再补上 OpenLane 流程里的全局布线层调整参数，仍报 <code>GRT-0226</code>。前者是顺序问题（二极管插在详细布线之后，guide 与连线已经固定在一起，重跑全局布线也补不回来），后者是工具内部错误，换起点、换参数都能复现。所以「修法可行」是真的，但「版图已修」目前<b>拿不出证据</b>。五次尝试的原文、日志字节数，以及下一步的两条路（打开 <code>GRT_REPAIR_ANTENNAS = 1</code> 整条 flow 重跑，或从电路侧消除长 met4 段）写在 <a href="evidence/antenna_repair_route_attempt.txt">evidence/antenna_repair_route_attempt.txt</a>。</p>
   </div>
 
   <div class="box bad">
@@ -323,7 +324,7 @@ check_antennas -verbose
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、十九份证据文件的指纹</h2>
+  <h2>五、二十份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -344,6 +345,7 @@ check_antennas -verbose
     <div class="fp" style="margin-top:14px">evidence/density_report.xml · 465 B<br>6681d364b2c424d55a95ad4444cace1f7aac6012fb812dfbecf3eac51f4501ea</div>
     <div class="fp" style="margin-top:14px">evidence/antenna_check.txt · 3,635 B<br>a9403329a5963aa998f1b7c2711fa772c308298ab48111d949221818924647d6</div>
     <div class="fp" style="margin-top:14px">evidence/antenna_repair_attempt.txt · 4,006 B<br>5f76607cf83cff7478f120c37d3536927e1662a54da1db2b91ae16ff74cce068</div>
+    <div class="fp" style="margin-top:14px">evidence/antenna_repair_route_attempt.txt · 5,693 B<br>858300362d2267da025ea7e88efcf8c9dff5905c3e20813cc6a51cf2380786f1</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_pass.txt · 8,292 B<br>956ff1a4cc9d2db595a722be26ac7fa53b5af0f15e24af613eef56fd169aaf9f</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>

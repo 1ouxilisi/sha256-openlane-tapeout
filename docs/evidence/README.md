@@ -26,6 +26,7 @@
 | `density_report.xml` | 465 B | 上面那次密度检查的 KLayout 报告原文（`<items>` 0 条） | 生成结果 |
 | `antenna_check.txt` | 3,635 B | **天线检查：没通过**。OpenROAD `check_antennas` 对布线后 ODB 补跑 → **67 个 net / 87 个 pin 越限**；本 run `GRT_REPAIR_ANTENNAS=0`、`DiodeCells=0`，检查也没在流程里跑到；含第一条违例原文、口径与复跑命令 | 生成结果 |
 | `antenna_repair_attempt.txt` | 4,006 B | **天线修法验证**：ODB 副本上跑 `repair_antennas`——直接插卡在 `DPL-0036`（先要 `remove_fillers`）；删 fill 后三轮共插 **147 个二极管**，同一检查器复测 **0 net / 0 pin**。但插入发生在详细布线之后、未重新出 GDS，版图仍未修 | 生成结果 |
+| `antenna_repair_route_attempt.txt` | 5,693 B | **走到新 GDS 的五次尝试（全失败）**：详细布线后的库 → `DRT-0218`；重跑全局布线 → 仍 `DRT-0218`；`22-global.odb` 起点 → `GRT-0226`；`20-sha256_axil.odb` 起点 → `GRT-0226`；补层调整参数 → 仍 `GRT-0226`。附「修法可行 ≠ 版图已修」的口径与下一步两条路 | 生成结果 |
 | `lvs_pass.txt` | 8,292 B | **LVS 结案**：两侧网名集合做差，真正多出的只有 `VNB`/`VPB` 两个网（井/衬底由 5,496 个 tap 接电源，Magic 提取时体端并入电源，而网表里 tap 引脚为空被整批丢掉）；`47 = 43 + 4`，两处都补后展平顶层 **166,353 器件 / 84,178 网**两侧相等，`Circuits match uniquely`；第 7 节记两次对照实跑：tap 单元在 PDK 里只有 `VGND VPWR` 两脚、body 为空，补回 5,496 个 tap 仍 47 行，强加 VNB/VPB 脚仍 47 行——另一条路线做不到，口径由定义决定 | 生成结果 |
 
 三份 STA 原始日志（`logs/signoff/29-rcx_mcsta.min.log`、`31-rcx_mcsta.max.log`、`33-rcx_mcsta.nom.log`）各约 33 MB，一次性的，没有入库。
@@ -45,6 +46,7 @@ ffd427b546a5e60aa4af17e5adaf183c5efab2bdaee123f661f41ce98e6f361b  klayout_drc.tx
 6681d364b2c424d55a95ad4444cace1f7aac6012fb812dfbecf3eac51f4501ea  density_report.xml
 a9403329a5963aa998f1b7c2711fa772c308298ab48111d949221818924647d6  antenna_check.txt
 5f76607cf83cff7478f120c37d3536927e1662a54da1db2b91ae16ff74cce068  antenna_repair_attempt.txt
+858300362d2267da025ea7e88efcf8c9dff5905c3e20813cc6a51cf2380786f1  antenna_repair_route_attempt.txt
 304a4406735091a1425df27420ac6d395089c25bb655cfb248f8b720b4082683  lvs_attempt.txt
 8397535d6d8f3a804c7d4d320699f815764eb261d09a7a57117ef40df1eda35e  lvs_rootcause.txt
 23d7022ac3cb9136bed59ba43baf67adb5a137a0f5790ebe33549b12b6db1af9  lvs_instance_audit.txt

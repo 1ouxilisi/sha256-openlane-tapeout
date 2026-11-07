@@ -1,0 +1,77 @@
+天线修法 · 走到「新 GDS」这一步为止的五次尝试
+生成时间：2026-11-07（v7 tapeout16，sky130A，OpenROAD 无 GUI 批处理，chroot）
+结论先说：违例可以消掉（前一份证据 147 个二极管 → 复测 0/0），
+但「按正确顺序重跑布线、产出一份修好的版图」这条链，本轮没有走通。
+两个 OpenROAD 错误把路堵死，且在不同检查点上都复现，不是脚本写错。
+
+一、起点与目标
+- 目标：从「详细布线前」的数据库出发，插二极管 → 重新布线 → 复测 0/0 → 出 GDS。
+- 该 run 的全部 ODB 检查点（find 全量，无遗漏）：
+  results/{floorplan,cts,placement,routing}/、results/signoff/、
+  tmp/18-sha256_axil.odb、tmp/20-sha256_axil.odb、
+  tmp/cts/17-sha256_axil.resized.odb、
+  tmp/floorplan/{3-initial_fp,4-io,5-tapcell}.odb、
+  tmp/placement/{7-global_skip_io,9-io,10-global,12-resizer}.odb、
+  tmp/routing/22-global.odb（15,128,137 B，全局布线后）、tmp/routing/25-fill.odb（23,099,996 B，填 fill 后）。
+- 关键事实：**没有 23-detailed / 24- 这类中间检查点**。详细布线后的唯一产物就是
+  results/routing/sha256_axil.odb（32,013,664 B）。
+
+二、尝试 1：从「详细布线后」的 ODB 插二极管，再重跑详细布线
+- fix3.tcl：routed ODB → check_antennas（67 net / 87 pin）→ remove_fillers →
+  repair_antennas（80 → 插 115 → 8 → 插 32 → 0）→ 写 rep.odb。
+  修法本身通过；下一步 `detailed_route -verbose` 直接被参数表拒绝：
+  [ERROR STA-0560] detailed_route -verbose missing value.  （-verbose 不是它的合法参数）
+- fix4.tcl：去掉 -verbose，从 rep.odb 跑 detailed_route -output_drc：
+  [WARNING DRT-0225] ... fall back to feedthrough mode（多条）
+  [WARNING DRT-0215] Pin _09785_/X not covered by guide（10 条 DRT-0215/0225）
+  [ERROR DRT-0218] Guide is not connected to design.
+  含义：guide 是旧布线留下的，插进来的二极管没有 guide，guide 与设计对不上。
+- fix5.tcl：在 rep.odb 上先 set_routing_layers（met1-met5 / 时钟 met3-met5）
+  + set_macro_extension 0 + global_route -congestion_iterations 200：
+  GRT_DONE（DRT-0267 cpu/elapsed = 00:00:53，peak 421.50 MB），再 detailed_route：
+  **仍是 DRT-0218**。重跑全局布线救不回这份数据库——二极管是在详细布线之后插的，
+  这让 guide 与既有连线的关系无法重建。
+
+三、尝试 2：从「全局布线后」的 ODB（22-global.odb）出发
+- fix6.tcl：read 22-global.odb → check_antennas（71 net / 92 pin）→ remove_fillers →
+  repair_antennas（插 114 个二极管）→
+  [ERROR GRT-0226] Type2 ripup not type L.
+  即：OpenROAD 自己的修法在「尚未详细布线」的库上，插完二极管要重跑内部布线时崩了。
+- 同一库上改动参数复跑两次仍崩（见第四节）。
+
+四、尝试 3/4：换更早的检查点、补齐流程参数，仍崩
+- fix7.tcl：改用 tmp/20-sha256_axil.odb（布线前、放置优化后），
+  set_routing_layers + set_macro_extension 0 → repair_antennas：
+  插 114 → [ERROR GRT-0226]。全程 6 行日志，无其它输出。
+- fix8.tcl：同上，但补上 OpenLane grt.tcl 里那份 set_global_routing_layer_adjustment
+  （* 0.3 / li1 0.99 / met1-met5 0），即尽量复刻正式流程的全局布线环境：
+  插 114 → **同样 GRT-0226**。
+- 所以 GRT-0226 不是「起点选错」，而是 repair_antennas 在这份设计上、
+  在「未详细布线」的库上做内部重布线的固有行为。
+
+五、两个错误的性质（能说到哪 / 不能说成什么）
+- DRT-0218「Guide is not connected to design」是**顺序问题**：二极管插在详细布线之后，
+  guide 体系已与物理连线绑定，重跑 GRT 也补不回来。
+- GRT-0226「Type2 ripup not type L」是**工具内部错误**：插完二极管后的重布线阶段，
+  OpenROAD 的 ripup 遇到非 L 类型的线网。换起点（22-global / 20-）、
+  换参数环境（有无 layer adjustment）都复现。
+- 因此：**「修法可行」与「版图已修」是两件事**。
+  前一份证据证明前者（147 个二极管、复测 0/0），
+  本份证据说明后者这条路本轮走不通：我拿不出「修好的 GDS」。
+- 天线违例数随阶段变化，须写清口径：最终详细布线后 67 net / 87 pin；
+  全局布线后（尚未详细布线）71 net / 92 pin。页面与报告一律以 67/87 为准。
+
+六、要真修，下一步只有两条（都超出「改一个数字」的范围）
+1) 改配置从头重跑整条 flow：在 config 里打开 GRT_REPAIR_ANTENNAS = 1
+   （本 run 为 0，第 153 行），让修正在正式流程的 GRT 阶段由 OpenLane 自己调用——
+   但同一份 OpenROAD 修法代码在此设计上已出现 GRT-0226，成功率未知，且要重跑
+   placement→routing→fill→GDS→signoff 全部步骤。
+2) 从电路侧消除违例：对首条违例 net _02246_ 这类长 met4 段，改布局/改层分配或加缓冲，
+   从源头降低天线比，再重跑布线。这属于设计改动，不是验证动作。
+无论走哪条，现有 XOR（21 制造层全 0）、两套 DRC（0/0）、密度（0/0）、
+LVS（Circuits match uniquely）四组结论都指向旧版图，必须重跑后重新举证。
+
+原始日志（未上传，留在 vm /home/user/openlane-rootfs/tmp/antfix/）：
+fix3.log 833,709 B（含 STA-0560）· fix4.log 117,793 B（含 DRT-0218）
+fix5.log 120,008 B（GRT 53 s 后仍 DRT-0218）· fix6.log 858,047 B（22-global 起点 GRT-0226）
+fix7.log 287 B / fix8.log 288 B（20- 起点与补 layer adjustment 后，同样 GRT-0226）
