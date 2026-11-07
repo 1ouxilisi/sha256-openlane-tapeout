@@ -1,0 +1,91 @@
+天线违例：真正修成的那一次（67 net / 87 pin → 0 / 0）
+生成时间：2026-11-08（本机时区 UTC+8）
+对应证据：antenna_check.txt（违例清单）、antenna_repair_attempt.txt（修法验证）、
+          antenna_repair_route_attempt.txt（前五次重布线失败）
+
+一、结论（先给结果，再给过程）
+  1. 从 tmp/routing/22-global.odb 出发，插二极管 + 全局布线 + 详细布线，最终
+     check_antennas = 0 net violations / 0 pin violations。
+  2. 详细布线 DRC 数为 0（detailed_route 输出的 .drc 文件为 0 字节）。
+  3. 已流出新 GDS：/tmp/antfix/fixed.gds，18,618,660 字节，
+     sha256 a58cdfea0ce5a98f8c62620f1fe915d2ef2c47c9832e72bbf33094ac5c2d2c8c。
+  4. 新 GDS 上重跑 signoff：
+       KLayout DRC（sky130A_mr.drc，含 offgrid）= 218 类规则，0 条违例；
+       金属密度（met_min_ca_density.lydrc）= 0 条违例，六层全高于阈值；
+       Magic DRC（drc style drc(full)）= No errors found，0 类规则命中。
+  5. 尚未在新版重跑：RCX + STA、功耗、以及 LVS。
+     所以「时间 / 功耗 / 频率」这些数字仍属于未修版，不得挂到新版图上。
+
+二、前五次失败的真因：漏了一个参数 -allow_congestion
+  前五次重布线分别报 STA-0560（-verbose 不是合法参数）、DRT-0218（两次）、
+  GRT-0226（三次）。其中 -verbose 那一次是我们脚本写错，与工具无关。
+  剩下两类错误的真因，是全局布线时没有传 -allow_congestion：
+    OpenLane 的 scripts/openroad/common/grt.tcl 里，只有在
+    GRT_ALLOW_CONGESTION=1 时才把 -allow_congestion 加进 global_route 的参数表；
+    而 GRT_ALLOW_CONGESTION 在本 run 的 config.tcl 第 144 行就是 1。
+    我们之前手写的脚本只传了 -congestion_iterations 200，漏掉了这个开关。
+  后果有两层：
+    1) 拥塞未收敛时 global_route 结束，repair_antennas 在内部重布线时 ripup
+       阶段状态不一致，报 GRT-0226 Type2 ripup not type L；
+    2) 同样的不完整 guide 留在 ODB 里，detailed_route 读到后报
+       DRT-0218 Guide is not connected to design。
+  判别方法（本段实测）：同一份 gr.odb，只把 -allow_congestion 补上，
+  repair_antennas 立刻跑通（Found 1 → Inserted 1 → 复测 39 net / 48 pin），
+  不再报 GRT-0226。也就是说，前五次的结论「这份设计上工具走不通」是错的，
+  必须撤回；错在我们自己的脚本。
+
+三、实跑链（三轮，全部保留日志）
+  起点：tmp/routing/22-global.odb 的副本 /tmp/antfix/gr.odb（15,128,137 字节）
+  参数：set_routing_layers -signal met1-met5 -clock met3-met5；
+        set_macro_extension 0；
+        set_global_routing_layer_adjustment 0.3（li1 0.99，met1-met5 0）
+        与 config.tcl 第 143/149/150 行一致；
+        global_route -congestion_iterations 200 -allow_congestion；
+        repair_antennas sky130_fd_sc_hd__diode_2 -iterations 15 -ratio_margin 10。
+  第一轮（fix13.tcl，日志 156,209 字节）
+    10 轮 GRT + repair，累计插入 389 个二极管；布线前复测 0 / 0；
+    detailed_route（-bottom met1 -top met5 -droute_end_iter 64 -or_seed 42 -verbose 1）
+      迭代收敛过程 9896 → 5510 → 5570 → 866 → 725 → …；
+      输出 d13.drc = 0 字节（0 条违例）；
+    详细布线后复测：9 net / 10 pin（残余是详细布线新增的长走线）。
+  第二轮（fix14.tcl，日志 46,686 字节）
+    同样 10 轮，再插入 40 个二极管；详细布线后复测 1 net / 1 pin；d14.drc 0 字节。
+  第三轮（fix15.tcl，日志 21,710 字节）
+    再插入 1 个二极管（合计 430 个 diode 实例）；详细布线后复测 0 / 0。
+  补 fill（fix16.tcl，日志 293 字节）
+    filler_placement 与 flow 同参数（decap_12/8/6/4/3 + fill*）；
+    写回 fixed16.odb（31,826,611 字节）与 fixed16.def（16,570,612 字节）；
+    复测仍 0 / 0。
+  实例总数 47,413（其中 diode 430 个）。
+  出 GDS：OpenLane 的 klayout/stream_out.py（klayout.db 0.29.1 的 pya 接口），
+    输入 fixed16.def + merged.nom.lef + sky130_fd_sc_hd.gds，
+    输出 18,618,660 字节。
+
+四、新 GDS 上的 signoff 复算（与旧版同一套 deck、同一命令）
+  KLayout DRC：日志末行 release 2023.6.14_01.08；报告 violations_offgrid_fix.xml
+    34,066 字节，218 类规则，<item> 0 条。
+  金属密度：六层实算（空孔率口径）
+    li1 0.4985616992797852 / m1 0.7248857586669922 / m2 0.904943455078125
+    m3 0.9217727662353515 / m4 0.9469605451049805 / m5 0.97066234375
+    报告 density_fix.xml 465 字节、0 条违例。
+  Magic DRC：No errors found；汇总文件 fixed_drc.txt 120 字节，
+    TOTAL_RULE_TYPES 0。
+  天线：check_antennas 0 / 0（详细布线后、加 fill 后各复测一次）。
+
+五、跟旧版的差异（会作废哪些旧结论）
+  旧版（未修）：signoff GDS 39,965,858 字节，天线 67 net / 87 pin；
+    插二极管数为 0（config.tcl 第 153 行 GRT_REPAIR_ANTENNAS=0）。
+  新版：18,618,660 字节，天线 0 / 0，多出 430 个 diode_2。
+  因此旧版上的这几条结论必须重跑后才能继续引用：
+    GDS XOR（旧版 42 层 41 层为 0）、LVS（top 级 Circuits match uniquely）、
+    RCX/STA、功耗、面积与利用率。
+  本段只重跑了 DRC ×2 与密度；XOR、LVS、STA 尚未在新版做。
+
+六、口径与不能证明什么
+  1. 这是「布线级修好」的版图：天线违例清零、两套 DRC 0 条、密度 0 条。
+     它不是「可交付流片版本」，因为 STA/LVS 还没在新版跑。
+  2. 三次重布线都是我自己在 OpenROAD 里做的，没有改 OpenLane 的 config.tcl，
+     也没有重跑整条 flow；所以 version 号、run 目录、metrics.csv 都没有新记录，
+     metrics.csv 里的 antenna 列仍是 -1，只能以本文件的复测为准。
+  3. 前五次失败的对外结论已撤回：错在脚本漏参数，不在工具不支持。
+  4. 本次 DRC 用的 deck 与旧版相同，但设计内容变了，两者数值不可直接对比。
