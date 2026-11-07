@@ -138,7 +138,7 @@ python3 scripts/check_vectors.py</pre>
     </div>
     <div class="card" style="margin-top:14px;border-color:rgba(56,189,248,.35)">
       <h3>上面那些数字，也都能点开看原文</h3>
-      <p>55.56 MHz、11,475 cells、0.4096 mm²、9.41 mW、setup 与 hold 的每一格，逐条追到 OpenLane 这次 run 的原文行和行号，附证据文件的指纹。<b>流水线里没跑成的那一步（GDS 逐层 XOR 崩在工具内部错误），也在这一页上补跑了</b>：42 个层里 41 层一致，唯一差异是被流水线本身忽略的边界层，逐层表与复现脚本一并给出。</p>
+      <p>55.56 MHz、11,475 cells、0.4096 mm²、9.41 mW、setup 与 hold 的每一格，逐条追到 OpenLane 这次 run 的原文行和行号，附证据文件的指纹。<b>流水线里没跑成的那两步（GDS 逐层 XOR、Magic signoff DRC），也在这一页上补跑了</b>：42 个层逐一比对，<b>21 个制造层（nwell 到 met5、via、via4 等）XOR 全部为 0</b>，唯一差异是一个不参与制造的 flow 标记层，流水线本身也把它排除；Magic DRC 跑完<b>零条违例</b>（不含天线与密度检查，原文只有两行表头）。层号已对到 PDK 的图层名表，逐层表、命令与复现脚本一并给出。</p>
       <p style="margin-bottom:0"><a href="numbers.html" style="font-family:var(--mono)">→ 打开数字溯源（每个数字一行出处）</a></p>
     </div>
   </div>

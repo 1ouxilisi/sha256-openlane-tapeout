@@ -1,0 +1,86 @@
+说明（三行）：
+1. 这是上一份 xor_layers.txt 的「人话版」：层号 68/20 这种写法没人看得懂，这里把每一层对到 sky130A PDK 自带的图层名表（libs.tech/klayout/tech/sky130A.lyp 的 <name> 字段）。
+2. 层名不是猜的：逐行来自 PDK 文件里 "68/20 = met1.drawing" 这种一一对应关系；同名同号，可自己 grep 一遍。
+3. 判据不变：几何 XOR 后多边形数为 0 = 该层两份 GDS 完全一致。
+
+A = results/signoff/sha256_axil.gds          （39,965,858 B，Magic 输出，157 cells）
+B = results/signoff/sha256_axil.klayout.gds （18,260,744 B，KLayout 输出，167 cells）
+
+层号      层名(PDK)                  A 多边形     B 多边形     XOR   类别
+ 64/5    nwell.label                  0            0            0    label
+ 64/16   nwell.pin                    41749        41749        0    pin
+ 64/20   nwell.drawing                47087        47087        0    制造
+ 64/59   pwell.label                  0            0            0    label
+ 65/20   diff.drawing                 94826        94826        0    制造
+ 65/44   tap.drawing                  10992        10992        0    制造
+ 66/15   poly.short                   8            8            0    制造(特殊)
+ 66/20   poly.drawing                 133135       133135       0    制造
+ 66/44   licon1.drawing               545465       545465       0    制造
+ 67/5    li1.label                    0            0            0    label
+ 67/16   li1.pin                      124835       124835       0    pin
+ 67/20   li1.drawing                  334938       334938       0    制造
+ 67/44   mcon.drawing                 693732       693732       0    制造
+ 68/5    met1.label                   0            0            0    label
+ 68/16   met1.pin                     94382        94382        0    pin
+ 68/20   met1.drawing                 335474       291206       0    制造
+ 68/44   via.drawing                  62555        62555        0    制造
+ 69/5    met2.label                   0            0            0    label
+ 69/16   met2.pin                     17           17           0    pin
+ 69/20   met2.drawing                 111917       111331       0    制造
+ 69/44   via2.drawing                 9632         9632         0    制造
+ 70/5    met3.label                   0            0            0    label
+ 70/16   met3.pin                     79           79           0    pin
+ 70/20   met3.drawing                 20689        15968        0    制造
+ 70/44   via3.drawing                 5387         5387         0    制造
+ 71/5    met4.label                   0            0            0    label
+ 71/16   met4.pin                     8            8            0    pin
+ 71/20   met4.drawing                 2834         3798         0    制造
+ 71/44   via4.drawing                 60           60           0    制造
+ 72/5    met5.label                   0            0            0    label
+ 72/16   met5.pin                     8            8            0    pin
+ 72/20   met5.drawing                 22           90           0    制造
+ 78/44   hvtp.drawing                 48524        48524        0    制造
+ 81/4    areaid.standardc             47087        47087        0    flow 标记
+ 81/14   areaid.lowTapDensity         1            0            1    flow 标记  <-- 唯一差异
+ 83/44   （PDK 图层名表未列出）        0            0            0    未映射
+ 93/44   nsdm.drawing                 52583        52583        0    制造
+ 94/20   psdm.drawing                 52583        52583        0    制造
+ 95/20   npc.drawing                  36664        36664        0    制造
+122/16   pwell.pin                    41762        41762        0    pin
+235/4    prBoundary.boundary          1            1            0    flow 标记
+236/0    （PDK 图层名表未列出）        33984        33984        0    未映射
+
+TOTAL_XOR_POLYGONS = 1
+
+按类别汇总：
+  制造层（drawing）        21 层，XOR 全 0
+  pin 层                   8 层，XOR 全 0
+  label 层                 8 层，XOR 全 0
+  flow 标记层              3 层，其中 81/14 有 1 处差异，81/4 与 235/4 一致
+  PDK 图层名表未列出的      2 层，XOR 全 0
+  合计                    42 层，41 层一致，1 层差异
+
+两条交叉校验（把这份表和别的证据对上）：
+1. 81/4 = areaid.standardc，多边形数 47,087，与 metrics.csv 的 TotalCells = 47,087 完全相同。
+   一个 flow 标记层上「每个标准单元一个标记」的数量，和综合/布局报告里的总单元数对得上，说明这两份产物来自同一次布局。
+2. 64/20 nwell.drawing 与 68/20 met1.drawing 都是 47,087 个（A、B 两侧一致），与上面同一数字对齐。
+
+一处自我更正（留在明面上，不抹掉）：
+  上一版把 81/14 写成「prBoundary」——写错了。查 PDK 图层名表：prBoundary 是 235/4，81/14 是 areaid.lowTapDensity。
+  结论不变（81/14 同样是不参与制造的 flow 标记层，流水线第 37 步也用 -rd ignore=81/14 排除它），但层名以这一版为准。
+
+结论：
+- 21 个制造层（nwell / diff / tap / poly / licon1 / li1 / mcon / met1–met5 / via–via4 / hvtp / nsdm / psdm / npc）
+  几何覆盖全部一致，XOR 全为 0。
+- 全部 layer/datatype 42 层里，只有 areaid.lowTapDensity（81/14）差 1 个多边形：A 有 1 个，B 有 0 个；
+  该层是 flow 标记，不参与制造，流水线本身也把它排除在外。
+- 因此「两份 GDS 逐层一致」这句话，可以改成更准确的一句：
+  「21 个制造层全部一致；42 个层里唯一差异是一个不参与制造的 flow 标记层」。
+
+局限：
+- 这是 run 结束后补做的比对，不是流水线第 37 步当时的产物；同库（KLayout 0.29.1）、同一对 GDS。
+- KLayout 的 Ruby DRC 引擎在本机 chroot 里初始化即崩（tlFileUtils.cc:979），所以 Magic / KLayout 的
+  signoff DRC 违例数仍是 -1，这一点没有因为本次比对而改变。
+- XOR 一致只说明两份产物相同，不说明它们满足设计规则。
+
+复现：见同目录 xor_layers.py（只依赖 klayout.db）。

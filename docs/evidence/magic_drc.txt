@@ -1,0 +1,52 @@
+说明（三行）：
+1. 这是 Magic 的 signoff DRC 结果。metrics.csv 里 Magic_violations 这一列是 -1（这次 run 没产出），我用 PDK 自带的 run_standard_drc.py 在同一份 GDS 上补跑了一遍，结果是 0。
+2. 下面「原文」一节是工具直接写出的文件内容，逐字节照抄，没有任何人工改动；那个文件只有 77 字节，两行都是表头。
+3. 没有违例条目 = 0 条违例。不是我删的，是它本来就没写任何东西进去。
+
+输入
+  GDS：results/signoff/sha256_axil.gds
+       39,965,858 B
+       sha256 3cb14a467b6e73cf56b7863405f319b50e7d9710eb90882ffeeed33039fce093
+  这是 Magic 输出的那份（另一份 sha256_axil.klayout.gds 是 KLayout 输出的，见 xor_layers.txt）
+
+技术
+  sky130A，version 1.0.466-0-gbdc9412（magic 启动时自己打印的）
+
+怎么跑的
+  run_standard_drc.py <layout>            # PDK 自带：libs.tech/magic/run_standard_drc.py
+
+  它实际调用的 magic 命令行：
+    magic -dnull -noconsole -rcfile sky130A.magicrc run_magic_drc_sha256_axil.tcl
+
+  生成的 tcl 里，DRC 设置是脚本写死的，不是我能改的：
+    drc euclidean on
+    drc style drc(full)
+    drc on
+    snap internal
+    gds flatglob *__example_*
+    gds flatten true
+    gds read .../results/signoff/sha256_axil
+    load sha256_axil
+    select top cell
+    expand
+    drc catchup
+    set allerrors [drc listall why]
+
+原文（77 B，sha256 见文末）
+  DRC errors for cell sha256_axil
+  --------------------------------------------
+  （到此为止，没有任何违例条目）
+
+结论
+  Magic signoff DRC：0 条违例。
+
+局限（这一段比上面那句更重要）
+- run_standard_drc.py 自己的注释写着：这是 full DRC，但不含 antenna 与 density 检查——那两项在 PDK 里是另外的脚本
+  （check_antenna.py / check_density.py），这次没有跑。所以准确的句子是「DRC 规则（不含天线与密度）：0 条违例」。
+- 跑的是 Magic 输出的那份 GDS。KLayout 输出的 sha256_axil.klayout.gds 的 DRC 仍然没有跑，
+  因为 KLayout 的 Ruby 规则引擎在本机 chroot 里初始化即崩（tlFileUtils.cc:979），
+  所以 metrics.csv 里 klayout_violations 这一列仍然是 -1。
+- 0 条 DRC 违例只说明几何满足制造规则，不说明电路对。电路对要靠 LVS，LVS 在这台机器上同样没有跑成。
+
+文件指纹
+  sha256 29cd85b6f247de85776b97fef9a50b3bab3f33d00bf6ec7f18a64eef7eaadbe4

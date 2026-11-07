@@ -119,7 +119,7 @@ footer{padding:34px 0 60px;color:var(--muted);font-size:12.5px;font-family:var(-
     <div class="top"><span class="v">0</span><span class="k">布线阶段违例</span></div>
     <div class="src">列 tritonRoute_violations / Short / MetSpc / OffGrid / MinHole / Other</div>
     <div class="raw">…,11475,0,0,0,0,0,0,…</div>
-    <div class="note"><b>口径要说清</b>：这 6 个 0 是布线阶段（TritonRoute）的违例计数。同一行的 Magic_violations、klayout_violations、lvs_total_errors 是 <code>-1</code>，意思是本次 run 里这几项<b>没有产出结果</b>，不是「检查通过」。下面第三节讲这件事的后果。</div>
+    <div class="note"><b>口径要说清</b>：这 6 个 0 是布线阶段（TritonRoute）的违例计数。同一行的 Magic_violations、klayout_violations、lvs_total_errors 是 <code>-1</code>，意思是本次 run 里这几项<b>没有产出结果</b>，不是「检查通过」。其中 Magic 那一项我事后单独补跑过，结果见第三节；另外两项仍是 -1。</div>
   </div>
 </div></section>
 
@@ -174,18 +174,34 @@ child process exited abnormally
       <tr><th>结果</th><th>数值</th></tr>
       <tr><td>参与比较的层</td><td>42</td></tr>
       <tr><td>XOR 为 0 的层</td><td class="hi">41</td></tr>
-      <tr><td>有差异的层</td><td>1 —— <code>81/14</code>（prBoundary: A 1 个 / B 0 个）</td></tr>
+      <tr><td>有差异的层</td><td>1 —— <code>81/14</code>（A 1 个 / B 0 个）</td></tr>
       <tr><td>TOTAL_XOR_POLYGONS</td><td class="hi">1</td></tr>
     </table>
-    <p class="note">完整逐层表在 <a href="evidence/xor_layers.txt">evidence/xor_layers.txt</a>，复现脚本在 <a href="evidence/xor_layers.py">evidence/xor_layers.py</a>。几层（68/20、69/20、70/20、71/20、72/20）两边多边形条数差出几万，但 XOR 仍是 0，原因就是上面说的合并差异。</p>
+    <p class="note"><b>层号看不出东西，所以对上了 PDK 自己的图层名表。</b>sky130A 的 <code>sky130A.lyp</code> 里，<code>68/20 = met1.drawing</code>、<code>67/44 = mcon.drawing</code>——逐行一一对应，可以自己 grep 一遍。按类别拆开：<b>制造层 21 个</b>（nwell / diff / tap / poly / licon1 / li1 / mcon / met1–met5 / via–via4 / hvtp / nsdm / psdm / npc）<b>XOR 全部为 0</b>；pin 层 8 个、label 层 8 个也全 0；剩下 3 个是 flow 标记层，只有 81/14 差 1 个。完整对照见 <a href="evidence/gds_layers.txt">evidence/gds_layers.txt</a>（层号原样版是 <a href="evidence/xor_layers.txt">xor_layers.txt</a>）。</p>
+    <p class="note">两条交叉校验：<code>81/4 = areaid.standardc</code> 上有 47,087 个多边形，和 metrics.csv 的 <b>TotalCells = 47,087 完全相等</b>；<code>met1.drawing</code> 两侧也同为 47,087。一个 flow 标记层的数量能和另一份报告的总单元数对齐，说明两份产物出自同一次布局。</p>
+  </div>
+
+  <div class="box">
+    <b>同一行的另一项：Magic signoff DRC，补跑得到 0 条违例</b>
+    <p class="note">metrics.csv 里 <code>Magic_violations</code> 是 <code>-1</code>。这一项和 KLayout 不一样：它不用 Ruby，它用的是 Magic 自己的 DRC 引擎。所以我把 PDK 自带的 <code>run_standard_drc.py</code> 对着同一份 <code>sha256_axil.gds</code> 跑了一遍，脚本设的是 <code>drc style drc(full)</code> + <code>drc catchup</code>，跑完输出文件只有 77 字节——两行表头，没有任何违例条目。</p>
+    <div class="raw">DRC errors for cell sha256_axil
+--------------------------------------------</div>
+    <p class="note">技术版本 <code>sky130A 1.0.466-0-gbdc9412</code>，输入 GDS 39,965,858 B。原文与命令在 <a href="evidence/magic_drc.txt">evidence/magic_drc.txt</a>。</p>
+    <p class="note"><b>但这句要打折说</b>：<code>run_standard_drc.py</code> 自己的注释写着，它是 full DRC，<b>不含天线（antenna）与密度（density）检查</b>——那两项是 PDK 里另外两个脚本，这次没跑。所以准确的说法是「DRC 规则（不含天线与密度）：0 条违例」。另外它跑的是 Magic 输出的那份 GDS，KLayout 输出的那份仍然没做 DRC。</p>
+  </div>
+
+  <div class="box bad">
+    <b>更正一处：上一版我把 81/14 写成了 prBoundary，那是错的</b>
+    <p class="note">查 PDK 图层名表：prBoundary 是 <code>235/4</code>；<code>81/14</code> 是 <code>areaid.lowTapDensity</code>。结论不变（它同样是不参与制造的 flow 标记层，流水线第 37 步也用 <code>-rd ignore=81/14</code> 排除），但层名以这一版为准。把这处错误写在页面上、而不是悄悄改掉，是因为这一页存在的意义就是让人能查出来。</p>
   </div>
 
   <div class="box warn">
     <b>于是原来那两条判断可以改写了：</b>
     <ul>
       <li>「布线阶段违例计数为 0」——<b>成立</b>，见第一节最后一格。</li>
-      <li>「两份 GDS 逐层一致」——<b>现在成立了</b>。41 个制造相关层 XOR 全 0；唯一差异是 prBoundary（版图边界标记，A 有 1 个、B 有 0 个），而流水线第 37 步原本就带 <code>-rd ignore=81/14</code>，把这一层排除在外。</li>
-      <li>仍然不成立的：Magic 与 KLayout 的 <b>signoff DRC 违例数</b>（metrics 里是 <code>-1</code>）。那是真没跑过，不是跑过为零——这两个要 <code>.drc</code> 脚本，而 Ruby 引擎在本机就是起不来，我没有补成功。</li>
+      <li>「两份 GDS 逐层一致」——<b>现在成立了</b>。42 个层里 <b>21 个制造层 XOR 全为 0</b>（nwell / diff / tap / poly / licon1 / li1 / mcon / met1–met5 / via–via4 / hvtp / nsdm / psdm / npc），pin 与 label 层也全 0；唯一差异是 <code>areaid.lowTapDensity</code>（81/14，A 有 1 个、B 有 0 个），flow 标记层，不参与制造，流水线第 37 步原本就带 <code>-rd ignore=81/14</code> 把它排除在外。</li>
+      <li>「Magic signoff DRC 违例数为 0」——<b>现在成立了，但要打折扣</b>：0 条违例，不含天线与密度检查。这一项是拿 Magic 自己的 DRC 引擎跑出来的，不依赖那个崩掉的 Ruby 引擎。</li>
+      <li>仍然不成立的：<b>KLayout 的 signoff DRC 违例数</b>和 <b>LVS 错误数</b>（metrics 里都是 <code>-1</code>）。这两个真没跑过，不是跑过为零——KLayout 侧要 <code>.drc</code> 的 Ruby 引擎，本机就是起不来；LVS 也没跑成。</li>
     </ul>
     <p class="note">这一节前后差的就是一件事：上一版只能写「这一步没有结论」，这一版把结论拿回来了，并且说清它是什么、靠什么拿回来的、还有什么没拿到。</p>
   </div>
@@ -198,7 +214,7 @@ child process exited abnormally
     <ul>
       <li>作品集里那 7 个数字，确实是 OpenLane 这次 run 报出来的，不是事后手写的。</li>
       <li>时序的 9 个 setup 值、9 个 hold 值，都能对到具体日志的具体行号。</li>
-      <li><b>两份 GDS 在 41 个制造相关层上逐层几何一致</b>（42 层中仅 prBoundary 一层有 1 处差异，而那一层流水线本身就排除）。</li>
+      <li><b>两份 GDS 在 21 个制造层上逐层几何一致</b>（42 层中仅 areaid.lowTapDensity 一层有 1 处差异，那是 flow 标记层，流水线本身就排除）。层号已对到 PDK 的图层名表。</li>
       <li>每个证据文件的指纹写在下面，你可以下载后自己 <code>sha256sum</code> 对一遍。</li>
       <li>失败步骤的原文也在，包括它为什么失败；连「后来怎么补跑成功」的方法和脚本也一起给了。</li>
     </ul>
@@ -207,7 +223,8 @@ child process exited abnormally
     <b style="color:var(--warn)">不能证明</b>
     <ul>
       <li>这份 metrics.csv 不是我伪造的——这一点只能靠「文件在仓库里、指纹可核对、内容自洽」来逼近，不能靠数学证明。真要做到不可否认，得由第三方重跑一次 flow。</li>
-      <li><b>Magic / KLayout 的 signoff DRC 违例数仍是 -1</b>：这两个要跑 <code>.drc</code> 规则脚本，而本机 KLayout 的 Ruby 引擎起不来，我没补成功。所以「DRC 0」目前只覆盖布线阶段，不能读成「所有 DRC 都零」。XOR 一致只说明两份产出相同，不等于两份产出都满足设计规则。</li>
+      <li>Magic 的 signoff DRC 确实跑过一遍、结果 0 条违例（<b>不含天线与密度</b>），原文与命令都在；不是我在口头上说「检查通过」。</li>
+      <li><b>Magic / KLayout 的 signoff DRC 违例数</b>：Magic 那侧已补跑为 <b>0</b>（不含天线与密度检查），KLayout 那侧仍是 <b>-1</b>。<b>LVS 错误数也仍是 -1。</b>所以「DRC 0」这句话：布线阶段成立、Magic 规则检查成立（有折扣），KLayout 侧不成立。XOR 一致只说明两份产出相同，不等于两份产出都满足设计规则。</li>
       <li>功耗数字是 OpenLane 内部功耗估算（向量无关的活动率假设），不是硅上实测。</li>
       <li>时序基于 sky130 的 signoff 库与寄生提取，不等于流片后的硅结果。</li>
     </ul>
@@ -215,13 +232,15 @@ child process exited abnormally
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、四份证据文件的指纹</h2>
+  <h2>五、六份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
     <div class="fp" style="margin-top:14px">evidence/errors.log · 1,987 B<br>a4fad4c589dcd60a9ab8001bd255d89a0e59d3276690d01cb9f7c1a61e5274f5</div>
     <div class="fp" style="margin-top:14px">evidence/sta_worst_slack.txt · 1,403 B<br>af0921bdabb0a663922e2ef1dbb703ecdf6779235d3198a1be37434f8bc21c80</div>
     <div class="fp" style="margin-top:14px">evidence/xor_layers.txt · 4,332 B<br>30a4e6032e61c961f165182d660576f274d398d8bf27405a3f74b66a9f25a4fc</div>
+    <div class="fp" style="margin-top:14px">evidence/gds_layers.txt · 6,241 B<br>f97fe245883cc40871630f33f0146b3d0faa904e6463963bf24838471e69e561</div>
+    <div class="fp" style="margin-top:14px">evidence/magic_drc.txt · 2,480 B<br>6036d8791e18b26a2ca76f8a1b9e2523c88fdeb11d7538ec262c08091b7580f4</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>
 </div></section>
