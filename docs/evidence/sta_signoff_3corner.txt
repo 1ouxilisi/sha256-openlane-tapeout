@@ -1,0 +1,108 @@
+新版（天线修好、重新布线）signoff 级 RCX + 三 corner STA 对照
+生成时间 2026-11-08  现场 /home/user/openlane-rootfs/tmp/signoff_new/
+
+==============================================================
+0. 结论
+==============================================================
+1) 方法先用旧版校准：同一套脚本读旧版官方产物（results/routing/sha256_axil.nl.v
+   + mca/process_corner_max/sha256_axil.spef），clk 组最差 setup 得到 +0.5619 ns，
+   与此前页面与证据上公布的 +0.5619 逐位一致 —— 说明这次脚本没有漏项。
+2) 新版（fixed16：天线修好 + 重新布线 + 430 个二极管）：
+     setup 最差角 Slowest = +0.4058 ns
+     hold  最差角 Fastest = +0.4096 ns
+     TNS = 0.0000
+   两角都为正，18 ns 周期（55.56 MHz）仍然成立。
+3) 代价：最差 setup 从 +0.5619 变成 +0.4058，少 0.156 ns。这是
+   「重新全局布线 + 天线修复 + 重新详细布线」整条动作的净代价，不是二极管单独的代价
+   （新版不是「原版 + 二极管」，diode 与布线是同时换的）。hold 反而略好（+0.4021 → +0.4096）。
+4) 修正上一版的说法：上一版站点写「估算口径 STA：原版 +9.8329 / 新版 +9.9243」，
+   那是 estimate_parasitics -global_routing 的估算值，过于乐观，不能当 signoff。
+   同一方法下两侧都掉到 0.4–0.6 ns 量级。以本文件为准。
+
+==============================================================
+1. 为什么这次叫 signoff 口径
+==============================================================
+- 寄生不是估的：OpenROAD 的 rcx 直接从布线后的 DEF 提取，参数与 OpenLane 自己的
+  scripts/openroad/rcx.tcl 同形：
+      read_lef <merged.角.lef>
+      read_def <fixed16.def>
+      define_process_corner -ext_model_index 0 X
+      extract_parasitics -ext_model_file <rules.openrcx.sky130A.角.calibre> -lef_res
+      write_spef <fixed16.角.spef>
+  三个角各提取一次，写三份 SPEF（本 run 的 RCX_MERGE_VIA_WIRE_RES=1，因此不带
+  -no_merge_via_res）。
+- 三个工艺角：ss_100C_1v60（Slowest） / tt_025C_1v80（Typical） / ff_n40C_1v95（Fastest），
+  各自读自己那角的 SPEF（read_spef -corner <name>）。
+- 约束沿用 run 自己的 20-sha256_axil.sdc（CLOCK_PERIOD 18.0、clock uncertainty 0.25、
+  clock transition 0.15、I/O delay 3.6 各端口逐条），set_propagated_clock。
+- STA 从网表 + SPEF 起算（与 OpenLane 的 sta/multi_corner.tcl 同形），不是从 ODB、
+  也不是从估算寄生起算。
+
+==============================================================
+2. 方法校准：先复现旧版已公布的值
+==============================================================
+同一脚本、同一 sdc、同一 liberty，只换设计产物：
+   旧版 = results/routing/sha256_axil.nl.v + mca/process_corner{max,min}/sha256_axil.spef
+   新版 = /tmp/signoff_new/fixed16.nl.v + /tmp/signoff_new/fixed16.{max,nom,min}.spef
+旧版 clk 组最差 setup = +0.5619（与公布值一致），最差 hold = +0.4021（Fastest）。
+脚本：/tmp/signoff_new/sta3c_old.tcl（旧版） / sta3c.tcl（新版），日志 sta3c_old.log / sta3c.log。
+
+先前错口径（已作废，勿引用）：用 read_db + 自写 extraction（漏了 -lef_res 与
+define_process_corner）得到原版 +9.83 / 新版 +9.92，且当时对旧库 25-fill.odb 提取出
+「Final 0 rc segments」（该 ODB 不含可提取的布线），所以那组数不可比。
+
+==============================================================
+3. 输入（字节与 md5）
+==============================================================
+fixed16.odb       31,826,611  md5 1db3749bdc05abff779ac50314ebdeee   （新版数据库）
+fixed16.def       16,570,612  md5 af2b020209c5d2a27d150e254b9c790c   （新版布线 DEF，提取用）
+fixed16.nl.v       3,368,227  md5 31a2ccf43ca4c7161043b4d64a907ad0   （新版网表，STA 用）
+fixed16.max.spef  19,968,664  md5 7da6c96fd82751c5485b4aeb78c24ed7   （max 角寄生）
+fixed16.nom.spef  18,919,837  md5 a85de59ce43202959a572077dda127a9
+fixed16.min.spef  18,653,847  md5 3a22753a5365a8bae721a6c38a69c365
+sta3c.log            167,259 md5 aa9f4f6109fc0c8475d14bdc5e395e27   （新版三 corner 报告）
+sta3c_old.log        167,264 md5 8603ff442f6e597e8173e5900eb32e8b   （旧版三 corner 报告）
+rcx_max.log / rcx_nom.log / rcx_min.log 各 1,641 B（提取日志）
+
+提取规模（新版）：max 角 99,136 rc segments / 168,517 coupling caps；
+nom 角 78,589 / 165,690；min 角 76,364 / 164,563；均为 15,441 个 net。
+
+==============================================================
+4. 结果表（同一方法，两侧各三 corner）
+==============================================================
+setup（clk 组最差路径，ns）        旧版        新版        差值
+  Slowest (ss_100C_1v60)        +0.5619     +0.4058     -0.1561
+  Typical (tt_025C_1v80)        +9.0831     +9.1425     +0.0594
+  Fastest (ff_n40C_1v95)       +11.9645    +11.9134     -0.0511
+
+hold（clk 组最差路径，ns）
+  Slowest (ss_100C_1v60)        +1.4977     +1.5310     +0.0333
+  Typical (tt_025C_1v80)        +0.7434     +0.7585     +0.0151
+  Fastest (ff_n40C_1v95)        +0.4021     +0.4096     +0.0075
+
+TNS：两侧、各角均为 0.0000。
+另：report_worst_slack -max / -min 两侧都打印 0.41（即各自的最差角），
+report_wns / report_tns 打印 0.00 / 0.00（这条命令在本版本里不区角，只作旁证）。
+
+==============================================================
+5. 功耗与面积（新版，默认 activity，非 signoff 功耗）
+==============================================================
+Slowest 7.58 mW（内部 5.32 / 开关 2.14 / 漏电 0.11）
+Typical 9.49 mW（内部 6.83 / 开关 2.65 / 漏电 0.0018）
+Fastest 10.9 mW（内部 7.91 / 开关 3.03 / 漏电 0.0019）
+面积：report_design_area 报单元面积 178,778 µm²，并报 100% utilization（那是相对 OpenROAD
+自己定义的核心区）。它与线上此前公布的「0.4096 mm² die、45.7689% 利用率」不是同一个分母
+（178,778 / 409,600 = 43.65%，差的那部分应是 fill / decap 未计入 timing 视图），
+这一条没有对平，按两个口径各自记录，不合并。
+寄生标注：210 个 driver 未标注寄生（多为 clkload* 与 AXI 输入端口），两侧同形。
+
+==============================================================
+6. 它不证明什么（别拿它说过头话）
+==============================================================
+- 没有 iRdrop / 电压降分析，没有 EM 检查。
+- 没有跑 max slew / max cap / max fanout 违例检查（只报了时序 slack）。
+- 没有 ERC，没有金属密度窗口（只有 PDK 的「最小空孔率」那一份 deck）。
+- 没有 GDS XOR（旧版上的「21 层全一致」只在旧版成立）。
+- 功耗是默认 activity 下的估算，不是带真实翻转率的 signoff 功耗。
+- 仍然是「顶层」口径：标准单元内部按库模型算，不做单元内逐管的时序。
+- 210 个 driver 无寄生标注，说明这不是逐网 100% 标注的完美提取。
