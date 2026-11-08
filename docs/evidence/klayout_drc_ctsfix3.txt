@@ -1,0 +1,58 @@
+ctsfix3 版 GDS 的 KLayout signoff DRC 补跑：218 个规则类，0 条违例
+==========================================================
+
+对象：designs/sha256_v7b/runs/ctsfix3/results/signoff/sha256_axil.gds
+      40,396,222 B
+      sha256 0cb148d6a42f44d4fb5b860a288b1bffbcc85bdecf24f48782a4112464ee41ea
+      （与 evidence/klayout_drc.txt 那次不是同一份：那次对象是 tapeout16 的 39,965,858 B 那版）
+deck：pdk/sky130A/libs.tech/klayout/drc/sky130A_mr.drc，33,834 B，release 2023.6.14_01.08
+引擎：KLayout 0.29.1，/nix/store/zdin7gzr638czb3isvn7hf2vrnm3k289-klayout/bin/klayout
+参数：feol=true beol=true floating_metal=true seal=true offgrid=true thr=4 thread=4
+结果：耗时 93.690 s
+      报告 34,074 B
+      sha256 36045191fa8549ad8a29e232e0885978acf99bd793ba144e6351a5e2778f60d2
+      <top-cell> sha256_axil；<categories> 218 类；<items> 0 条
+日志：klayout_drc_ctsfix3_log.txt，70,588 B，sha256 e5b7ec1351f7b53f1bec6a4f02696ef8807cbb4ff10c3093c8d762ba2ded5ddf
+      （klayout 的 stdout 原样，含逐规则读取的图形计数，可核对引擎真的在读这份版图：
+        例如 deck 第 126 行 diff 层读到 95,216 个多边形（flat）/ 463 个（hierarchical））
+
+正对照（证明 0 条不是空跑）
+--------------------------
+同一 deck、同一组参数，对 ctl.gds（只有两条 met1、间距 0.10 µm，规则要求 ≥0.14）：
+  <categories> 218 类，<items> 1 条，类别 m1.2
+  报告 34,306 B，sha256 66ef9ca8fb91060c51d3cb8d7e1475d74921006efa682ca61456dc857eed2592
+说明引擎在按规则比对图形；同一组参数下 sha256_axil.gds 的 0 条是真 0 条。
+
+四件要如实写明白
+----------------
+一、这次报告与 tapeout16 那次的报告逐字节相同
+  两次 <items> 都是 0 条，而空 RDB 只含规则类别表、不含任何条目，同一 deck 生成的空报告
+  必然逐字节相同。所以 sha256 36045191… 不能用来区分两次 run；能区分的只有日志：
+  输入路径写在本次命令行里，耗时 93.690 s（tapeout16 那次 106.120 s）。
+二、上游传的两个变量名其实一个都没对上
+  deck 读 $top_cell 与 $thr；OpenLane 的 run_klayout_drc_sky130 传的是 topcell= / thread=。
+  本次两个名字都传，所以顶层确实按 sha256_axil 选（报告 <top-cell> 可查）、线程确实 4；
+  若照上游原样只传 topcell / thread，两个值都会落到默认（自动选顶层 / threads(4)）。
+三、这个 0 覆盖什么、不覆盖什么
+  覆盖：该 deck 的 218 个规则类（feol + beol + seal + offgrid + floating_metal 全开）。
+  不覆盖：天线（这个 deck 里没有天线规则，flow 里由另外的步骤承担）；
+         金属密度（在 PDK 单独的 met_min_ca_density.lydrc，见 density_ctsfix3.txt）。
+四、这是补跑，不是流水线原始记录
+  原 run 第 37 步 gds_klayout 崩在 GDS XOR，KLayout DRC 这一步在 flow 里根本没执行到，
+  所以 metrics.csv 的 klayout_violations 仍是 -1（不是「跑了得到 -1」）。
+
+复跑
+----
+chroot 里没有 procfs，必须先在 chroot 内造出 /proc/<pid>/exe 再 exec 同一个 pid：
+
+  export LANG=C LC_ALL=C HOME=/tmp/kl TMPDIR=/tmp/kl
+  BIN=/nix/store/zdin7gzr638czb3isvn7hf2vrnm3k289-klayout/bin/klayout
+  P=$$; mkdir -p /proc/$P; ln -sfn $BIN /proc/$P/exe
+  exec $BIN -b -zz -r /pdk/sky130A/libs.tech/klayout/drc/sky130A_mr.drc \
+    -rd top_cell=sha256_axil -rd topcell=sha256_axil \
+    -rd input=/designs/sha256_v7b/runs/ctsfix3/results/signoff/sha256_axil.gds \
+    -rd report=/tmp/kl/drc_full.lyrdb \
+    -rd feol=true -rd beol=true -rd floating_metal=true -rd seal=true -rd offgrid=true \
+    -rd thr=4 -rd thread=4
+
+报告是 KLayout RDB 的 XML，直接数 <items> 里的条目即可核对。

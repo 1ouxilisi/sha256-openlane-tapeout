@@ -24,6 +24,10 @@
 | `klayout_drc_report.xml` | 34,074 B | 上面那次 DRC 的 KLayout RDB 原文（`<categories>` 218 类 / `<items>` 0 条），可直接数条目核对 | 生成结果 |
 | `density_check.txt` | 1,954 B | 密度检查（PDK `met_min_ca_density.lydrc`）：六层空孔率 li1 0.4988 / m1 0.7280 / m2 0.9061 / m3 0.9293 / m4 0.9470 / m5 0.9732，全部高于阈值，**0 条违例**；含「met1 铺满 die」的正对照（报 1 条 `m1.pd.1d`）与口径 | 生成结果 |
 | `density_report.xml` | 465 B | 上面那次密度检查的 KLayout 报告原文（`<items>` 0 条） | 生成结果 |
+| `klayout_drc_ctsfix3.txt` | 3,792 B | **ctsfix3 那版 GDS（40,396,222 B）的 KLayout DRC 补跑**：218 个规则类 / **0 条**，93.690 s，报告 34,074 B；同一 deck 同一参数下 `ctl.gds` 报 **1 条 `m1.2`**；写清四处边界——① 这份报告与 tapeout16 那次**逐字节相同**（空 RDB 只含类别表，不能用哈希区分两次 run）② 上游传的 `topcell`/`thread` 其实与 deck 读的 `$top_cell`/`$thr` 不一致，本次两个名字都传 ③ 不含天线、不含密度 ④ 是补跑，`metrics.csv` 那列仍为 `-1` | 生成结果 |
+| `klayout_drc_ctsfix3_log.txt` | 70,588 B | 上面那次 DRC 的 KLayout stdout 原样（含逐规则图形计数，可核对引擎真在读这份版图），头部 `#` 块写明对象路径 / GDS sha256 / deck / 完整命令 / 报告字节与 sha256 | 原始输出 + 说明头 |
+| `density_ctsfix3.txt` | 2,490 B | **ctsfix3 那版 GDS 的密度检查**：六层空孔率 li1 0.4993 / m1 0.7275 / m2 0.9055 / m3 0.9264 / m4 0.9460 / m5 0.9763，全部高于阈值（li1–m4 ≥0.40、m5 ≥0.24），**0 条**，5.780 s；写明这份 deck 通过时不写类别、所以报告为空是 PASS 的形态 | 生成结果 |
+| `density_ctsfix3_log.txt` | 3,580 B | 上面那次密度检查的 KLayout stdout（六行 `<层>_ca_density is <值>` 即实测值），头部 `#` 块含对象、报告字节与 sha256 | 原始输出 + 说明头 |
 | `antenna_check.txt` | 3,635 B | **天线检查：没通过**。OpenROAD `check_antennas` 对布线后 ODB 补跑 → **67 个 net / 87 个 pin 越限**；本 run `GRT_REPAIR_ANTENNAS=0`、`DiodeCells=0`，检查也没在流程里跑到；含第一条违例原文、口径与复跑命令 | 生成结果 |
 | `antenna_repair_attempt.txt` | 4,006 B | **天线修法验证**：ODB 副本上跑 `repair_antennas`——直接插卡在 `DPL-0036`（先要 `remove_fillers`）；删 fill 后三轮共插 **147 个二极管**，同一检查器复测 **0 net / 0 pin**。但插入发生在详细布线之后、未重新出 GDS，版图仍未修 | 生成结果 |
 | `antenna_repair_route_attempt.txt` | 5,693 B | **走到新 GDS 的五次尝试（全失败）**：详细布线后的库 → `DRT-0218`；重跑全局布线 → 仍 `DRT-0218`；`22-global.odb` 起点 → `GRT-0226`；`20-sha256_axil.odb` 起点 → `GRT-0226`；补层调整参数 → 仍 `GRT-0226`。附「修法可行 ≠ 版图已修」的口径与下一步两条路 | 生成结果 |
@@ -66,6 +70,10 @@ ffd427b546a5e60aa4af17e5adaf183c5efab2bdaee123f661f41ce98e6f361b  klayout_drc.tx
 36045191fa8549ad8a29e232e0885978acf99bd793ba144e6351a5e2778f60d2  klayout_drc_report.xml
 18b9c39e614e6d0039441d064880607893f944f25a9d2ce666cfce09fabe147b  density_check.txt
 6681d364b2c424d55a95ad4444cace1f7aac6012fb812dfbecf3eac51f4501ea  density_report.xml
+2821ea07bbdbd86ecd9c6b454abd5ed4073c5a5fb0b46644df410aebbfb6be01  klayout_drc_ctsfix3.txt
+e5b7ec1351f7b53f1bec6a4f02696ef8807cbb4ff10c3093c8d762ba2ded5ddf  klayout_drc_ctsfix3_log.txt
+b4180e1c6ef04e97c29a3a2f60cd07a5d68d3d409a22f62f125036e3f6d7ffd7  density_ctsfix3.txt
+728788b76f652b340adcb08063e19ca326a17e332ec4a3d8152f0c83a78727be  density_ctsfix3_log.txt
 a9403329a5963aa998f1b7c2711fa772c308298ab48111d949221818924647d6  antenna_check.txt
 5f76607cf83cff7478f120c37d3536927e1662a54da1db2b91ae16ff74cce068  antenna_repair_attempt.txt
 858300362d2267da025ea7e88efcf8c9dff5905c3e20813cc6a51cf2380786f1  antenna_repair_route_attempt.txt
@@ -119,7 +127,7 @@ db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13  lvs_port_graph
 
 `Magic_violations` 这一项事后补跑成功：PDK 自带的 `run_standard_drc.py` 对着 `sha256_axil.gds` 跑 `drc(full)`，输出只有两行表头、**零条违例**，见 `magic_drc.txt`。注意 `run_standard_drc.py` 不含天线与密度检查。
 
-`klayout_violations` 这一项也补跑成功：`klayout -b -zz -r sky130A_mr.drc`（release 2023.6.14_01.08），同一份 GDS，参数与 OpenLane 的 `run_klayout_drc_sky130` 等价（`beol 1 feol 1 floating_metal 0 seal 1 offgrid 1`），报告 **218 个规则类 / 0 条违例**，见 `klayout_drc.txt` 与 `klayout_drc_report.xml`。0 条不是空跑：故意造一个 met1 间距 0.10 µm 的小版图做正对照，同一 deck 立刻报 1 条 `m1.2`。口径：这是补跑不是流水线原始记录（`metrics.csv` 那列仍为 -1，因为本次 run 的第 37 步是 XOR 崩的、KLayout DRC 没执行到）；不含天线，密度类检查在 PDK 单独的 `.lydrc` 里，本轮没跑。
+`klayout_violations` 这一项也补跑成功：`klayout -b -zz -r sky130A_mr.drc`（release 2023.6.14_01.08），同一份 GDS，参数与 OpenLane 的 `run_klayout_drc_sky130` 等价（`beol 1 feol 1 floating_metal 0 seal 1 offgrid 1`），报告 **218 个规则类 / 0 条违例**，见 `klayout_drc.txt` 与 `klayout_drc_report.xml`。0 条不是空跑：故意造一个 met1 间距 0.10 µm 的小版图做正对照，同一 deck 立刻报 1 条 `m1.2`。口径：这是补跑不是流水线原始记录（`metrics.csv` 那列仍为 -1，因为本次 run 的第 37 步是 XOR 崩的、KLayout DRC 没执行到）；不含天线，密度类检查在 PDK 单独的 `.lydrc` 里，本轮没跑。（这一段的对象是 tapeout16 那版 39,965,858 B 的 GDS；ctsfix3 那版另有一组记录，见下节。）
 
 `lvs_total_errors` 这一项也补跑过，结论是**没过**：Magic 从版图提取出晶体管级网表（2,785,763 B / 154 个子电路），与 PnR 网表按 PDK 器件模型展开后用 netgen 对比，迭代八轮后顶层**器件数两侧完全相等（15,593 = 15,593）**，但网数差 2（15,645 vs 15,647）且有 47 个 AXI 顶层端口在网表侧报 `no matching pin`，最终 `Netlists do not match.`。卡点在 verilog→spice 的端口/网名映射这一侧，不是版图与电路不一致。详见 `lvs_attempt.txt`。
 
@@ -145,6 +153,6 @@ db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13  lvs_port_graph
 - 同一次 run 的 detailed routing 收在 0 违例；
 - 同一次 run 的 RCX 三 corner STA 全部 MET。
 
-要说清的边界：flow 自己在第 36 步「Magic Spice Export from LEF」假死（chroot 环境限制），所以 `metrics.csv` 的 `flow_status` 是 `flow failed`，`lvs_total_errors` / `Magic_violations` / `pin_antenna_violations` / `net_antenna_violations` / `klayout_violations` 五列仍是 `-1`——那是**没跑**，不是 0。LVS 是在 flow 之外、用同一份 GDS 单独跑出来的，现已固化成仓库 `tools/lvs/run_lvs.sh` 一条命令（`bash tools/lvs/run_lvs.sh <run目录> sha256_axil`，末行 `LVS PASS`；两侧各 34,182 个实例、94 个端口，实跑数字见 `tools/lvs/EXPECTED.txt`）；KLayout DRC、GDS XOR、天线与密度检查这一版都没跑。
+要说清的边界：flow 自己在第 36 步「Magic Spice Export from LEF」假死（chroot 环境限制），所以 `metrics.csv` 的 `flow_status` 是 `flow failed`，`lvs_total_errors` / `Magic_violations` / `pin_antenna_violations` / `net_antenna_violations` / `klayout_violations` 五列仍是 `-1`——那是**没跑**，不是 0。LVS 是在 flow 之外、用同一份 GDS 单独跑出来的，现已固化成仓库 `tools/lvs/run_lvs.sh` 一条命令（`bash tools/lvs/run_lvs.sh <run目录> sha256_axil`，末行 `LVS PASS`；两侧各 34,182 个实例、94 个端口，实跑数字见 `tools/lvs/EXPECTED.txt`）。KLayout DRC 与金属密度也已在这一版 GDS 上补跑（`klayout_drc_ctsfix3.txt`：218 类 / 0 条，正对照报 1 条 `m1.2`；`density_ctsfix3.txt`：六层空孔率 0.4993–0.9763 全高于阈值 / 0 条）；GDS XOR 与天线检查这一版仍没跑。
 
-这一版第一次让「布线 0 违例」和「可交付 GDS + LVS 通过」落在同一个版本上，但仍不是签核：缺 DRC、天线、密度、XOR 四项。
+这一版第一次让「布线 0 违例」「可交付 GDS + LVS 通过」「KLayout DRC 0 条 + 密度 0 条」落在同一个版本上，但仍不是签核：缺天线与 GDS XOR 两项。

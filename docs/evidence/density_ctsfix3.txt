@@ -1,0 +1,44 @@
+ctsfix3 版 GDS 的金属密度检查：六层空孔率全部在阈值之上，0 条违例
+========================================================
+
+对象：designs/sha256_v7b/runs/ctsfix3/results/signoff/sha256_axil.gds
+      40,396,222 B
+      sha256 0cb148d6a42f44d4fb5b860a288b1bffbcc85bdecf24f48782a4112464ee41ea
+deck：pdk/sky130A/libs.tech/klayout/drc/met_min_ca_density.lydrc，3,968 B
+通道：与 DRC 同一个 chroot/proc 补丁（先造 /proc/<pid>/exe 再 exec 同一 pid 的 klayout）
+结果：耗时 5.780 s；报告 density_ctsfix3.xml 465 B
+      sha256 6681d364b2c424d55a95ad4444cace1f7aac6012fb812dfbecf3eac51f4501ea
+      <categories> 空（这份 deck 只在越界时才写类别）、<items> 0 条
+日志：density_ctsfix3_log.txt，3,580 B
+      sha256 728788b76f652b340adcb08063e19ca326a17e332ec4a3d8152f0c83a78727be
+
+六层实测（deck 里的 ca_density = 1 − 该层金属覆盖率，即「空孔率」）
+------------------------------------------------------------
+  li1  0.4992545  阈值 ≥ 0.40  PASS
+  m1   0.7275031  阈值 ≥ 0.40  PASS
+  m2   0.9054843  阈值 ≥ 0.40  PASS
+  m3   0.9264419  阈值 ≥ 0.40  PASS
+  m4   0.9460372  阈值 ≥ 0.40  PASS
+  m5   0.9762794  阈值 ≥ 0.24  PASS
+阈值取自 deck 原文：li1/m1/m2/m3/m4 为 `if <x>_ca_density < 0.4`，m5 为 `< 0.24`。
+六个数在日志里各有一行 `<层>_ca_density is <值>`，可逐行核对。
+
+三件要如实写明白
+----------------
+一、对象换了
+  之前 evidence/density_report.xml 那次跑的是天线修复后的那一版（/tmp/antfix/fixed.gds），
+  不是这份 ctsfix3 的 signoff GDS；这次补的就是这一版。
+二、这份 deck 通过时不写类别，所以报告是空的
+  <categories> 与 <items> 都为空才是 PASS 的形态；若越界会写 <x>.pd.1d 一条。
+  因此不能靠「报告 465 B 很小」判断它没跑——要看日志里六行实测值都打印出来了。
+三、这是补跑
+  flow 里没有密度这一步，metrics.csv 也没有对应列；它不能与「布线 0 违例」混为一谈。
+
+复跑
+----
+  export LANG=C LC_ALL=C HOME=/tmp/kl TMPDIR=/tmp/kl
+  BIN=/nix/store/zdin7gzr638czb3isvn7hf2vrnm3k289-klayout/bin/klayout
+  P=$$; mkdir -p /proc/$P; ln -sfn $BIN /proc/$P/exe
+  exec $BIN -b -zz -r /pdk/sky130A/libs.tech/klayout/drc/met_min_ca_density.lydrc \
+    -rd input=/designs/sha256_v7b/runs/ctsfix3/results/signoff/sha256_axil.gds \
+    -rd top_cell=sha256_axil -rd report=/tmp/kl/density_ctsfix3.xml

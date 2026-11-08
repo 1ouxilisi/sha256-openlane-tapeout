@@ -234,6 +234,19 @@ m5_ca_density  is 0.9731959375
     <p class="note">口径：这是 PDK 里<b>「最小空孔率」这一份</b> deck，不是全部密度规则（各层的金属密度窗口是另一套检查）；它查的是「金属太密」，不查「金属太稀」。同样属补跑。原文与正对照在 <a href="evidence/density_check.txt">evidence/density_check.txt</a>，报告在 <a href="evidence/density_report.xml">evidence/density_report.xml</a>。</p>
   </div>
 
+  <div class="box">
+    <b>这两项在 ctsfix3 那一版上又各跑了一遍（旧记录不合并、不替换）</b>
+    <p class="note">上面两段的对象都不是第四节这版：<b>DRC</b> 那段跑的是 <b>39,965,858 B</b> 的 tapeout16 版，<b>密度</b> 那段跑的是修天线那版 <b>18,618,660 B</b>（sha256 <code>a58cdfea…</code>）。第四节这版 GDS 是 <b>40,396,222 B</b>（sha256 <code>0cb148d6…</code>），我按同一套 deck、同一套参数又各跑了一次，数字如下（旧记录原样保留、不合并成一句）：</p>
+    <div class="raw">KLayout DRC : 218 个规则类 / 0 条；93.690 s
+             报告 34,074 B / 36045191fa8549ad8a29e232e0885978acf99bd793ba144e6351a5e2778f60d2
+             正对照 ctl.gds（两条 met1 间距 0.10 µm）→ 1 条 m1.2，报告 34,306 B
+金属密度    : li1 0.4993 / m1 0.7275 / m2 0.9055 / m3 0.9264 / m4 0.9460 / m5 0.9763
+             六层全在阈值之上（li1–m4 ≥0.40、m5 ≥0.24），0 条；5.780 s</div>
+    <p class="note">这次 DRC 五个开关全开（<code>feol beol floating_metal seal offgrid</code>），比上一轮多开了 <code>floating_metal</code>（上一轮按 run 配置是关的）。<b>报告与上一轮逐字节相同</b>——但这不等于「结果一样」，而是<b>空报告本来就相同</b>：0 条时 RDB 里只写 218 个类别名、不写任何条目，同一 deck 生成两次必然同字节。要区分两次 run 只能看日志：输入路径写在命令行里，耗时 93.690 s（上一轮 106.120 s）。</p>
+    <p class="note">顺手查出一处上游的不一致：deck 读的是 <code>$top_cell</code> 与 <code>$thr</code>，而 OpenLane 的 <code>run_klayout_drc_sky130</code> 传的是 <code>topcell=</code> / <code>thread=</code>。这次两个名字都传，所以顶层确实按 <code>sha256_axil</code> 选（报告里 <code>&lt;top-cell&gt;</code> 可查）、线程确实 4；照上游只传那一套，两个值都会静默落到默认（自动选顶层、固定 4 线程）。</p>
+    <p class="note">原文在 <a href="evidence/klayout_drc_ctsfix3.txt">evidence/klayout_drc_ctsfix3.txt</a>，日志 <a href="evidence/klayout_drc_ctsfix3_log.txt">evidence/klayout_drc_ctsfix3_log.txt</a>（70,588 B，含逐规则图形计数，可核对引擎真在读这份版图）；密度在 <a href="evidence/density_ctsfix3.txt">evidence/density_ctsfix3.txt</a> 与 <a href="evidence/density_ctsfix3_log.txt">evidence/density_ctsfix3_log.txt</a>（六行 <code>&lt;层&gt;_ca_density is &lt;值&gt;</code> 即实测值）。</p>
+  </div>
+
   <div class="box bad">
     <b style="color:var(--bad)">天线检查：这一项没通过——67 个 net、87 个 pin 越限</b>
     <p class="note">本 run 的配置里 <code>USE_ARC_ANTENNA_CHECK = 1</code>，也就是天线这一项走 OpenROAD 的 <code>check_antennas</code>，不是 Magic 的 antennacheck。流程在第 37 步就断了，这一步没执行到，所以 <code>metrics.csv</code> 里 <code>pin_antenna_violations</code> / <code>net_antenna_violations</code> 都是 -1。我用同一个引擎、对同一份布线后的 <code>sha256_axil.odb</code> 补跑了一遍，结果不是 0：</p>
@@ -381,10 +394,10 @@ check_antennas -verbose
     <b>这一版同样有不能吹的地方，先说清楚</b>
     <ul>
       <li><b>flow 自己没有跑完</b>。<code>metrics.csv</code> 的 <code>flow_status</code> 就是 <code>flow failed</code>：第 36 步「Magic Spice Export from LEF」在 chroot 里假死（15 分钟 CPU 只跑了 17 秒、打开的文件描述符停在 155 不增长）。我是在 flow 之外、用 Magic 直接从这份 GDS 提取 SPICE 完成 LVS 的，所以 <code>lvs_total_errors</code>、<code>Magic_violations</code>、<code>pin_antenna_violations</code>、<code>net_antenna_violations</code>、<code>klayout_violations</code> 五列仍是 <code>-1</code>——<b>是「没跑」，不是「0」</b>。</li>
-      <li><b>KLayout DRC 与 GDS XOR 这一版没跑</b>。XOR 需要 KLayout 出的那份 GDS，而 KLayout 在 chroot 起不来，所以 flow 直接跳过了（原文警告 <code>…klayout.gds wasn't found. Skipping GDS XOR.</code>）。</li>
-      <li><b>没有做天线与密度复检</b>。<code>GRT_REPAIR_ANTENNAS</code> 这一版是开的（1），布线阶段会插二极管，但 signoff 的 antenna / density 检查步骤没跑到，所以本页不给这两项结论。</li>
+      <li><b>GDS XOR 这一版没跑</b>。XOR 需要 KLayout 出的那份 GDS，而 KLayout 在 chroot 起不来，所以 flow 直接跳过了（原文警告 <code>…klayout.gds wasn't found. Skipping GDS XOR.</code>）。KLayout DRC 与密度这两项已经在 flow 之外用这份 GDS 补跑（218 类 0 条 / 六层 0 条，正对照各报 1 条），见上面对应两段。</li>
+      <li><b>天线没做复检</b>。<code>GRT_REPAIR_ANTENNAS</code> 这一版是开的（1），布线阶段会插二极管，但 signoff 的 antenna 检查步骤没跑到；密度已在同一份 GDS 上补跑通过，天线这一项本页不给结论。</li>
       <li><b>功耗数字这一版没取</b>。时序取到了三 corner，功耗报告没解析，先不写，避免拿旧版的数填新版的空。</li>
-      <li><b>这不是签核</b>。LVS 通过 + 时序 MET + 布线 0 违例，缺 DRC、天线、密度、XOR 四项 signoff 检查，所以只能说「这一版第一次同时具备 0 违例与可交付 GDS，且这份 GDS 的 LVS 通过」，不能说「已签核」。</li>
+      <li><b>这不是签核</b>。LVS 通过 + 时序 MET + 布线 0 违例 + KLayout DRC 0 条 + 密度 0 条，缺天线与 GDS XOR 两项 signoff 检查，所以只能说「这一版第一次同时具备 0 违例与可交付 GDS，且这份 GDS 的 LVS / DRC / 密度都过」，不能说「已签核」。</li>
     </ul>
   </div>
 </div></section>
@@ -405,7 +418,7 @@ check_antennas -verbose
     <b style="color:var(--warn)">不能证明</b>
     <ul>
       <li>这份 metrics.csv 不是我伪造的——这一点只能靠「文件在仓库里、指纹可核对、内容自洽」来逼近，不能靠数学证明。真要做到不可否认，得由第三方重跑一次 flow。</li>
-      <li>Magic 的 signoff DRC 跑过一遍、结果 0 条违例（<b>不含天线与密度</b>）；KLayout 侧的 218 类规则同样 0 条；密度 deck 六层空孔率全部在阈值之上、0 条。这三项都是事后补跑，各自都带了一个故意违规的正对照，证明引擎不是在空转。</li>
+      <li>Magic 的 signoff DRC 跑过一遍、结果 0 条违例（<b>不含天线与密度</b>）；KLayout 侧的 218 类规则同样 0 条（tapeout16 与 ctsfix3 两版各跑一次，都是 0 条）；密度 deck 六层空孔率全部在阈值之上、0 条（修天线那版与 ctsfix3 版各一次）。这几项都是事后补跑，各自都带了一个故意违规的正对照，证明引擎不是在空转。</li>
       <li><b>LVS 的「通过」是有口径的通过</b>：netgen 在 <code>VNB≡VGND</code>、<code>VPB≡VPWR</code> 的前提下、把叶子单元展平之后，顶层 166,353 器件与 84,178 条网两侧完全相等（<code>Circuits match uniquely</code>）。它证明的是<b>顶层晶体管级连接等价</b>，不证明「每个标准单元内部逐管等价」；另一条本该给出同样结论的路线（把 5,496 个 tap 补回网表再跑）也实跑过了，走不通——PDK 里那个单元只有两个脚、body 为空。</li>
       <li><b>天线这一项<b>已修好，但只到「布线级」</b>：原始 run 的 ODB 上报 <b>67 个 net / 87 个 pin</b>（本 run <code>DiodeCells = 0</code>，一个二极管都没插）。后来补上 <code>-allow_congestion</code> 重跑，插 <b>430 个二极管</b>，复测 <b>0 / 0</b>，并流出新 GDS、重跑两套 DRC 与密度（都是 0 条）。但新版的 STA / 功耗 / XOR / LVS 还没重跑，所以本页的时序与功耗数字仍属<b>未修版</b>。</li>
       <li>功耗数字是 OpenLane 内部功耗估算（向量无关的活动率假设），不是硅上实测。</li>
@@ -415,7 +428,7 @@ check_antennas -verbose
 </div></section>
 
 <section><div class="wrap">
-  <h2>六、二十八份证据文件的指纹</h2>
+  <h2>六、四十四份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -434,6 +447,10 @@ check_antennas -verbose
     <div class="fp" style="margin-top:14px">evidence/klayout_drc_report.xml · 34,074 B<br>36045191fa8549ad8a29e232e0885978acf99bd793ba144e6351a5e2778f60d2</div>
     <div class="fp" style="margin-top:14px">evidence/density_check.txt · 1,954 B<br>18b9c39e614e6d0039441d064880607893f944f25a9d2ce666cfce09fabe147b</div>
     <div class="fp" style="margin-top:14px">evidence/density_report.xml · 465 B<br>6681d364b2c424d55a95ad4444cace1f7aac6012fb812dfbecf3eac51f4501ea</div>
+    <div class="fp" style="margin-top:14px">evidence/klayout_drc_ctsfix3.txt · 3,792 B<br>2821ea07bbdbd86ecd9c6b454abd5ed4073c5a5fb0b46644df410aebbfb6be01</div>
+    <div class="fp" style="margin-top:14px">evidence/klayout_drc_ctsfix3_log.txt · 70,588 B<br>e5b7ec1351f7b53f1bec6a4f02696ef8807cbb4ff10c3093c8d762ba2ded5ddf</div>
+    <div class="fp" style="margin-top:14px">evidence/density_ctsfix3.txt · 2,490 B<br>b4180e1c6ef04e97c29a3a2f60cd07a5d68d3d409a22f62f125036e3f6d7ffd7</div>
+    <div class="fp" style="margin-top:14px">evidence/density_ctsfix3_log.txt · 3,580 B<br>728788b76f652b340adcb08063e19ca326a17e332ec4a3d8152f0c83a78727be</div>
     <div class="fp" style="margin-top:14px">evidence/antenna_check.txt · 3,635 B<br>a9403329a5963aa998f1b7c2711fa772c308298ab48111d949221818924647d6</div>
     <div class="fp" style="margin-top:14px">evidence/antenna_repair_attempt.txt · 4,006 B<br>5f76607cf83cff7478f120c37d3536927e1662a54da1db2b91ae16ff74cce068</div>
     <div class="fp" style="margin-top:14px">evidence/antenna_repair_route_attempt.txt · 5,693 B<br>858300362d2267da025ea7e88efcf8c9dff5905c3e20813cc6a51cf2380786f1</div>
