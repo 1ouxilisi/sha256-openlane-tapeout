@@ -1,0 +1,121 @@
+DRV 修复：时钟树扇出违例归零，重布线后仍是 0，三 corner 复核
+=================================================================
+
+一句话结论
+----------
+上一份试点（drv_fix_pilot.txt）说「参数调不到 0，卡在 CTS 的 15-sink 判据」——**这句话错了，撤回**。
+把聚类直径从 50 放大到 70–100、聚类 size 用 9，时钟树扇出违例就是 **0**：
+最大扇出正好等于限值 10，一个都不超；面积 142,876 u²，比原配置的 142,952 还小 76 u²；
+时钟 buffer 238 → 289。重跑了全局布线 + 详细布线，布线后扇出违例**仍然是 0**，详细布线本身 0 违例。
+三 corner 带 RCX 提取的 STA 复核：setup 三格全 MET；hold 在 Fastest 角有一条 −0.0391 的违例；
+max slew 在 Slowest 角还剩 90 条（最差 1.04，限 0.75）；max cap 与 max fanout 三格全 MET。
+
+CTS 参数扫描（每组从同一份 placement DEF 起跑，只改聚类参数）
+--------------------------------------------------------
+违例数（CTS 后 detailed_placement，再 report_check_types -max_fanout）
+
+| size / 直径 | 扇出违例 | 时钟 buffer | 面积 u² |
+|---|---|---|---|
+| 9 / 80  | **0** | 289 | **142,876** |
+| 9 / 70  | **0** | 291 | 142,978 |
+| 9 / 100 | **0** | 287 | 142,897 |
+| 9 / 60  | 1 | 294 | 142,930 |
+| 9 / 55  | 2 | 304 | 143,166 |
+| 9 / 50  | 2 | 316 | 143,295 |
+| 8 / 50  | 9 | 338 | 143,458 |
+| 9 / 45  | 13 | 345 | 144,166 |
+| 9 / 40  | 24 | 380 | 144,863 |
+| 7 / 50  | 25 | 375 | 143,981 |
+| 6 / 50  | 31 | 419 | 144,406 |
+| 10 / 60 | 128 | 274 | 142,754 |
+| 10 / 50 | 87 | 298 | 143,374 |
+| 11 / 50 | 141 | 282 | 143,140 |
+| 12 / 50 | 138 | 273 | 143,147 |
+| 25 / 50（原配置） | 143 | 238 | 142,952 |
+
+读法：不是「越小越好」也不是「越大越好」，是**聚类后的簇大小必须落进 ≤10 才行**。
+size 9 时，直径 70 以上让区域划分把每个叶子簇压在 9 个 sink；直径收到 60 以下时，
+区域切得更碎，反而出现 11 个 sink 的叶子。日志里 `[INFO CTS-0032] Stop criterion found.
+Max number of sinks is 15.` 这一行依然在，但它是「最多 15」而不是「必须 15」——
+只要划分本身给出 ≤9 的簇，这个上限就不再咬人。上一份把它读成硬下限，是读错了。
+
+size 9 / 直径 80 的时钟树形状（cts9d80.log 第 74 行）
+--------------------------------------------------
+`Fanout distribution for the current clock = 2:1, 3:1, 6:6, 7:12, 8:14, 9:244, 10:2..`
+244 个叶子挂 9 个负载、2 个挂 10 个（正好到限）、其余更少；最大就是 10，所以违例 0。
+聚类后 248 个 sink 簇，buffer 289 个，路径深度 3–4（最浅 4、最深 4）。
+
+重布线（把 0 从「拓扑」证到「布完线还是 0」）
+--------------------------------------------
+脚本 cts9d80_adj.tcl：CTS（9/80）→ detailed_placement → set_routing_layers met1-met5 →
+`set_global_routing_layer_adjustment * 0.3`（照 config.tcl 第 143 行 GRT_ADJUSTMENT=0.3）→
+global_route -congestion_iterations 200 → detailed_route met1-met5 -droute_end_iter 40 -or_seed 42。
+结果（cts9d80_adj.log）：
+- 详细布线 `[INFO DRT-0199] Number of violations = 0.`（第 606 行）
+- 布线总长 584,628 µm，过孔 104,134 个；`== AFTER_ROUTE_FANOUT ==` 段（第 654 行）为空
+- 面积 142,876 u²（与原配置 142,952 相比 −76 u²，−0.05%）
+说明：第一次不加层调整直接布线，第 0 轮就 16,347 条违例、迭代三轮还在 9,583 条，判断是引导太挤，
+停掉重跑（加 0.3 调整后第 0 轮 8,563 → 5,072 → 4,881 → … → 0，共约 20 分钟）。
+这事本身也是记录：同样一份 DEF，布线引导参数能把收敛速度差一个数量级。
+
+三 corner STA + 全量 DRV（带 RCX 提取的真延迟）
+--------------------------------------------
+链路：cts9d80_adj_routed.odb → write_verilog（cts9d80.nl.v 1,893,131 B）→
+RCX 三 corner（rules.openrcx.sky130A.{max,nom,min}.calibre，-lef_res）→
+`read_lef merged.max.lef + 三 liberty + read_verilog + link_design + read_sdc 20-sha256_axil.sdc +
+set_propagated_clock + read_spef -corner` → report_checks / report_check_types / report_power。
+
+setup（report_checks -corner X -path_delay max，全路径）
+
+| corner | 最差 slack | 判定 |
+|---|---|---|
+| Slowest | +4.0576 | MET |
+| Typical | +11.0275 | MET |
+| Fastest | +12.2001 | MET |
+
+hold（report_checks -corner X -path_delay min）
+
+| corner | 最差 slack | 判定 |
+|---|---|---|
+| Slowest | +0.4374 | MET |
+| Typical | +0.0820 | MET |
+| Fastest | **−0.0391** | **VIOLATED**（`_19368_/Q → _19367_/D`） |
+
+DRV 三检查（report_check_types，Slowest/Typical/Fastest 各一遍）
+
+| 检查 | Slowest | Typical | Fastest |
+|---|---|---|---|
+| max fanout | 0 违例（最大扇出 10 = 限值，`_09265_/X`） | 0（10） | 0（10） |
+| max capacitance | MET（最差 0.02 / 限 0.03） | MET（0.02 / 0.05） | MET（0.02 / 0.08） |
+| max slew | **90 违例**，最差 1.04（限 0.75，`_13718_/B1`） | 0，最差 0.60 | 0，最差 0.41 |
+| 合并 -violators -verbose | 90 个块，全部是 max slew | 空 | 空 |
+
+功耗（report_power）：Slowest 6.78 mW（内 4.88 / 开关 1.82 / 漏 0.087）、
+Typical 8.53 mW、Fastest 9.86 mW。时钟网络占 37–38%。
+
+它证明什么
+----------
+1. 扇出这一项 DRV 修得掉：CTS 聚类 9/80 后拓扑 0 违例，重布线后仍 0。
+2. 代价是零：面积 −76 u²、时钟 buffer +51 个；没有拿面积换规则。
+3. 布线引导参数能决定收敛：0.3 层调整让同一份 DEF 从 16,347 条违例起步变成可收敛到 0。
+4. 修完的版本 setup 三格全 MET。
+
+它不证明什么
+------------
+- **这不是原来那一版**。cts9d80 是从 `results/placement/sha256_axil.def` 派生出来的新版本，
+  没有天线修复时插的 430 个二极管、没有布线后的 resizer 动作，也**没有跑 LVS**。
+  所以它的 setup 4.0576 与 fixed16 的 0.4058 不是同一颗东西的两个数，不能逐项对比，
+  也不能把这里任何数字搬到线上那一版的描述里。
+- **hold 在 Fastest 角还有一条 −0.0391 的违例没修**。这条是本版本新出现的（fixed16 是 +0.4096），
+  原因本轮没查，只能说「修好了扇出，这一版反而在 fast corner 的 hold 上欠 39 ps」。
+- **max slew 还剩 Slowest 90 条**（最差 1.04，限 0.75）。相比 fixed16 的 255 条少了，但没清。
+- 没做 fill / 金属密度 / 天线 / KLayout DRC / XOR / ERC / iRdrop，所以这不是可交付流片版本。
+- 「15 是判据、参数调不到 0」这条上一轮的结论，本轮被自己的数据推翻：保留 drv_fix_pilot.txt 作为
+  过程记录不改，更正写在这里和新一版页面上。
+
+复现命令
+--------
+  sudo chroot $R <bash> -c "export LANG=C LC_ALL=C; exec <openroad> -no_init -no_splash \
+      -exit /tmp/signoff_new/cts9d80_adj.tcl" > $R/tmp/signoff_new/cts9d80_adj.log 2>&1
+  计数口径：`== AFTER_CTS_FANOUT ==` / `== AFTER_ROUTE_FANOUT ==` 之后、下一行 `==` 之前，
+  每个以 `Pin ` 起头的块计一条；合并检查用 `-- corner X violators` 段内块数。

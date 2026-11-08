@@ -31,7 +31,10 @@
 | `lvs_top_level_gap.txt` | 4,692 B | **新版 LVS 的失败边界**：四组对照（合并衬底网 / 不合并 / 同内容无 fill / 两侧删物理单元）全部 `Netlists do not match`，但 **150 个叶子单元逐个 `Netlists match uniquely`**、器件与网数逐单元相等，失败只在顶层；顶层差 = 物理单元口径（版图 16,472 实例 vs 网表 21,968，差 5,496 正好是 `tapvpwrvgnd_1` 实例数）+ 衬底网命名口径（版图每实例一份 `VPB`/`VNB`，网表单个全局网，PDK setup 无此规则）。同时撤回上一版「逐单元网数差 2」——那是把 `VNB→VGND`/`VPB→VPWR` 全量替换时连单元内部定义一起合并造成的 | 生成结果 |
 | `lvs_new_pass.txt` | 4,572 B | **新版 LVS 通过**：天线修好那版 GDS 提出的网表 vs OpenROAD 网表，`Final result: Circuits match uniquely.`；两侧 **15,588 器件 / 15,645 网**相等，149 个叶子单元逐个 `Netlists match uniquely`。文件逐条写清先前四组对照为何全败——`+` 续行导致两侧删物理单元不一致、只在网表侧合并 `VPB/VNB`、总线被压成单网并丢 4 条 `assign` 端口别名、`write_verilog` 不写电源脚——附复现链、字节数、md5 与「这证明不了什么」 | 生成结果 |
 | `sta_signoff_3corner.txt` | 7,176 B | **RCX + 三 corner 的 signoff 口径时序对照**：寄生由 OpenROAD rcx 从 `fixed16.def` 直接提取（`extract_parasitics -lef_res -ext_model_file rules.openrcx.sky130A.{max,nom,min}.calibre`，三份 SPEF 19.9/18.9/18.6 MB），三工艺角 `ss_100C_1v60`/`tt_025C_1v80`/`ff_n40C_1v95` 各算一次。结果：最差 setup **+0.4058 ns**（Slowest）、最差 hold **+0.4096 ns**（Fastest）、TNS 0；对比未修版 +0.5619 / +0.4021，setup 少 0.156 ns。方法自证：同一脚本跑旧版官方 `nl.v` + SPEF 复现 +0.5619（与已公布值逐位一致）。同时**撤回**估算口径的 +9.83 → +9.92 | 生成结果 |
-| `drv_fix_pilot.txt` | 5,065 B | **DRV 修复试点（CTS 阶段）**：从 placement 重跑 CTS 只改聚类目标，143 → 9（原配置 25/50 重跑量到 143，与线上 signoff 的 143 逐条相同）；残留 9 条卡在 `CTS-0032 Max number of sinks is 15` 这一工具内部判据；明确未重布线、slew 无可信读数 | 本轮新增 |
+| `drv_fix_routed.txt` | 7,204 B | **DRV 修复跑到底：扇出归零 + 重布线 + 三 corner 复核**：CTS 聚类 size 9 / 直径 80 后扇出违例 **0**（最大扇出正好等于限值 10），面积 142,876 u²（比原配置 142,952 小 76），buffer 238 → 289；重布线（层调整 0.3）详细布线 0 违例、布线后扇出仍 0，走线 584,628 µm、过孔 104,134；三 corner 真 STA：setup +4.0576 / +11.0275 / +12.2001 全 MET，hold +0.4374 / +0.0820 / **−0.0391**（Fastest 一条），max fanout 与 cap 全 MET，max slew Slowest 剩 90 条（最差 1.04）。**同时公开撤回上一份「参数调不到 0」** | 本轮新增 |
+| `cts9d80_adj.log` | 27,498 B | 上述重布线原始日志：`DRT-0199 Number of violations = 0.` 在第 606 行，`== AFTER_ROUTE_FANOUT ==` 第 654 行（该段为空） | 原始输出 |
+| `sta_cts9.log` | 159,550 B | 修好版三 corner STA + DRV + 功耗 + 面积原始报告：setup/hold 六格在 1006–1037 行，`-- corner Slowest violators` 第 1064 行（90 个 max slew 块），`==DONE==` 第 1690 行 | 原始输出 |
+| `drv_fix_pilot.txt` | 5,065 B | **DRV 修复试点（CTS 阶段）**：从 placement 重跑 CTS 只改聚类目标，143 → 9（原配置 25/50 重跑量到 143，与线上 signoff 的 143 逐条相同）；当时把残留 9 条归因到 `CTS-0032 Max number of sinks is 15` 这一工具内部判据——**该结论已被 `drv_fix_routed.txt` 推翻，本文件原样保留不改** | 本轮新增 |
 | `cts25.log` | 20,148 B | CTS 聚类 25/50（原配置）原始日志：`== AFTER_CTS_FANOUT ==` 段 143 条 | 本轮新增 |
 | `cts8.log` | 5,322 B | CTS 聚类 8/50 原始日志：同段 9 条，含 `CTS-0032 ... Max number of sinks is 15` 原文 | 本轮新增 |
 | `drv_rootcause.txt` | 4,475 B | **DRV 违例根因**：`config.tcl` 第 10 行时钟扇出目标 16、第 29 行 sink 聚类 25，而第 207 行→SDC 第 213 行要求 ≤10——配置自相矛盾；含 Slowest 角扇出值分布（11–20 密集成团 + 孤立 25/27，127 条为时钟叶子） | 本轮新增 |
@@ -73,6 +76,9 @@ e0b905155bdb1fcb4793feebc2570029536d69ed4abcd1e65d592ca3b694a221  sta_est_compar
 8b9893df273506ec51a28b23c8931ed799f95bddcd3ffb3ac851b702bafeed9d  sta3c_chk_old.log
 32d6e89d569bfa377c1130a464044c947fd503be845759cfc1f0cd9c251c7dcf  drv_rootcause.txt
 b67a197da8c234c707755ba41dd20bbc96e1b9e05905dbf5158f4daeb0716675  drv_fix_pilot.txt
+d08e23fe2fc94e5a1cb056e63cce7300cd2152948d5196237cbb60fbaaa079ac  drv_fix_routed.txt
+1ffb8c6c42292230d848da5176fb5d8aaade1c7e10bf7b6466d81ca95eb67975  cts9d80_adj.log
+0931bfeea7efc11f22631b6a73c3de52878c179c8e06c533008a169d467be16b  sta_cts9.log
 3b1129de86ff8517cd6fca6b027f8ab403fc6df2e877aad3450cc3d1e37507e3  cts25.log
 1aa40f480db24a43f57d40d6b975f97a561db32e31ed3c50bff53b4efa2e5e36  cts8.log
 304a4406735091a1425df27420ac6d395089c25bb655cfb248f8b720b4082683  lvs_attempt.txt
