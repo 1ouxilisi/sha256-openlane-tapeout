@@ -1,0 +1,30 @@
+本目录脚本在 ctsfix3 那一版（sha256_axil, sky130A）实跑通过。
+以下数字全部取自本次实跑输出，不是设计意图。
+
+输入
+  results/signoff/sha256_axil.gds          40,396,222 B
+  results/routing/sha256_axil.nl.v          3,379,950 B
+
+Magic 提取（gds read -> extract -> ext2spice lvs）
+  layout.ext.spice                          2,789,147 B   （与归档件同字节数）
+  TOP_PORTS 94   TOP_INST 34,182   SUBCKTS 150（空 subckt 0）
+
+版图侧清洗（prep_lay.py）
+  折行           1,839 行续行被拼回
+  反斜杠转义     6,270 行（u_core.msg\[275\] 这类）被还原
+  输出 lay.spice                            2,768,173 B
+
+网表侧生成（nl2spice.py）
+  INSTANCES 34,182（丢弃 fill/tap 13,377）
+  CELL_TYPES 149
+  PORTS     94（声明 98，删 4 条重复端口）
+  输出 net.spice                            2,708,330 B
+
+netgen
+  Cell pin lists are equivalent.
+  Device classes sha256_axil and sha256_axil are equivalent.
+  Final result: Circuits match uniquely.
+
+注意：单元 .subckt 的端口顺序会随提取来源（.mag / gds read）浮动，
+所以新提取的 layout.ext.spice 与归档的 cts9_mag.ext.spice 只在端口顺序上不同
+（名字、数量、拓扑一致，sha256 不同），LVS 结论相同。

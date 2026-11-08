@@ -64,9 +64,29 @@ netgen -batch lvs "<版图侧.spice> sha256_axil" "<网表侧.spice> sha256_axil
 4. **未连引脚不能用共享常量名**：CTS 加的均衡负载 `clkload*` 输出悬空，版图侧命名是 `clkload90/X` 这类「实例/引脚」。网表侧若写成 `NC_Y`/`NC_HI`/`NC_X` 这种共享名，178 个 `clkbuf_4/X`、11 个 `clkbuf_8/X`、5 个 `clkinvlp_4/Y` 会被归成同一类，报 222 个 Net mismatch；改成 `f'{inst}/{pin}'` 后归零。
    另外顶层有 4 个重复端口（`s_axil_bresp[0..1]`、`s_axil_rresp[0..1]`），两侧同删后 98 → 94 端口，`Cell pin lists are equivalent`。
 
-版图侧提取用 Magic 从 `sha256_axil.mag`（run 产物，32,237,466 B）跑 `extract` + `ext2spice`，不要用 gdspy 从 GDS 重写（那样只出 4 个端口）。另外：不要在 FUSE 网络盘上跑 Magic（`/home/user` 单次 open 约 1 s，会表现为「零输出假死」），把工作目录放在本地盘。
+版图侧提取用 Magic（`gds read` 这份 GDS，或 `load sha256_axil.mag`）跑 `extract` + `ext2spice`，两种都实测能出 94 个端口；不要用 gdspy 从 GDS 重写（那样只出 4 个端口）。另外：不要在 FUSE 网络盘上跑 Magic（`/home/user` 单次 open 约 1 s，会表现为「零输出假死」），把工作目录放在本地盘。
 
-**已知缺口（如实写在这里）**：把上述四点做出来的清洗脚本（`mk_net2.py` 一类）与最终两侧 SPICE（`lay_u2.spice` 2.8 MB、`pnr_v4.spice` 4.0 MB）**尚未入库**。所以「LVS 这一段」现在可复现的是**方法与判据**，不是「一条命令」。补齐它需要把四个变换固化成脚本并附上两侧输入的生成命令，这是下一步要做的事，页面与 `docs/evidence/README.md` 里不声称它已完成。
+### 一条命令
+
+上面四点已经固化成 [`tools/lvs/`](tools/lvs/) 里的脚本（`ext_mag.tcl` + `prep_lay.py` + `nl2spice.py` + `run_lvs.sh`）：
+
+```bash
+bash tools/lvs/run_lvs.sh <run目录> sha256_axil
+```
+
+只需要 flow 已经产出的 `results/signoff/sha256_axil.gds` 与 `results/routing/sha256_axil.nl.v`，
+不需要另外导出中间件。成功判据是最后一行 `LVS PASS`，脚本打印的 netgen 末行是
+`Final result: Circuits match uniquely.`。
+
+本次在一台 Linux 机器上从 GDS 起完整跑过一遍：Magic 提取约 4 分钟（到 `SPICE_DONE`），
+netgen 比对约 1 分钟。两侧各 34,182 个顶层实例、149 种单元、94 个顶层端口；网表侧从
+47,559 个实例里删掉 13,377 个 fill/tap，端口从 98 删到 94。netgen 输出 298,274 B，与归档的
+`cts9_lvs6.out` 同字节数。逐项数字在 [`tools/lvs/EXPECTED.txt`](tools/lvs/EXPECTED.txt)。
+
+**两点如实写明**：
+
+1. 新提取的 `layout.ext.spice` 与归档的 `cts9_mag.ext.spice` 只在单元 `.subckt` 的**端口顺序**上不同（名字、数量、拓扑一致），所以 `sha256` 不一样，LVS 结论一样。想要与归档件逐字节对齐，用归档的 `cts9_mag.ext.spice` 喂 `prep_lay.py`，输出与 `lay_u2.spice` 只差一行文件头。
+2. 这一节只补上「版图与网表等价」这一项。KLayout DRC、天线、金属密度、GDS XOR、功耗仍是缺口，见第四节。原先这里写的「清洗脚本与两侧 SPICE 尚未入库」已经不再成立，改为脚本入库；归档的两侧 SPICE（`lay_u2.spice` 2,768,096 B、`pnr_v4.spice` 2,708,285 B）仍留在 run 现场，可用上述命令随时重生成。
 
 ## 四、这一版明确不是签核
 

@@ -29,7 +29,7 @@
 
 **这次 LVS 卡了四轮，每一轮都是真缺陷，不是工具玄学**：① fill/tap 单元在版图里没有器件、`subckt` 是空的，实例却被 netgen 展平成「unmatched」，两侧一起去掉才对得上；② 电源引脚必须按版图口径连（`VNB→VGND`、`VPB→VPWR`），否则电源网扇出 31,740 对 15,870、报 13,961 个 `Net:` 片段；③ Magic 写出的网表在固定列宽折行、下一条以 `+` 起头，按行首数实例会数错；④ CTS 加的均衡负载 `clkload*` 输出悬空，版图侧被命名成 `clkload90/X`，网表侧若写成 `NC_Y` 这类常量名，178 个悬空输出会被归成一类、报 222 个 Net mismatch —— 两侧统一用「实例/引脚」命名后归零。
 
-**边界（必须一起读）**：`metrics.csv` 的 `flow_status` 是 **`flow failed`** —— 第 36 步「Magic Spice Export from LEF」在 chroot 里假死（15 分钟 CPU 只跑 17 秒、fd 停在 155 不增长），LVS 是我在 flow 之外用同一份 GDS 手跑出来的。所以 `lvs_total_errors`、`Magic_violations`、`pin_antenna_violations`、`net_antenna_violations`、`klayout_violations` 五列仍是 **`-1`（没跑，不是 0）**；KLayout DRC 与 GDS XOR 这一版没跑（XOR 被 flow 跳过，原文警告 `…klayout.gds wasn't found. Skipping GDS XOR.`）；天线与密度检查没跑到；功耗本版没取。**这一版第一次同时具备「0 违例」与「可交付 GDS + LVS 通过」，但仍不是签核。**
+**边界（必须一起读）**：`metrics.csv` 的 `flow_status` 是 **`flow failed`** —— 第 36 步「Magic Spice Export from LEF」在 chroot 里假死（15 分钟 CPU 只跑 17 秒、fd 停在 155 不增长），LVS 是在 flow 之外用同一份 GDS 单独跑出来的（现已固化成 [`tools/lvs/run_lvs.sh`](tools/lvs/run_lvs.sh) 一条命令）。所以 `lvs_total_errors`、`Magic_violations`、`pin_antenna_violations`、`net_antenna_violations`、`klayout_violations` 五列仍是 **`-1`（没跑，不是 0）**；KLayout DRC 与 GDS XOR 这一版没跑（XOR 被 flow 跳过，原文警告 `…klayout.gds wasn't found. Skipping GDS XOR.`）；天线与密度检查没跑到；功耗本版没取。**这一版第一次同时具备「0 违例」与「可交付 GDS + LVS 通过」，但仍不是签核。**
 
 证据：`docs/evidence/cts9_route.txt`（710 B）、`cts9_cts.txt`（288 B）、`cts9_lvs.txt`（622 B）、`cts9_sta3c.txt`（469 B）、`cts9_metrics.csv`（1,953 B）；逐字节指纹在 `docs/evidence/README.md` 与 `docs/numbers.html` 第六节。
 
@@ -163,7 +163,13 @@ openlane-chips/
 │   ├── gen_sha256_tb.py             # 测试向量生成（对照 hashlib）
 │   ├── sha256_logic_check.py        # 算法逻辑验证
 │   ├── rtl_fsm_sim.py               # RTL 逐周期模拟
-│   └── render_gds.py                # GDS → PNG 版图渲染
+│   ├── render_gds.py                # GDS → PNG 版图渲染
+│   └── lvs/                         # LVS 一条命令：GDS → Magic 提取 → 清洗 → netgen
+│       ├── run_lvs.sh               #   入口，判据看最后一行 LVS PASS
+│       ├── ext_mag.tcl              #   Magic 提取（GDS → SPICE）
+│       ├── prep_lay.py              #   版图侧：拼续行、去转义、删重复端口
+│       ├── nl2spice.py              #   网表侧：nl.v + PDK 单元库 → SPICE
+│       └── EXPECTED.txt             #   实跑数字（两侧 34,182 实例 / 94 端口）
 ├── docs/
 │   └── images/                      # 版图渲染图
 └── 交付物（通过 Release 附件提供）
@@ -219,6 +225,14 @@ nohup sudo chroot $R \
 ```
 
 跑约 37 分钟。判断跑对没跑对不看 `flow_status`（chroot 里 STEP 36 会假死，故必然 `flow failed`），看四处原文：`logs/cts/15-cts.log` 第 1049 / 1084 行、`logs/routing/26-detailed.log` 第 194…581 行收敛到 0、`results/signoff/sha256_axil.gds` **40,396,222 B**、`reports/metrics.csv` 的 `TotalCells 47559` / `Final_Util 46.2004`。逐步清单、LVS 的四条真缺陷、以及本版没做的事，都在 [`REPRODUCE.md`](REPRODUCE.md)。
+
+LVS 那一步不再需要手搓中间件，flow 跑完之后直接：
+
+```bash
+bash tools/lvs/run_lvs.sh /home/user/openlane-rootfs/designs/sha256_v7b/runs/ctsfix3 sha256_axil
+```
+
+脚本吃 `results/signoff/sha256_axil.gds` 与 `results/routing/sha256_axil.nl.v`，末行打 `LVS PASS`，netgen 末行是 `Final result: Circuits match uniquely.`。实跑数字与边界见 [`tools/lvs/README.md`](tools/lvs/README.md)。
 
 ---
 
