@@ -62,6 +62,10 @@
 
 证据：`docs/evidence/antenna_ctsfix3.txt`、`antenna_closed_loop.txt`、`klayout_drc_antclean.txt`、`density_antclean.txt`、`lvs_antclean.txt`、`xor_antclean.txt`（六份都在 `docs/evidence/`，逐字节指纹见该目录 `README.md`）。
 
+上面那六项跑的就是这一份版图（`antclean_fill.gds`，40,666,588 B 自己的渲染，`gdspy` 展平 3,021,383 个多边形，只画 li1 与 m1–m5，不是截图）：
+
+![天线 0/0、补齐 fill 这一版 GDS 的六层渲染](docs/images/sha256_antclean_layout.png)
+
 ---
 
 ## 成果速览（七代迭代）

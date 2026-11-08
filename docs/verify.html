@@ -124,6 +124,29 @@ li{margin:4px 0;color:var(--muted)}
 </div></section>
 
 <section><div class="wrap">
+  <h2>数字那头：物理侧的证据在哪</h2>
+  <p class="sub">上面这一页证明的是「算法行为对」。真正难的是版图那一头——这一节只做一件事：把每个数字指到证据文件的具体行。</p>
+  <div class="box">
+    <p style="margin:0 0 10px;font-size:14px">以下六项全部跑在<b>同一份 GDS</b>：<code>antclean_fill.gds · 40,666,588 B · sha256 89cda760…</code>（天线 0 / 0、补齐 fill 的那一版）。</p>
+    <div class="row"><span class="k">KLayout DRC</span><span class="v">218 个规则类、0 条；正对照同一 deck 立刻报 1 条 → <code>evidence/klayout_drc_antclean.txt</code></span></div>
+    <div class="row"><span class="k">金属密度</span><span class="v">li1–m5 六层空孔率 0.4991 / 0.7232 / 0.9033 / 0.9223 / 0.9478 / 0.9716，0 条 → <code>evidence/density_antclean.txt</code></span></div>
+    <div class="row"><span class="k">天线</span><span class="v">先报 39 net / 49 pin（不是 0），同一 ODB 上三轮压到 0 / 0，另起进程独立复检仍 0 / 0 → <code>evidence/antenna_closed_loop.txt</code></span></div>
+    <div class="row"><span class="k">GDS XOR</span><span class="v">两条独立 stream-out 路径 flatten 后逐层异或，<code>TOTAL_DIFF=0</code> → <code>evidence/xor_antclean.txt</code></span></div>
+    <div class="row"><span class="k">LVS</span><span class="v">Magic 从 GDS 提取的网表对 OpenROAD 网表，两侧 34,289 实例 / 94 端口，<code>Circuits match uniquely</code> → <code>evidence/lvs_antclean.txt</code></span></div>
+    <div class="row"><span class="k">同一份版图</span><span class="v"><a href="images/sha256_antclean_layout.png">六层渲染</a>，展平 3,021,383 个多边形、640 × 640 µm</span></div>
+  </div>
+  <div class="box">
+    <p style="margin:0 0 6px;color:var(--warn);font-family:var(--mono);font-size:12px">这一版没有的</p>
+    <ul style="padding-left:18px">
+      <li>没重跑 RCX + 三 corner STA 与 DRV，所以时序结论属于上一版（ctsfix3）原版，不能顺延到这一版</li>
+      <li>上一版跑 STA 的那一次，DRV 五列是 <code>-1</code>（没跑，不是 0）；真正跑过 DRV 的派生版还留 90 条 max slew</li>
+      <li>LVS 两侧 34,289 与上一版 34,182 差 +107，没追到单元级，照写不抹平</li>
+    </ul>
+  </div>
+  <p class="note">逐条原文、字节数与 sha256 在 <a href="evidence/README.md">evidence/README.md</a>；被推翻的旧写法留在 <a href="project.html">项目详情</a>里，用「此处更正」标出，不覆盖。</p>
+</div></section>
+
+<section><div class="wrap">
   <h2>这页能证明什么，不能证明什么</h2>
   <div class="grid">
     <div class="box">
@@ -139,7 +162,7 @@ li{margin:4px 0;color:var(--muted)}
     <div class="box">
       <p style="margin:0 0 6px;color:var(--warn);font-family:var(--mono);font-size:12px">不能证明</p>
       <ul>
-        <li>版图做对了、DRC 干净、时序收敛——那是 STA 和 XOR 的事</li>
+        <li>版图做对了、DRC 干净、时序收敛——那是 KLayout、XOR 与 STA 的事；物理侧证据在上节，这页一个都没验</li>
         <li>面积、频率、功耗这些数字</li>
         <li>硬件在硅上真跑过（这几代都是开源 PDK 的流片级交付，不是实物芯片）</li>
         <li>这页的 JS 实现和 RTL 在电路层等价——只证明算法行为一致</li>
