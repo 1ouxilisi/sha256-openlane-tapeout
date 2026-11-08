@@ -46,6 +46,7 @@
 | `density_antclean.txt` | 780 B | **同一份 GDS 的金属密度**：li1 0.4991 / m1 0.7232 / m2 0.9033 / m3 0.9223 / m4 0.9478 / m5 0.9716，六层全在阈值之上、**0 条**；日志 5.400 s，附 ctsfix3 对照与 `m1.pd.1d` 正对照 | 生成结果 |
 | `lvs_antclean.txt` | 1,616 B | **同一份 GDS 的 LVS**：Magic 提取 `layout.ext.spice` 2,815,680 B → 清洗 `TOP_INST 34,289` → 网表侧 `INSTANCES 34,289 (dropped fill/tap 13,382)` → netgen **`Final result: Circuits match uniquely.` / `LVS PASS`**（日志 321 行）；写明与 ctsfix3 的 34,182 相差 +107 尚未逐条追查，以及「本版未重跑 STA/DRV、功耗未取」 | 生成结果 |
 | `xor_antclean.txt` | 1,706 B | **GDS XOR：两条 stream-out 路径 0 差异**。A = Magic 出图 40,666,588 B，B = KLayout「读同一份 DEF + PDK 单元 GDS 回填空 cell」18,758,880 B；flatten 后逐层 `Region ^` → `common=42 A_only=[(81,14)] B_only=[]`、`TOTAL_DIFF=0`、**RESULT PASS**；含上一版同法 PASS 的对照，以及「为何不拿逐层形状数相减当判据」的口径说明 | 生成结果 |
+| `../images/sha256_antclean_layout.png` | 1,600,361 B | **天线 0/0 那版 GDS 自己的金属层渲染**：输入就是 `antclean_fill.gds`（40,666,588 B / `89cda760…`），`gdspy` 展平后 3,021,383 个多边形、bbox 0,0 – 640,640 µm，只画 li1 与 m1–m5 共六层，4200×4200 px，sha256 `33179acd…`；渲染脚本 `render_antclean.py`（gdspy + matplotlib，非查看器截图）。**它与页面早先那张 `fixed15.gds`（16,621,738 B）的渲染不是同一份版图** | 本轮新增 |
 | `cts9_lvs.txt` | 622 B | **这一版的 LVS 结论**：`Circuits match uniquely`、151 处叶子单元 `Netlists match uniquely`、顶层 pin 表与器件类等价 | 生成结果（netgen 原文截取） |
 | `cts9_sta3c.txt` | 469 B | 同一次 run 的三 corner 签核时序：Slowest +0.51/+0.41、Typical +0.74/+0.41、Fastest +0.99/+0.40（全 MET） | 生成结果 |
 | `cts9_metrics.csv` | 1,953 B | 同一次 run 的 `reports/metrics.csv` 原文件：0 违例五列全 0，`flow_status` 为 `flow failed`，五列 `-1` | 原样，未改一个字节 |

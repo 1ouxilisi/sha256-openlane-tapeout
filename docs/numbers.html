@@ -306,9 +306,6 @@ check_antennas -verbose
     <p class="note">上一轮记的四组对照（合并衬底网、不合并、同内容无 fill、两侧都删物理单元）全部 <code>Netlists do not match</code>；当时量出的两条顶层差（tap 实例 5,496 的口径差、衬底网每实例 vs 全局网）作为过程记录保留。四组对照的字节数、md5、关键词行号，以及「不能拿这些数说什么」，在 <a href="evidence/lvs_top_level_gap.txt">evidence/lvs_top_level_gap.txt</a>。</p>
     <p class="note"><b>顺带撤回上一版的一个说法</b>：上一版写「逐单元网数差 2（nets 14 vs 12）」，那是<b>实验方法造成的</b>，不是版图问题。把网表里 <code>VNB→VGND</code>、<code>VPB→VPWR</code> 全量替换时，连 PDK 单元定义内部的体端网也一起被合并，每个单元内部就少 2 个网。保留 <code>VNB/VPB</code> 原样、其它不变再跑，同一批单元两侧都是 <b>14 网 / 12 器件</b>、<code>Netlists match uniquely</code>——所以「差 2」是我改网表改出来的。</p>
   </div>
-    <p class="note"><b>顺带撤回上一版的一个说法</b>：上一版写「逐单元网数差 2（nets 14 vs 12）」，那是<b>实验方法造成的</b>，不是版图问题。把网表里 <code>VNB→VGND</code>、<code>VPB→VPWR</code> 全量替换时，连 PDK 单元定义内部的体端网也一起被合并，每个单元内部就少 2 个网。保留 <code>VNB/VPB</code> 原样、其它不变再跑，同一批单元两侧都是 <b>14 网 / 12 器件</b>、<code>Netlists match uniquely</code>——所以「差 2」是我改网表改出来的。</p>
-    <p class="note">四组对照的字节数、md5、关键词所在行号，以及「不能拿这些数说什么」，写在 <a href="evidence/lvs_top_level_gap.txt">evidence/lvs_top_level_gap.txt</a>。</p>
-  </div>
 
   <div class="box bad">
     <b>更正二：上一版「1,795 行实例缺单元名」是错的，撤回</b>
@@ -412,6 +409,7 @@ round3 : 布线 0（L509）                                  天线 0 net / 0 pi
     <p class="note"><b>为什么一轮不够</b>：详细布线会改走线，二极管按旧走线插的位置就未必还合适；所以每轮必须把复检后的 ODB 再送回 <code>repair_antennas</code>，二极管位置才按真实走线重算。<code>detailed_placement</code> 也不能省——早先一版漏了它，二极管没有合法位置，布线违例从 2,636 涨到 116,774，64 轮都收敛不下来。二极管最终 <b>327</b> 个（原 196 + 增补 131）。</p>
     <p class="note">补齐 fill（<code>Placed 25656 filler instances</code>，清单取 <code>config.tcl</code> 第 46 / 65 行）后，从新 DEF 重出 GDS：<b>40,666,588 B / sha256 <code>89cda760…</code></b>，网表 3,386,854 B / <code>b547bca3…</code>。在这一份 GDS 上：KLayout DRC <b>218 类 0 条</b>（<a href="evidence/klayout_drc_antclean.txt">evidence/klayout_drc_antclean.txt</a>）、密度 <b>六层 0.4991 / 0.7232 / 0.9033 / 0.9223 / 0.9478 / 0.9716、0 条</b>（<a href="evidence/density_antclean.txt">evidence/density_antclean.txt</a>）、netgen <b><code>Final result: Circuits match uniquely.</code></b>（两侧各 34,289 实例，<a href="evidence/lvs_antclean.txt">evidence/lvs_antclean.txt</a>）、GDS XOR <b><code>TOTAL_DIFF=0</code></b>（<a href="evidence/xor_antclean.txt">evidence/xor_antclean.txt</a>）。</p>
     <p class="note"><b>一处不对齐就照写</b>：本版 LVS 两侧 34,289 实例，ctsfix3 原版是 34,182（+107）。二极管 +131、filler −19，相抵后仍有小幅出入，没有逐条追到单元级——netgen 的判据是 <code>Circuits match uniquely</code>，它不看这个总数差；但既然页面上摆着两个数，出入就写出来。</p>
+    <figure style="margin:14px 0 0"><img src="images/sha256_antclean_layout.png" alt="天线 0/0、补齐 fill 那一版 GDS 的金属层渲染" style="width:100%;border-radius:8px;border:1px solid var(--line)" loading="lazy"><figcaption class="note" style="margin-top:6px">上面这张就是本节这份 GDS 自己的渲染：<code>antclean_fill.gds</code>，<b>40,666,588 B</b>，sha256 <code>89cda760…</code>；展平后 <b>3,021,383</b> 个多边形，bbox 0,0 – 640,640 µm，只画 li1 与 m1–m5 六层。它<b>不是</b>上一节那张 <code>fixed15.gds</code>（16,621,738 B / 2,014,852 多边形）——之前页面上那张图属于「第一次修天线」那条线，这一版才是 0/0 且补齐 fill 之后流出的 GDS，四种复核（DRC / 密度 / LVS / XOR）也是在这份文件上跑的。渲染用的是 <code>gdspy</code> 展平后按层上色、matplotlib 出图（<code>render_antclean.py</code>），不是版图查看器的截图。</figcaption></figure>
   </div>
 </div></section>
 

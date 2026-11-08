@@ -247,6 +247,8 @@ footer p{margin:6px 0}
       <tr><td>时序 / DRV / 功耗</td><td><b>这一版没有重跑</b>（增补二极管改变了走线与电容），功耗未取</td><td>同上，末尾「未重跑」段</td></tr>
     </table>
     <p class="sub">XOR 的口径也一并公开：左边是 Magic 从 DEF 出的 GDS，右边是 KLayout 读同一份 DEF、再用 PDK 单元 GDS 回填空 cell 出的图；两边 flatten 后按几何做逐层异或。所以它证明的是<b>两条 stream-out 路径产出一致的图形</b>，不是「版图与网表一致」（后者由 LVS 负责）。另外，前期按「逐层形状数」相减得到 1,719,510 的差，是统计口径差（一侧把 fill/tap 重复展开成 170,800 个实例，另一侧 47,559），不是真实图形差——这也是为什么判据取 flatten 后的几何异或。</p>
+    <img src="images/sha256_antclean_layout.png" alt="天线 0/0、补齐 fill 这一版 GDS 的金属层渲染" style="width:100%;border-radius:10px;border:1px solid var(--line);margin-top:18px" loading="lazy">
+    <p class="sub" style="color:var(--muted);font-size:13px;margin-top:8px">上图是这份 GDS 自己的渲染：<code>antclean_fill.gds</code>，<b>40,666,588 B</b>、sha256 <code>89cda760…</code>，展平后 3,021,383 个多边形，bbox 0,0 – 640,640 µm，只画 li1 与 m1–m5。上面四种复核（DRC / 密度 / LVS / XOR）全部在这份文件上跑；它和前一节那张 <code>fixed15.gds</code>（16,621,738 B）不是同一份版图。渲染用 <code>gdspy</code> 展平 + <code>matplotlib</code> 按层上色，不是查看器截图。</p>
   </div>
 </section>
 
