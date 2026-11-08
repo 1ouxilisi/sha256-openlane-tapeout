@@ -1,0 +1,64 @@
+STA 估算口径对比：「天线修好版」vs「原版布线」
+================================================================
+生成时间：2026-11-08。全部命令与输入文件的字节数、md5 如下，可原样复跑。
+
+【先写清楚这不是什么】
+这不是 signoff STA。没有跑 RCX / SPEF —— 寄生参数是 OpenROAD 用
+`estimate_parasitics -global_routing` 从布线数据库自己估的；工艺角只用了
+tt_025C_1v80 一个（原 signoff 的 min/nom/max 三角落没有复现）；功耗用默认
+activity 口径。
+所以下面的绝对 slack 不能拿去和作品集里 signoff 的 +0.5619 ns 比。它要回答的
+只有一个问题：把天线修好、重新布线之后，时序有没有被搞坏。
+
+【输入文件】
+新版（重新全局布线 + 插 430 个天线二极管 + 重新详细布线）
+  /tmp/antfix/fixed16.odb
+  31,826,611 B  md5 1db3749bdc05abff779ac50314ebdeee
+原版（流水线自己跑出来的详细布线结果，未修天线）
+  /designs/sha256_v7b/runs/tapeout16/tmp/routing/25-fill.odb
+  23,099,996 B  md5 f8420c35364bda8939861b8e3287dccf
+两者共用
+  liberty /pdk/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+          12,841,859 B
+  sdc     /designs/sha256_v7b/runs/tapeout16/tmp/20-sha256_axil.sdc
+          20,224 B（CLOCK_PERIOD 18.0，CLOCK_PORT clk）
+
+【脚本】/tmp/sta/sta_est.tcl.tmpl，两侧只差 read_db 的路径
+  read_db <odb>
+  read_liberty <tt lib>
+  read_sdc <sdc>
+  estimate_parasitics -global_routing
+  report_worst_slack -max / -min
+  report_tns
+  report_checks -path_delay max -digits 4 -group_count 1 -endpoint_count 1
+  report_power
+
+【命令】（$R=/home/user/openlane-rootfs；$SH=bash-5.2p26；$OR=openroad）
+  sudo chroot $R $SH -c "export LANG=C LC_ALL=C; exec $OR -no_init -no_splash \
+    -exit /tmp/sta/sta_new.tcl" > $R/tmp/sta/sta_new.log 2>&1
+  sudo chroot $R $SH -c "export LANG=C LC_ALL=C; exec $OR -no_init -no_splash \
+    -exit /tmp/sta/sta_old.tcl" > $R/tmp/sta/sta_old.log 2>&1
+
+【结果】
+                              原版 25-fill.odb     新版 fixed16.odb      差
+  worst setup slack           +9.8329 ns           +9.9243 ns          +0.0914 ns
+  worst hold slack            +0.6247 ns           +0.6274 ns          +0.0027 ns
+  tns                          0.0000               0.0000              —
+  total power（默认 activity）  8.8383 mW            8.7922 mW          -0.0461 mW
+  新版功耗内部/开关/漏电：6.8340 / 1.9581 / 1.17e-07 mW
+
+【怎么读这组数】
+1. 两者都 MET、tns 都是 0：插 430 个二极管并重新布线之后，同一口径下时序没有被
+   做坏；变化量在 0.1 ns 量级，远小于 18 ns 的周期。
+2. 新版不是「原版 + 二极管」：它是从 22-global.odb 重新全局布线（补上漏传的
+   `-allow_congestion`）+ `repair_antennas` + 重新详细布线的结果，布线本身也变了。
+   所以这个差值是整条动作的净效果，不是「二极管单独带来的代价」。
+3. 新版日志里有 1,001 行 `GRT-0026 Missing route to pin`，是
+   `estimate_parasitics` 重估寄生时对未被布到的引脚发的告警，属估算过程噪声；
+   DRC 与 LVS 是另外拿 GDS 跑的，与此无关。
+4. 要把这条升级成 signoff，还缺 RCX/SPEF + 三 corner，这一步没做——所以页面上它
+   只能标「估算口径」，不能标「时序签核」。
+
+【原始日志】
+  /tmp/sta/sta_new.log  56,608 B  md5 35431bf21262d7adb3f7432a7b39bdbe
+  /tmp/sta/sta_old.log   5,337 B  md5 3d8ad26d24ddedcd3bb3de57552c139d
