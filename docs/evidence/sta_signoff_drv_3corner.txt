@@ -1,0 +1,95 @@
+设计规则类检查（DRV）：max transition / max fanout / max capacitance，三 corner，新旧两版同脚本对照
+===============================================================================================
+
+一句话结论
+----------
+时序（setup / hold）在新版三 corner 全部 MET。但同一份 SDC 里写的两条设计规则约束——
+set_max_transition 0.75、set_max_fanout 10——在新版和旧版都没有满足。
+所以准确说法是「时序通过，DRV 未清」，不是「signoff 通过」。
+这条我原来没查，是补上来的，放在这里作废掉任何一句「时序 MET 就算过签核」的说法。
+
+约束不是你猜的，是 SDC 原文里写的
+------------------------------
+文件：designs/sha256_v7b/runs/tapeout16/tmp/20-sha256_axil.sdc
+第 212 行：set_max_transition 0.7500 [current_design]
+第 213 行：set_max_fanout     10.0000 [current_design]
+这两条由 OpenLane 的 base.sdc 模板生成（MAX_TRANSITION_CONSTRAINT=0.75），
+属于本 run 自己的约束，不是工具默认值，也不是我为了凑一个结论临时设的。
+max_capacitance 的限值来自 liberty（每个 pin 各不相同，量级 0.03–0.08 pF）。
+
+怎么跑的（和 sta3c.log / sta3c_old.log 完全同一条链）
+--------------------------------------------------
+读 LEF（merged.max.lef）→ define_corners Slowest/Typical/Fastest → 三份 liberty
+（ss_100C_1v60 / tt_025C_1v80 / ff_n40C_1v95）→ read_verilog 网表 → link_design sha256_axil
+→ read_sdc 20-sha256_axil.sdc → set_propagated_clock → 三份 SPEF
+→ 逐 corner：report_check_types -max_slew / -max_capacitance / -max_fanout，
+再加一次 -max_slew -max_capacitance -max_fanout -corner <c> -violators -verbose 打印每个违例 pin。
+脚本：/tmp/signoff_new/sta3c_chk.tcl（新版）与 sta3c_chk_old.tcl（旧版，只换网表与 SPEF，
+nom 角用官方 max SPEF 代替——和 sta3c_old.log 的处理完全一致）。
+
+输入（字节与哈希，可复算）
+------------------------
+新版网表  /tmp/signoff_new/fixed16.nl.v            3,368,227 B  md5 31a2ccf43ca4c7161043b4d64a907ad0
+新版 SPEF  fixed16.max.spef                       19,968,664 B  md5 7da6c96fd82751c5485b4aeb78c24ed7
+           fixed16.nom.spef                       18,919,837 B  md5 a85de59ce43202959a572077dda127a9
+           fixed16.min.spef                       18,653,847 B  md5 3a22753a5365a8bae721a6c38a69c365
+旧版网表  results/routing/sha256_axil.nl.v
+旧版 SPEF  results/routing/mca/process_corner_max/sha256_axil.spef  19,328,175 B
+           results/routing/mca/process_corner_min/sha256_axil.spef
+
+报告日志（原文未剪裁，逐行可查）
+-----------------------------
+新版  sta3c_chk.log       244,996 B  SHA-256 6e34a60a9205b7b39ad6f42b216c64ac0b6c0ef301b4a83fcdadc048686750e1
+      Slowest violators 段起于第 1030 行，Typical 起于第 3900 行，Fastest 起于第 5238 行
+旧版  sta3c_chk_old.log   217,799 B  SHA-256 8b9893df273506ec51a28b23c8931ed799f95bddcd3ffb3ac851b702bafeed9d
+
+逐 corner 违例 pin 数（每个 Pin 块是一条违例，三类分别计数）
+--------------------------------------------------------
+角         版本    max slew   max fanout   max capacitance   合计
+Slowest    新版      255         219             0            474
+Slowest    旧版      210         143             0            353
+Typical    新版        0         219             0            219
+Typical    旧版        8         143             0            151
+Fastest    新版        0         219             0            219
+Fastest    旧版        0         143             0            143
+
+最差值（三类各自的最坏一条）
+--------------------------
+max slew         新版 Slowest 1.17 ns  限 0.75  → −0.42 ns（VIOLATED，pin _11939_/A2 等）
+                 旧版 Slowest 1.17 ns  同一组 pin、同一数值
+                 新版 Typical 全 MET（最差 0.71，+0.04）
+                 旧版 Typical 0.76 → −0.01（8 条），新版典型角反而清了
+max fanout       新版 27（限 10，−17，pin _15359_/X；时钟叶子 clkbuf_leaf_* 25–27 一片）
+                 旧版 25（限 10，−15，pin clkbuf_leaf_60_clk/X）
+max capacitance  两版三 corner 全部 MET（最差 pin _17813_/Y，+0.01 / +0.03 / +0.06）
+
+怎么读这组数（不做美化）
+----------------------
+1. DRV 不是新版才坏：旧版同样 353 / 151 / 143 条违例，时钟叶子 buffer 扇出 25 也早超限。
+   这条从头到尾都没被清过，之前的「时序 MET」只覆盖 slack，不覆盖 DRV。
+2. 新版确实更差：fanout 违例 143 → 219 条，慢角 slew 违例 210 → 255 条，最差扇出 25 → 27。
+   合理解释：天线修复插了 430 个二极管、重做了全局布线与详细布线、时钟树随之重做，
+   每个时钟叶子 buffer 多带了 2 个负载。这是修复天线付出的代价，和 setup 少 0.156 ns 是同一笔账的两面。
+3. 但 setup 仍正、hold 仍正、TNS 0：DRV 违例在 18 ns 周期下没有把时序打死，
+   它意味着「这版不能直接当量产 signoff 交出去」，而不是「这版跑不起来」。
+4. 扇出超限集中在时钟叶子 buffer 与 input9/input11 这类输入驱动 pin，属于结构性问题，
+   不是随机噪声——要清就得回头改时钟树结构或加 buffer 层级，不能在 STA 里改约束糊过去。
+
+它不证明什么
+------------
+- 不证明这版过了签核：DRV 三 corner 都有违例，最大扇出 27 vs 限 10。
+- 不证明旧版过了签核：旧版同样违例，只是数量少一些。
+- 不证明这些违例可以被忽略：18 ns 周期下时序仍有正 slack，但 DRV 超限在真实工艺里对应
+  电迁移、串扰、时钟偏斜风险，属于必须清的项目，不是可选优化。
+- 不证明原因已定：扇出增加与天线修复的因果关系是我根据动作顺序提出的解释，
+  没有做过对照实验（比如只插二极管不重布线）来隔离变量。
+- 没有做 max_capacitance 之外的电气规则：没有 ERC、没有 iRdrop、没有每个单元的逐管等价检查。
+- 没有重跑功耗/面积：这里只补 DRV，功耗与面积仍以 sta_signoff_3corner.txt 为准。
+
+复现
+----
+同环境同脚本即可：
+  openroad -no_init -no_splash -exit /tmp/signoff_new/sta3c_chk.tcl      > sta3c_chk.log 2>&1
+  openroad -no_init -no_splash -exit /tmp/signoff_new/sta3c_chk_old.tcl  > sta3c_chk_old.log 2>&1
+计数口径：以日志里 "-- corner <c> violators" 段内每个 "Pin <name>" 块为一条违例，
+块内首行 "max slew / max fanout / max capacitance <limit>" 决定类别。
