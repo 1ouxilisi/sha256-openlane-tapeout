@@ -345,7 +345,51 @@ check_antennas -verbose
 </div></section>
 
 <section><div class="wrap">
-  <h2>四、这一页能证明什么、不能证明什么</h2>
+  <h2>四、整条 flow 重跑：0 违例与 LVS 第一次落在同一版上</h2>
+  <p class="sub">前面几节都是「事后补跑」拼出来的：时序来自一个 run、违例来自另一个 run、LVS 来自第三个。这一节不一样——下面每一个数字，都来自<b>同一次 OpenLane run</b>（tag <code>ctsfix3</code>），同一次 run 出 GDS，同一份 GDS 出 LVS。</p>
+
+  <div class="box">
+    <b style="color:var(--accent)">先说我改了什么，为什么改</b>
+    <p class="note">设计级 <code>config.tcl</code> 原本只有 50 行、2,111 B，里面并没有 CTS 聚类那两行——所以「扇出压到 0」这件事，之前只在手写脚本里成立，不在 flow 里成立。这一版把三行覆盖写进设计 config：<code>CTS_SINK_CLUSTERING_SIZE "9"</code>、<code>CTS_SINK_CLUSTERING_MAX_DIAMETER "80"</code>、<code>GRT_REPAIR_ANTENNAS "1"</code>；外加 <code>RUN_KLAYOUT "0"</code>（KLayout 0.29.1 启动即读 <code>/proc/&lt;pid&gt;/exe</code>，chroot 的 <code>/proc</code> 是空目录，必崩）。备份留在 <code>config.tcl.bak_20261108T0500</code>，原文件 50 行。</p>
+  </div>
+
+  <table>
+    <tr><th>项</th><th>结果</th><th>原文位置</th></tr>
+    <tr><td>CTS 聚类复现</td><td>聚类后 sink 248 个；扇出分布 <code>2:1, 3:1, 6:6, 7:12, 8:14, 9:244, 10:2</code>，上界正好等于 SDC 的 <code>set_max_fanout 10</code></td><td><code>logs/cts/15-cts.log</code> 第 1049、1084 行</td></tr>
+    <tr><td>详细布线违例</td><td><b>0</b>：12,932 → 4,974 → 4,733 → 1,076 → 79 → 34 → 1 → 1 → 0</td><td><code>logs/routing/26-detailed.log</code> 第 194/245/295/345/395/442/489/535/581 行</td></tr>
+    <tr><td>GDS</td><td>40,396,222 B</td><td><code>results/signoff/sha256_axil.gds</code></td></tr>
+    <tr><td>网表</td><td>3,379,950 B</td><td><code>results/routing/sha256_axil.nl.v</code></td></tr>
+    <tr><td>走线 / 过孔</td><td>618,229 µm / 117,592</td><td><code>reports/metrics.csv</code> 的 <code>wire_length</code>、<code>vias</code></td></tr>
+    <tr><td>单元 / 利用率 / 面积</td><td>47,559 个；46.20%；die 0.4096 mm²（640×640 µm）</td><td><code>metrics.csv</code> 的 <code>TotalCells</code>、<code>Final_Util</code>、<code>DIEAREA_mm^2</code></td></tr>
+    <tr><td>时序（Slowest / Typical / Fastest）</td><td>setup <b>+0.51 / +0.74 / +0.99</b>、hold <b>+0.41 / +0.41 / +0.40</b>，三 corner 全部 MET、0 条违例</td><td><code>reports/signoff/31-sta-rcx_max</code>、<code>33-sta-rcx_nom</code>、<code>29-sta-rcx_min</code> 下 <code>multi_corner_sta.max.rpt</code> / <code>.min.rpt</code></td></tr>
+    <tr><td>LVS</td><td><code>Circuits match uniquely</code>；151 处叶子单元 <code>Netlists match uniquely</code>，顶层 <code>Cell pin lists are equivalent</code>、<code>Device classes … are equivalent</code></td><td>证据文件 <code>evidence/cts9_lvs.txt</code></td></tr>
+  </table>
+
+  <div class="box">
+    <b>LVS 是怎么做成的——四道真缺陷，不是「工具玄学」</b>
+    <ul>
+      <li><b>fill / tap 不是器件</b>。版图侧 Magic 提取时，<code>fill_1</code>/<code>fill_2</code>/<code>tapvpwrvgnd</code> 的 <code>.subckt</code> 是空的（里面没有晶体管），但实例还在，netgen 于是报「Flattening unmatched subcell … (5496 instances)」。把两侧这些实例一起去掉，器件数才对得上：<b>两侧各 34,182 个顶层实例、36,256 个器件</b>。</li>
+      <li><b>电源引脚必须按版图的口径连</b>。版图侧每个单元实例是 <code>… VGND VGND VPWR VPWR …</code>（井 <code>VNB</code> 归 <code>VGND</code>、<code>VPB</code> 归 <code>VPWR</code>）。网表侧我一开始按 PDK 引脚名逐个独立悬空，结果电源网扇出 <b>31,740 对 15,870</b>，报出 13,961 个 <code>Net:</code> 片段。强制 <code>VNB→VGND</code>、<code>VPB→VPWR</code> 之后这一批全消。</li>
+      <li><b>长行会被折行</b>。Magic 写出的网表在固定列宽处折行、下一行以 <code>+</code> 起头；按行首判断实例的脚本会把 34,182 数错。必须先 unwrap 再统计。</li>
+      <li><b>悬空引脚要用「实例/引脚」命名</b>。CTS 加的均衡负载 <code>clkload*</code> 输出在版图里是悬空网，Magic 把它命名成 <code>clkload90/X</code>；网表侧如果写 <code>NC_Y</code> 这样的常量名，netgen 会把 178 个悬空输出归成同一个类，于是报 <b>222 个 Net mismatch</b>。把网表侧未连引脚也按 <code>实例/引脚</code> 命名，两侧一一对上，<b>222 归零</b>。</li>
+    </ul>
+    <p class="note">这四条都是实跑出来的，不是推的：每一条都先看到具体计数不一致，再定位到具体成因，改完再跑一次。上一版页面里「LVS 通过」是另一套口径（<code>VNB≡VGND</code> 全局替换 + 展平），这一版是<b>逐实例口径</b>，同一个结论，更硬的证据。</p>
+  </div>
+
+  <div class="box warn">
+    <b>这一版同样有不能吹的地方，先说清楚</b>
+    <ul>
+      <li><b>flow 自己没有跑完</b>。<code>metrics.csv</code> 的 <code>flow_status</code> 就是 <code>flow failed</code>：第 36 步「Magic Spice Export from LEF」在 chroot 里假死（15 分钟 CPU 只跑了 17 秒、打开的文件描述符停在 155 不增长）。我是在 flow 之外、用 Magic 直接从这份 GDS 提取 SPICE 完成 LVS 的，所以 <code>lvs_total_errors</code>、<code>Magic_violations</code>、<code>pin_antenna_violations</code>、<code>net_antenna_violations</code>、<code>klayout_violations</code> 五列仍是 <code>-1</code>——<b>是「没跑」，不是「0」</b>。</li>
+      <li><b>KLayout DRC 与 GDS XOR 这一版没跑</b>。XOR 需要 KLayout 出的那份 GDS，而 KLayout 在 chroot 起不来，所以 flow 直接跳过了（原文警告 <code>…klayout.gds wasn't found. Skipping GDS XOR.</code>）。</li>
+      <li><b>没有做天线与密度复检</b>。<code>GRT_REPAIR_ANTENNAS</code> 这一版是开的（1），布线阶段会插二极管，但 signoff 的 antenna / density 检查步骤没跑到，所以本页不给这两项结论。</li>
+      <li><b>功耗数字这一版没取</b>。时序取到了三 corner，功耗报告没解析，先不写，避免拿旧版的数填新版的空。</li>
+      <li><b>这不是签核</b>。LVS 通过 + 时序 MET + 布线 0 违例，缺 DRC、天线、密度、XOR 四项 signoff 检查，所以只能说「这一版第一次同时具备 0 违例与可交付 GDS，且这份 GDS 的 LVS 通过」，不能说「已签核」。</li>
+    </ul>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>五、这一页能证明什么、不能证明什么</h2>
   <div class="box">
     <b style="color:var(--accent)">能证明</b>
     <ul>
@@ -370,7 +414,7 @@ check_antennas -verbose
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、二十三份证据文件的指纹</h2>
+  <h2>六、二十八份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -395,7 +439,7 @@ check_antennas -verbose
     <div class="fp" style="margin-top:14px">evidence/antenna_repair_route_fixed.txt · 6,164 B<br>f949e0d0ec5a81c30de9db98e4cc8851d40ecb1196e1470f5464cd79cccaccaf</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_pass.txt · 8,292 B<br>956ff1a4cc9d2db595a722be26ac7fa53b5af0f15e24af613eef56fd169aaf9f</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_top_level_gap.txt · 4,692 B<br>ea954e06f4182e4fd0f88058c402824bf3f0eeb6ff6b81ef172233d080cb5c0c</div>
-    <div class="fp" style="margin-top:14px">evidence/lvs_new_pass.txt · 4,572 B<br>a3dd1f65f39b93bf20eefe2d5458efba3053d073cacdf5fe275f73b0113193ee<br>evidence/sta_est_compare.txt · 3,585 B（估算口径，已被取代）<br>e0b905155bdb1fcb4793feebc2570029536d69ed4abcd1e65d592ca3b694a221<br>evidence/sta_signoff_3corner.txt · 7,176 B<br>681637a543e750b338077d1ded658785f90cd198342277a78878c2e48f8bd2e2<br>evidence/sta_signoff_drv_3corner.txt · 6,686 B<br>8af0d95e2a966bf7f01a49275332ea2a503c28379aa65b10860e365218b897fa<br>evidence/sta3c_chk.log · 244,996 B<br>6e34a60a9205b7b39ad6f42b216c64ac0b6c0ef301b4a83fcdadc048686750e1<br>evidence/sta3c_chk_old.log · 217,799 B<br>8b9893df273506ec51a28b23c8931ed799f95bddcd3ffb3ac851b702bafeed9d<br>evidence/drv_rootcause.txt · 4,475 B<br>32d6e89d569bfa377c1130a464044c947fd503be845759cfc1f0cd9c251c7dcf<br>evidence/drv_fix_pilot.txt · 5,065 B<br>b67a197da8c234c707755ba41dd20bbc96e1b9e05905dbf5158f4daeb0716675<br>evidence/cts25.log · 20,148 B<br>3b1129de86ff8517cd6fca6b027f8ab403fc6df2e877aad3450cc3d1e37507e3<br>evidence/cts8.log · 5,322 B<br>1aa40f480db24a43f57d40d6b975f97a561db32e31ed3c50bff53b4efa2e5e36<br>evidence/drv_fix_routed.txt · 7,204 B<br>d08e23fe2fc94e5a1cb056e63cce7300cd2152948d5196237cbb60fbaaa079ac<br>evidence/cts9d80_adj.log · 27,498 B<br>1ffb8c6c42292230d848da5176fb5d8aaade1c7e10bf7b6466d81ca95eb67975<br>evidence/sta_cts9.log · 159,550 B<br>0931bfeea7efc11f22631b6a73c3de52878c179c8e06c533008a169d467be16b</div>
+    <div class="fp" style="margin-top:14px">evidence/lvs_new_pass.txt · 4,572 B<br>a3dd1f65f39b93bf20eefe2d5458efba3053d073cacdf5fe275f73b0113193ee<br>evidence/sta_est_compare.txt · 3,585 B（估算口径，已被取代）<br>e0b905155bdb1fcb4793feebc2570029536d69ed4abcd1e65d592ca3b694a221<br>evidence/sta_signoff_3corner.txt · 7,176 B<br>681637a543e750b338077d1ded658785f90cd198342277a78878c2e48f8bd2e2<br>evidence/sta_signoff_drv_3corner.txt · 6,686 B<br>8af0d95e2a966bf7f01a49275332ea2a503c28379aa65b10860e365218b897fa<br>evidence/sta3c_chk.log · 244,996 B<br>6e34a60a9205b7b39ad6f42b216c64ac0b6c0ef301b4a83fcdadc048686750e1<br>evidence/sta3c_chk_old.log · 217,799 B<br>8b9893df273506ec51a28b23c8931ed799f95bddcd3ffb3ac851b702bafeed9d<br>evidence/drv_rootcause.txt · 4,475 B<br>32d6e89d569bfa377c1130a464044c947fd503be845759cfc1f0cd9c251c7dcf<br>evidence/drv_fix_pilot.txt · 5,065 B<br>b67a197da8c234c707755ba41dd20bbc96e1b9e05905dbf5158f4daeb0716675<br>evidence/cts25.log · 20,148 B<br>3b1129de86ff8517cd6fca6b027f8ab403fc6df2e877aad3450cc3d1e37507e3<br>evidence/cts8.log · 5,322 B<br>1aa40f480db24a43f57d40d6b975f97a561db32e31ed3c50bff53b4efa2e5e36<br>evidence/drv_fix_routed.txt · 7,204 B<br>d08e23fe2fc94e5a1cb056e63cce7300cd2152948d5196237cbb60fbaaa079ac<br>evidence/cts9d80_adj.log · 27,498 B<br>1ffb8c6c42292230d848da5176fb5d8aaade1c7e10bf7b6466d81ca95eb67975<br>evidence/sta_cts9.log · 159,550 B<br>0931bfeea7efc11f22631b6a73c3de52878c179c8e06c533008a169d467be16b<br>evidence/cts9_route.txt · 710 B<br>de5d8a91e1c8e36f55e4e33edc1fbe966473d0a7d9e1f6a73f49ebf999ba3e32<br>evidence/cts9_cts.txt · 288 B<br>4d09b720220a0125efe446c6fbb2be7bbc83e9cd5c752ff431ab72fffdd9ca33<br>evidence/cts9_lvs.txt · 622 B<br>36b37506fc99d13cca0bebb73ad8e54d36fd038b60a267bdb2a9308e1a0f170d<br>evidence/cts9_sta3c.txt · 469 B<br>af75ba9599faedab25c24cd38e785e1d29b1e9385c6640d8b43a06990c5b8c8e<br>evidence/cts9_metrics.csv · 1,955 B<br>c33ea3177d7ac75ee086803df8aa519cea1cbac8774c6cc5fccada04461322aa</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>
 </div></section>

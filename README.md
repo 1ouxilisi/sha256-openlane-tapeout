@@ -13,6 +13,28 @@
 
 ---
 
+## 最新：整条 flow 重跑，0 违例与 LVS 第一次落在同一版（2026-11-08）
+
+前面那些数字是「分段补跑」拼出来的。这一次不再拼：把 CTS 聚类参数直接写进设计 config，整条 flow 从头跑一遍。
+
+**改了什么**：设计级 `config.tcl` 原本 50 行、2,111 B，里面没有 CTS 聚类那两行（`CTS_SINK_CLUSTERING_*` 只在 PDK 默认值里），所以「扇出压到 0」之前只在我手写的脚本里成立。这一版加了四行：`CTS_SINK_CLUSTERING_SIZE "9"`、`CTS_SINK_CLUSTERING_MAX_DIAMETER "80"`、`GRT_REPAIR_ANTENNAS "1"`、`RUN_KLAYOUT "0"`（KLayout 0.29.1 启动读 `/proc/<pid>/exe`，chroot 里必崩）。备份 `config.tcl.bak_20261108T0500`。
+
+**结果（全部来自同一次 run，tag `ctsfix3`）**：
+
+- **CTS 复现**：`logs/cts/15-cts.log` 第 1049 行聚类后 sink 248，第 1084 行扇出分布 `9:244, 10:2` —— 上界正好等于 SDC 的 `set_max_fanout 10`。
+- **详细布线 0 违例**：`logs/routing/26-detailed.log` 第 194/245/295/345/395/442/489/535/581 行，12,932 → 4,974 → 4,733 → 1,076 → 79 → 34 → 1 → 1 → **0**。
+- **GDS 40,396,222 B**，网表 3,379,950 B；走线 618,229 µm、过孔 117,592；47,559 个单元、利用率 46.20%、die 0.4096 mm²；runtime 37 分 21 秒。
+- **时序三 corner 全 MET**：setup **+0.51 / +0.74 / +0.99**、hold **+0.41 / +0.41 / +0.40**（Slowest / Typical / Fastest）。
+- **LVS 通过**：用 Magic 从这份 GDS 提取 SPICE，netgen 对同一次 run 的 `nl.v`，151 处叶子单元 `Netlists match uniquely`，顶层 `Cell pin lists are equivalent` + `Device classes … are equivalent`，原文 **`Final result: Circuits match uniquely.`** 两侧各 34,182 个顶层实例、36,256 个器件。
+
+**这次 LVS 卡了四轮，每一轮都是真缺陷，不是工具玄学**：① fill/tap 单元在版图里没有器件、`subckt` 是空的，实例却被 netgen 展平成「unmatched」，两侧一起去掉才对得上；② 电源引脚必须按版图口径连（`VNB→VGND`、`VPB→VPWR`），否则电源网扇出 31,740 对 15,870、报 13,961 个 `Net:` 片段；③ Magic 写出的网表在固定列宽折行、下一条以 `+` 起头，按行首数实例会数错；④ CTS 加的均衡负载 `clkload*` 输出悬空，版图侧被命名成 `clkload90/X`，网表侧若写成 `NC_Y` 这类常量名，178 个悬空输出会被归成一类、报 222 个 Net mismatch —— 两侧统一用「实例/引脚」命名后归零。
+
+**边界（必须一起读）**：`metrics.csv` 的 `flow_status` 是 **`flow failed`** —— 第 36 步「Magic Spice Export from LEF」在 chroot 里假死（15 分钟 CPU 只跑 17 秒、fd 停在 155 不增长），LVS 是我在 flow 之外用同一份 GDS 手跑出来的。所以 `lvs_total_errors`、`Magic_violations`、`pin_antenna_violations`、`net_antenna_violations`、`klayout_violations` 五列仍是 **`-1`（没跑，不是 0）**；KLayout DRC 与 GDS XOR 这一版没跑（XOR 被 flow 跳过，原文警告 `…klayout.gds wasn't found. Skipping GDS XOR.`）；天线与密度检查没跑到；功耗本版没取。**这一版第一次同时具备「0 违例」与「可交付 GDS + LVS 通过」，但仍不是签核。**
+
+证据：`docs/evidence/cts9_route.txt`（710 B）、`cts9_cts.txt`（288 B）、`cts9_lvs.txt`（622 B）、`cts9_sta3c.txt`（469 B）、`cts9_metrics.csv`（1,955 B，原文件未改一字节），逐字节指纹在 `docs/evidence/README.md` 与 `docs/numbers.html` 第六节。
+
+---
+
 ## 现状：天线已修，新版 LVS 已通过（2026-11-08）
 
 上面七代数字来自流水线自己跑完的那几轮。之后对 v7 又做了两件事，都在流水线之外单独跑，且都留了原始产出：

@@ -1,0 +1,10 @@
+# ctsfix3 三 corner 签核（报告目录 reports/signoff/{29,31,33}-sta-rcx_*）
+# corner 命名: rcx_max=Slowest  rcx_nom=Typical  rcx_min=Fastest
+
+corner          setup_worst_slack   hold_worst_slack
+Slowest(max)    +0.51 MET          +0.41 MET
+Typical(nom)    +0.74 MET          +0.41 MET
+Fastest(min)    +0.99 MET          +0.40 MET
+
+# 生成方式: 对 multi_corner_sta.max.rpt / .min.rpt 各取 3000 条路径里最小 slack
+# 违例条数: 三 corner 全部 0

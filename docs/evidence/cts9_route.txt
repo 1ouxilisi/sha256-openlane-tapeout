@@ -1,0 +1,17 @@
+# ctsfix3 详细布线违例收敛（logs/routing/26-detailed.log 原文行）
+# 格式: <行号>:<原文>
+194:[INFO DRT-0199]   Number of violations = 12932.
+245:[INFO DRT-0199]   Number of violations = 4974.
+295:[INFO DRT-0199]   Number of violations = 4733.
+345:[INFO DRT-0199]   Number of violations = 1076.
+395:[INFO DRT-0199]   Number of violations = 79.
+442:[INFO DRT-0199]   Number of violations = 34.
+489:[INFO DRT-0199]   Number of violations = 1.
+535:[INFO DRT-0199]   Number of violations = 1.
+581:[INFO DRT-0199]   Number of violations = 0.
+
+# 最终统计
+500:Total number of vias = 117590.
+546:Total number of vias = 117590.
+590:Total number of vias = 117592.
+612:Total number of vias = 117592.

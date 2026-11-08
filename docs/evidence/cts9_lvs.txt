@@ -1,0 +1,14 @@
+# ctsfix3 版图 vs 网表 netgen 结果
+# layout: Magic 从 results/signoff/sha256_axil.gds(40,396,222 B) 提取
+# schematic: results/routing/sha256_axil.nl.v (3,379,950 B) 转 SPICE
+
+叶子单元 match uniquely 计数: 151
+
+s_axil_awaddr[0]                           |s_axil_awaddr[0]                           
+s_axil_awaddr[1]                           |s_axil_awaddr[1]                           
+---------------------------------------------------------------------------------------
+Cell pin lists are equivalent.
+Device classes sha256_axil and sha256_axil are equivalent.
+
+Final result: Circuits match uniquely.
+.

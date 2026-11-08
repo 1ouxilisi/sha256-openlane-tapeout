@@ -34,6 +34,11 @@
 | `drv_fix_routed.txt` | 7,204 B | **DRV 修复跑到底：扇出归零 + 重布线 + 三 corner 复核**：CTS 聚类 size 9 / 直径 80 后扇出违例 **0**（最大扇出正好等于限值 10），面积 142,876 u²（比原配置 142,952 小 76），buffer 238 → 289；重布线（层调整 0.3）详细布线 0 违例、布线后扇出仍 0，走线 584,628 µm、过孔 104,134；三 corner 真 STA：setup +4.0576 / +11.0275 / +12.2001 全 MET，hold +0.4374 / +0.0820 / **−0.0391**（Fastest 一条），max fanout 与 cap 全 MET，max slew Slowest 剩 90 条（最差 1.04）。**同时公开撤回上一份「参数调不到 0」** | 本轮新增 |
 | `cts9d80_adj.log` | 27,498 B | 上述重布线原始日志：`DRT-0199 Number of violations = 0.` 在第 606 行，`== AFTER_ROUTE_FANOUT ==` 第 654 行（该段为空） | 原始输出 |
 | `sta_cts9.log` | 159,550 B | 修好版三 corner STA + DRV + 功耗 + 面积原始报告：setup/hold 六格在 1006–1037 行，`-- corner Slowest violators` 第 1064 行（90 个 max slew 块），`==DONE==` 第 1690 行 | 原始输出 |
+| `cts9_route.txt` | 710 B | **整条 flow 重跑版的布线收敛原文**：`logs/routing/26-detailed.log` 里 9 条 `DRT-0199 Number of violations =` 全列，带行号：194/245/295/345/395/442/489/535/581，序列 12,932 → 4,974 → 4,733 → 1,076 → 79 → 34 → 1 → 1 → **0** | 原样摘录 |
+| `cts9_cts.txt` | 288 B | 同一次 run 的 CTS 原文：第 1049 行聚类后 sink 248、第 1084 行扇出分布 `9:244, 10:2`（上界等于 SDC 限值 10） | 原样摘录 |
+| `cts9_lvs.txt` | 622 B | **这一版的 LVS 结论**：`Circuits match uniquely`、151 处叶子单元 `Netlists match uniquely`、顶层 pin 表与器件类等价 | 生成结果（netgen 原文截取） |
+| `cts9_sta3c.txt` | 469 B | 同一次 run 的三 corner 签核时序：Slowest +0.51/+0.41、Typical +0.74/+0.41、Fastest +0.99/+0.40（全 MET） | 生成结果 |
+| `cts9_metrics.csv` | 1,955 B | 同一次 run 的 `reports/metrics.csv` 原文件：0 违例五列全 0，`flow_status` 为 `flow failed`，五列 `-1` | 原样，未改一个字节 |
 | `drv_fix_pilot.txt` | 5,065 B | **DRV 修复试点（CTS 阶段）**：从 placement 重跑 CTS 只改聚类目标，143 → 9（原配置 25/50 重跑量到 143，与线上 signoff 的 143 逐条相同）；当时把残留 9 条归因到 `CTS-0032 Max number of sinks is 15` 这一工具内部判据——**该结论已被 `drv_fix_routed.txt` 推翻，本文件原样保留不改** | 本轮新增 |
 | `cts25.log` | 20,148 B | CTS 聚类 25/50（原配置）原始日志：`== AFTER_CTS_FANOUT ==` 段 143 条 | 本轮新增 |
 | `cts8.log` | 5,322 B | CTS 聚类 8/50 原始日志：同段 9 条，含 `CTS-0032 ... Max number of sinks is 15` 原文 | 本轮新增 |
@@ -79,6 +84,11 @@ b67a197da8c234c707755ba41dd20bbc96e1b9e05905dbf5158f4daeb0716675  drv_fix_pilot.
 d08e23fe2fc94e5a1cb056e63cce7300cd2152948d5196237cbb60fbaaa079ac  drv_fix_routed.txt
 1ffb8c6c42292230d848da5176fb5d8aaade1c7e10bf7b6466d81ca95eb67975  cts9d80_adj.log
 0931bfeea7efc11f22631b6a73c3de52878c179c8e06c533008a169d467be16b  sta_cts9.log
+de5d8a91e1c8e36f55e4e33edc1fbe966473d0a7d9e1f6a73f49ebf999ba3e32  cts9_route.txt
+4d09b720220a0125efe446c6fbb2be7bbc83e9cd5c752ff431ab72fffdd9ca33  cts9_cts.txt
+36b37506fc99d13cca0bebb73ad8e54d36fd038b60a267bdb2a9308e1a0f170d  cts9_lvs.txt
+af75ba9599faedab25c24cd38e785e1d29b1e9385c6640d8b43a06990c5b8c8e  cts9_sta3c.txt
+c33ea3177d7ac75ee086803df8aa519cea1cbac8774c6cc5fccada04461322aa  cts9_metrics.csv
 3b1129de86ff8517cd6fca6b027f8ab403fc6df2e877aad3450cc3d1e37507e3  cts25.log
 1aa40f480db24a43f57d40d6b975f97a561db32e31ed3c50bff53b4efa2e5e36  cts8.log
 304a4406735091a1425df27420ac6d395089c25bb655cfb248f8b720b4082683  lvs_attempt.txt
@@ -126,3 +136,15 @@ db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13  lvs_port_graph
 **结案（最新）**：`lvs_pass.txt`。两侧网名集合做差，真正多出来的只有 `VNB` / `VPB` 两个网——版图里井与衬底由 5,496 个 `tapvpwrvgnd_1` 直接接到 VPWR/VGND，Magic 提取时体端一律并到电源，而 `nl.v` 里这些 tap 单元引脚是空的、被转换器整批丢掉，于是这两个网在网表侧悬空。`47 = 43 + 4`（43 归 VNB/VPB，4 归 assign 漏读），两处都补之后：展平顶层 **166,353 个器件、84,178 条网两侧完全相等**，netgen 原文 `Netlists match uniquely` / `Final result: Circuits match uniquely`，全文 `(no matching pin)` 出现 0 次。口径写在明处：`VNB≡VGND`、`VPB≡VPWR`，叶子单元由 netgen 展平后再比，因此是「顶层晶体管级等价」。第 7 节把「把 tap 补回网表」这条等价路线**实跑完了**：PDK 的 `tapvpwrvgnd_1` 只有 `VGND VPWR` 两个脚、body 为空，补回 5,496 个之后仍是 47 行 `Netlists do not match`；强加 VNB/VPB 脚仍是 47 行。所以这条路线做不到，口径不是可选项而是由单元定义决定的唯一写法。
 
 已经补上的：**天线的版图已经修好了（布线级）**——补跑原本报 67 个 net / 87 个 pin 越限、`DiodeCells = 0`；后来查出前五次失败的根因是我手写脚本漏传 `global_route -allow_congestion`，补上后从 `22-global.odb` 出发三轮插 430 个二极管、复测 **0 / 0**，并流出新 GDS（18,618,660 B，`a58cdfea…`），在其上重跑 KLayout DRC（218 类 0 条）、密度（六层 0 条）、Magic DRC（`No errors found`）。**仍然缺的**：新版的功耗、GDS XOR、ERC、iRdrop、金属密度窗口都还没重跑（**LVS 已在新版通过**：`Circuits match uniquely`，两侧 15,588 器件 / 15,645 网，证据 `lvs_new_pass.txt`；**时序已补到 signoff 口径**：OpenROAD rcx 从 `fixed16.def` 提寄生（`-lef_res`，三份 RCX 规则各一份 SPEF）+ `ss_100C_1v60`/`tt_025C_1v80`/`ff_n40C_1v95` 三 corner，最差 setup +0.4058 ns / hold +0.4096 ns / TNS 0，证据 `sta_signoff_3corner.txt`；同一脚本在旧版产物上复现 +0.5619，口径对齐；早前那版估算口径 +9.8329 → +9.9243 已作废），所以旧版上的 XOR「21 层全一致」与所有 signoff 功耗数字仍只属于未修版；密度只跑了 PDK 的「最小空孔率」这一份 deck，各层金属密度窗口没跑；以及**每个标准单元内部逐管等价**（LVS 的口径是展平后的顶层晶体管级等价）。XOR 一致只说明两份产出相同，不等于两份都满足设计规则——DRC 那两份是各自单独跑的，天线更是另一套规则。
+
+## 整条 flow 重跑的那一版（tag `ctsfix3`，2026-11-08）
+
+前面那些文件是「分段补跑」拼出来的：时序一个 run、违例一个 run、LVS 又一个 run。这一组不一样，全部来自**同一次 OpenLane run**：
+
+- 同一份 GDS（40,396,222 B）先被 Magic 提取成 SPICE，再用 netgen 与同一次 run 写的 `nl.v`（3,379,950 B）比对，结论 `Circuits match uniquely`；
+- 同一次 run 的 detailed routing 收在 0 违例；
+- 同一次 run 的 RCX 三 corner STA 全部 MET。
+
+要说清的边界：flow 自己在第 36 步「Magic Spice Export from LEF」假死（chroot 环境限制），所以 `metrics.csv` 的 `flow_status` 是 `flow failed`，`lvs_total_errors` / `Magic_violations` / `pin_antenna_violations` / `net_antenna_violations` / `klayout_violations` 五列仍是 `-1`——那是**没跑**，不是 0。LVS 是在 flow 之外、用同一份 GDS 手跑出来的；KLayout DRC、GDS XOR、天线与密度检查这一版都没跑。
+
+这一版第一次让「布线 0 违例」和「可交付 GDS + LVS 通过」落在同一个版本上，但仍不是签核：缺 DRC、天线、密度、XOR 四项。
