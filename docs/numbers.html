@@ -261,6 +261,7 @@ check_antennas -verbose
     <p class="note"><b>前面四组对照全军覆没，原因不在版图，在我的三个工具动作</b>：① 按行删物理单元时没处理 SPICE 的 <code>+</code> 续行，两侧删得不一样多（15,588 vs 15,839）；② 只在网表侧合并 <code>VPB→VPWR</code>、<code>VNB→VGND</code>，版图侧没动，于是每单元假性少 2 网；③ 我的 verilog→spice 脚本把总线压成一个网、又丢掉四条 <code>assign s_axil_bresp[0] = net389;</code> 这种端口别名，顶层端口 18 个对 97 个，netgen 直接报 <code>Top level cell failed pin matching</code>。再加上 <code>write_verilog</code> 根本不写电源脚（<code>.VGND(</code> 出现 0 次），必须按物理事实把 PG 脚接到全局轨、其余真悬空脚按实例唯一命名（206 个）。这四条改对，就过了。</p>
     <p class="note"><b>收回上一版的「边界」说法</b>：上一次写「失败只在顶层、卡在物理单元口径与衬底网命名」，方向对了一半——真实原因是上面这些可修的动作，不是不可调和的「口径」。上一版那句「150 个叶子单元 match、只有顶层不齐」仍然成立，只是现在顶层也齐了。</p>
     <p class="note">全链复现（脚本、命令行、四个中间文件、字节数与 md5）写在 <a href="evidence/lvs_new_pass.txt">evidence/lvs_new_pass.txt</a>。<b>它证明什么、不证明什么</b>也在里面：证明的是展平后晶体管级等价 + 149 个单元等价；不证明 RCX/STA/功耗/XOR/ERC/金属密度，也不把「布线级修好」升级成「可交付流片」。</p>
+    <figure style="margin:14px 0 0"><img src="images/sha256_lvs_pass_layout.png" alt="天线已修、LVS 已通过那版 GDS 的金属层渲染" style="width:100%;border-radius:8px;border:1px solid var(--line)" loading="lazy"><figcaption class="note" style="margin-top:6px">上面就是这一版的金属层渲染：<code>fixed15.gds</code>，16,621,738 B，2,014,852 个多边形，bbox 0,0 – 640,640 µm。LVS 用的正是这份文件，KLayout DRC 与密度、Magic DRC 也是在这份上跑的。</figcaption></figure>
   </div>
 
   <div class="box bad">
