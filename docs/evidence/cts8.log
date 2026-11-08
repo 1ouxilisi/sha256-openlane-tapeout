@@ -1,0 +1,151 @@
+/nix/store/306znyj77fv49kwnkpxmb0j2znqpa8bj-bash-5.2p26/bin/bash: warning: setlocale: LC_ALL: cannot change locale (en_US.UTF-8)
+[INFO ODB-0227] LEF file: /designs/sha256_v7b/runs/tapeout16/tmp/merged.max.lef, created 13 layers, 25 vias, 441 library cells
+[INFO ODB-0127] Reading DEF file: /designs/sha256_v7b/runs/tapeout16/results/placement/sha256_axil.def
+[INFO ODB-0128] Design: sha256_axil
+[INFO ODB-0130]     Created 98 pins.
+[INFO ODB-0131]     Created 17813 components and 105472 component-terminals.
+[INFO ODB-0132]     Created 2 special nets and 60260 connections.
+[INFO ODB-0133]     Created 11918 nets and 45208 connections.
+[INFO ODB-0134] Finished DEF file: /designs/sha256_v7b/runs/tapeout16/results/placement/sha256_axil.def
+== BEFORE_CTS_FANOUT ==
+max fanout
+
+Pin clk  
+max fanout     10
+fanout       2205
+-----------------
+Slack       -2195 (VIOLATED)
+
+[INFO CTS-0050] Root buffer is sky130_fd_sc_hd__clkbuf_16.
+[INFO CTS-0051] Sink buffer is sky130_fd_sc_hd__clkbuf_2.
+[INFO CTS-0052] The following clock buffers will be used for CTS:
+                    sky130_fd_sc_hd__clkbuf_2
+                    sky130_fd_sc_hd__clkbuf_4
+                    sky130_fd_sc_hd__clkbuf_8
+[INFO CTS-0049] Characterization buffer is sky130_fd_sc_hd__clkbuf_8.
+[INFO CTS-0007] Net "clk" found for clock "clk".
+[INFO CTS-0010]  Clock net "clk" has 2205 sinks.
+[INFO CTS-0008] TritonCTS found 1 clock nets.
+[INFO CTS-0097] Characterization used 3 buffer(s) types.
+[INFO CTS-0200] 0 placement blockages have been identified.
+[INFO CTS-0201] 0 placed hard macros will be treated like blockages.
+[INFO CTS-0027] Generating H-Tree topology for net clk.
+[INFO CTS-0028]  Total number of sinks: 2205.
+[INFO CTS-0029]  Sinks will be clustered in groups of up to 8 and with maximum cluster diameter of 50.0 um.
+[INFO CTS-0030]  Number of static layers: 0.
+[INFO CTS-0020]  Wire segment unit: 13600  dbu (13 um).
+[INFO CTS-0204] A clustering solution was found from clustering size of 8 and clustering diameter of 50.
+[INFO CTS-0205] Better solution may be possible if either -sink_clustering_size, -sink_clustering_max_diameter, or both options are omitted to enable automatic clustering.
+[INFO CTS-0019]  Total number of sinks after clustering: 300.
+[INFO CTS-0024]  Normalized sink region: [(1.34642, 7.3739), (45.8817, 41.6739)].
+[INFO CTS-0025]     Width:  44.5352.
+[INFO CTS-0026]     Height: 34.3000.
+ Level 1
+    Direction: Horizontal
+    Sinks per sub-region: 150
+    Sub-region size: 22.2676 X 34.3000
+[INFO CTS-0034]     Segment length (rounded): 12.
+ Level 2
+    Direction: Vertical
+    Sinks per sub-region: 75
+    Sub-region size: 22.2676 X 17.1500
+[INFO CTS-0034]     Segment length (rounded): 8.
+ Level 3
+    Direction: Horizontal
+    Sinks per sub-region: 38
+    Sub-region size: 11.1338 X 17.1500
+[INFO CTS-0034]     Segment length (rounded): 6.
+ Level 4
+    Direction: Vertical
+    Sinks per sub-region: 19
+    Sub-region size: 11.1338 X 8.5750
+[INFO CTS-0034]     Segment length (rounded): 4.
+ Level 5
+    Direction: Horizontal
+    Sinks per sub-region: 10
+    Sub-region size: 5.5669 X 8.5750
+[INFO CTS-0034]     Segment length (rounded): 2.
+[INFO CTS-0032]  Stop criterion found. Max number of sinks is 15.
+[INFO CTS-0035]  Number of sinks covered: 300.
+[INFO CTS-0018]     Created 338 clock buffers.
+[INFO CTS-0012]     Minimum number of buffers in the clock path: 3.
+[INFO CTS-0013]     Maximum number of buffers in the clock path: 4.
+[INFO CTS-0015]     Created 338 clock nets.
+[INFO CTS-0016]     Fanout distribution for the current clock = 2:4, 3:3, 4:6, 5:15, 6:21, 7:27, 8:228, 9:8, 10:13, 11:3, 12:1..
+[INFO CTS-0017]     Max level of the clock tree: 5.
+[INFO CTS-0098] Clock net "clk"
+[INFO CTS-0099]  Sinks 2454
+[INFO CTS-0100]  Leaf buffers 297
+[INFO CTS-0101]  Average sink wire length 980.34 um
+[INFO CTS-0102]  Path depth 3 - 4
+[INFO CTS-0207]  Leaf load cells 249
+[WARNING DPL-0037] Use remove_fillers before detailed placement.
+Placement Analysis
+---------------------------------
+total displacement       2193.9 u
+average displacement        0.1 u
+max displacement            8.3 u
+original HPWL          457894.6 u
+legalized HPWL         466156.3 u
+delta HPWL                    2 %
+
+== AFTER_CTS_FANOUT ==
+max fanout
+
+Pin clkbuf_5_14__f_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_5_0__f_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_5_13__f_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_5_15__f_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_5_16__f_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_5_1__f_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_5_25__f_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_5_27__f_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_5_2__f_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+== AFTER_CTS_SLEW ==
+== CELLCOUNT ==
+Design area 143458 u^2 37% utilization.

@@ -1,0 +1,950 @@
+/nix/store/306znyj77fv49kwnkpxmb0j2znqpa8bj-bash-5.2p26/bin/bash: warning: setlocale: LC_ALL: cannot change locale (en_US.UTF-8)
+[INFO ODB-0227] LEF file: /designs/sha256_v7b/runs/tapeout16/tmp/merged.max.lef, created 13 layers, 25 vias, 441 library cells
+[INFO ODB-0127] Reading DEF file: /designs/sha256_v7b/runs/tapeout16/results/placement/sha256_axil.def
+[INFO ODB-0128] Design: sha256_axil
+[INFO ODB-0130]     Created 98 pins.
+[INFO ODB-0131]     Created 17813 components and 105472 component-terminals.
+[INFO ODB-0132]     Created 2 special nets and 60260 connections.
+[INFO ODB-0133]     Created 11918 nets and 45208 connections.
+[INFO ODB-0134] Finished DEF file: /designs/sha256_v7b/runs/tapeout16/results/placement/sha256_axil.def
+== BEFORE_CTS_FANOUT ==
+max fanout
+
+Pin clk  
+max fanout     10
+fanout       2205
+-----------------
+Slack       -2195 (VIOLATED)
+
+[INFO CTS-0050] Root buffer is sky130_fd_sc_hd__clkbuf_16.
+[INFO CTS-0051] Sink buffer is sky130_fd_sc_hd__clkbuf_2.
+[INFO CTS-0052] The following clock buffers will be used for CTS:
+                    sky130_fd_sc_hd__clkbuf_2
+                    sky130_fd_sc_hd__clkbuf_4
+                    sky130_fd_sc_hd__clkbuf_8
+[INFO CTS-0049] Characterization buffer is sky130_fd_sc_hd__clkbuf_8.
+[INFO CTS-0007] Net "clk" found for clock "clk".
+[INFO CTS-0010]  Clock net "clk" has 2205 sinks.
+[INFO CTS-0008] TritonCTS found 1 clock nets.
+[INFO CTS-0097] Characterization used 3 buffer(s) types.
+[INFO CTS-0200] 0 placement blockages have been identified.
+[INFO CTS-0201] 0 placed hard macros will be treated like blockages.
+[INFO CTS-0027] Generating H-Tree topology for net clk.
+[INFO CTS-0028]  Total number of sinks: 2205.
+[INFO CTS-0029]  Sinks will be clustered in groups of up to 25 and with maximum cluster diameter of 50.0 um.
+[INFO CTS-0030]  Number of static layers: 0.
+[INFO CTS-0020]  Wire segment unit: 13600  dbu (13 um).
+[INFO CTS-0204] A clustering solution was found from clustering size of 25 and clustering diameter of 50.
+[INFO CTS-0205] Better solution may be possible if either -sink_clustering_size, -sink_clustering_max_diameter, or both options are omitted to enable automatic clustering.
+[INFO CTS-0019]  Total number of sinks after clustering: 214.
+[INFO CTS-0024]  Normalized sink region: [(1.39747, 7.47304), (45.598, 41.2239)].
+[INFO CTS-0025]     Width:  44.2006.
+[INFO CTS-0026]     Height: 33.7509.
+ Level 1
+    Direction: Horizontal
+    Sinks per sub-region: 107
+    Sub-region size: 22.1003 X 33.7509
+[INFO CTS-0034]     Segment length (rounded): 12.
+ Level 2
+    Direction: Vertical
+    Sinks per sub-region: 54
+    Sub-region size: 22.1003 X 16.8754
+[INFO CTS-0034]     Segment length (rounded): 8.
+ Level 3
+    Direction: Horizontal
+    Sinks per sub-region: 27
+    Sub-region size: 11.0501 X 16.8754
+[INFO CTS-0034]     Segment length (rounded): 6.
+ Level 4
+    Direction: Vertical
+    Sinks per sub-region: 14
+    Sub-region size: 11.0501 X 8.4377
+[INFO CTS-0034]     Segment length (rounded): 4.
+[INFO CTS-0032]  Stop criterion found. Max number of sinks is 15.
+[INFO CTS-0035]  Number of sinks covered: 214.
+[INFO CTS-0018]     Created 238 clock buffers.
+[INFO CTS-0012]     Minimum number of buffers in the clock path: 3.
+[INFO CTS-0013]     Maximum number of buffers in the clock path: 4.
+[INFO CTS-0015]     Created 238 clock nets.
+[INFO CTS-0016]     Fanout distribution for the current clock = 2:6, 3:2, 4:2, 5:11, 6:12, 7:17, 8:20, 9:16, 10:29, 11:24, 12:18, 13:18, 14:23, 15:11, 16:7, 17:6, 18:2, 19:4, 25:1..
+[INFO CTS-0017]     Max level of the clock tree: 4.
+[INFO CTS-0098] Clock net "clk"
+[INFO CTS-0099]  Sinks 2407
+[INFO CTS-0100]  Leaf buffers 213
+[INFO CTS-0101]  Average sink wire length 996.56 um
+[INFO CTS-0102]  Path depth 3 - 4
+[INFO CTS-0207]  Leaf load cells 202
+[WARNING DPL-0037] Use remove_fillers before detailed placement.
+Placement Analysis
+---------------------------------
+total displacement       1843.9 u
+average displacement        0.1 u
+max displacement            8.9 u
+original HPWL          454245.7 u
+legalized HPWL         462777.0 u
+delta HPWL                    2 %
+
+== AFTER_CTS_FANOUT ==
+max fanout
+
+Pin clkbuf_leaf_60_clk/X  
+max fanout     10
+fanout         25
+-----------------
+Slack         -15 (VIOLATED)
+
+Pin clkbuf_leaf_66_clk/X  
+max fanout     10
+fanout         20
+-----------------
+Slack         -10 (VIOLATED)
+
+Pin clkbuf_leaf_67_clk/X  
+max fanout     10
+fanout         20
+-----------------
+Slack         -10 (VIOLATED)
+
+Pin clkbuf_leaf_144_clk/X  
+max fanout     10
+fanout         19
+-----------------
+Slack          -9 (VIOLATED)
+
+Pin clkbuf_leaf_187_clk/X  
+max fanout     10
+fanout         19
+-----------------
+Slack          -9 (VIOLATED)
+
+Pin clkbuf_leaf_125_clk/X  
+max fanout     10
+fanout         18
+-----------------
+Slack          -8 (VIOLATED)
+
+Pin clkbuf_leaf_202_clk/X  
+max fanout     10
+fanout         18
+-----------------
+Slack          -8 (VIOLATED)
+
+Pin clkbuf_leaf_37_clk/X  
+max fanout     10
+fanout         18
+-----------------
+Slack          -8 (VIOLATED)
+
+Pin clkbuf_leaf_41_clk/X  
+max fanout     10
+fanout         18
+-----------------
+Slack          -8 (VIOLATED)
+
+Pin clkbuf_leaf_102_clk/X  
+max fanout     10
+fanout         17
+-----------------
+Slack          -7 (VIOLATED)
+
+Pin clkbuf_leaf_121_clk/X  
+max fanout     10
+fanout         17
+-----------------
+Slack          -7 (VIOLATED)
+
+Pin clkbuf_leaf_36_clk/X  
+max fanout     10
+fanout         17
+-----------------
+Slack          -7 (VIOLATED)
+
+Pin clkbuf_leaf_44_clk/X  
+max fanout     10
+fanout         17
+-----------------
+Slack          -7 (VIOLATED)
+
+Pin clkbuf_leaf_45_clk/X  
+max fanout     10
+fanout         17
+-----------------
+Slack          -7 (VIOLATED)
+
+Pin clkbuf_leaf_56_clk/X  
+max fanout     10
+fanout         17
+-----------------
+Slack          -7 (VIOLATED)
+
+Pin clkbuf_leaf_70_clk/X  
+max fanout     10
+fanout         17
+-----------------
+Slack          -7 (VIOLATED)
+
+Pin clkbuf_leaf_0_clk/X  
+max fanout     10
+fanout         16
+-----------------
+Slack          -6 (VIOLATED)
+
+Pin clkbuf_leaf_131_clk/X  
+max fanout     10
+fanout         16
+-----------------
+Slack          -6 (VIOLATED)
+
+Pin clkbuf_leaf_135_clk/X  
+max fanout     10
+fanout         16
+-----------------
+Slack          -6 (VIOLATED)
+
+Pin clkbuf_leaf_162_clk/X  
+max fanout     10
+fanout         16
+-----------------
+Slack          -6 (VIOLATED)
+
+Pin clkbuf_leaf_16_clk/X  
+max fanout     10
+fanout         16
+-----------------
+Slack          -6 (VIOLATED)
+
+Pin clkbuf_leaf_211_clk/X  
+max fanout     10
+fanout         16
+-----------------
+Slack          -6 (VIOLATED)
+
+Pin clkbuf_leaf_38_clk/X  
+max fanout     10
+fanout         16
+-----------------
+Slack          -6 (VIOLATED)
+
+Pin clkbuf_leaf_54_clk/X  
+max fanout     10
+fanout         16
+-----------------
+Slack          -6 (VIOLATED)
+
+Pin clkbuf_leaf_65_clk/X  
+max fanout     10
+fanout         16
+-----------------
+Slack          -6 (VIOLATED)
+
+Pin clkbuf_leaf_88_clk/X  
+max fanout     10
+fanout         16
+-----------------
+Slack          -6 (VIOLATED)
+
+Pin clkbuf_leaf_8_clk/X  
+max fanout     10
+fanout         16
+-----------------
+Slack          -6 (VIOLATED)
+
+Pin clkbuf_4_11__f_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_4_8__f_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_4_9__f_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_123_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_142_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_152_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_160_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_165_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_170_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_177_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_206_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_21_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_42_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_46_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_48_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_50_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_59_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_79_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_91_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_96_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_leaf_97_clk/X  
+max fanout     10
+fanout         15
+-----------------
+Slack          -5 (VIOLATED)
+
+Pin clkbuf_4_10__f_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_4_14__f_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_4_15__f_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_4_2__f_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_4_3__f_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_4_4__f_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_4_7__f_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_104_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_107_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_110_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_138_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_164_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_176_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_179_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_189_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_208_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_210_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_39_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_51_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_leaf_89_clk/X  
+max fanout     10
+fanout         14
+-----------------
+Slack          -4 (VIOLATED)
+
+Pin clkbuf_4_0__f_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_4_12__f_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_4_13__f_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_4_1__f_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_4_5__f_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_103_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_11_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_120_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_134_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_154_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_158_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_167_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_172_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_191_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_19_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_22_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_25_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_27_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_40_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_61_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_68_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_73_clk/X  
+max fanout     10
+fanout         13
+-----------------
+Slack          -3 (VIOLATED)
+
+Pin clkbuf_leaf_100_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_109_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_115_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_119_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_122_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_12_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_140_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_159_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_169_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_186_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_198_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_1_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_204_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_212_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_213_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_23_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_26_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_2_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_31_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_57_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_63_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_71_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_80_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_leaf_87_clk/X  
+max fanout     10
+fanout         12
+-----------------
+Slack          -2 (VIOLATED)
+
+Pin clkbuf_4_6__f_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_10_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_111_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_112_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_113_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_124_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_129_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_132_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_137_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_145_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_149_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_151_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_171_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_181_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_18_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_190_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_205_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_32_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_3_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_4_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_55_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_58_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_5_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_6_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_7_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_92_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_95_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_98_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+Pin clkbuf_leaf_99_clk/X  
+max fanout     10
+fanout         11
+-----------------
+Slack             (VIOLATED)
+
+== AFTER_CTS_SLEW ==
+== CELLCOUNT ==
+Design area 142952 u^2 37% utilization.

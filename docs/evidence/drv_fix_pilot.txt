@@ -1,0 +1,80 @@
+DRV 修复试点：CTS 阶段实测 143 → 9，剩下的 9 条卡在工具自己的停止判据上
+=================================================================
+
+一句话结论
+----------
+根因那一份（drv_rootcause.txt）说：配置把时钟树扇出目标设成 16 / sink 聚类 25，而 SDC 卡 10。
+这一份是去真的改它：从 placement 阶段重跑 CTS，把聚类目标压到 8。
+实测扇出违例 143 → 9（−94%），面积 +506 u^2（+0.35%）。
+而剩下那 9 条不再是参数问题——CTS 内部把叶子簇停在「最多 15 个 sink」，
+15 > 10，所以这套 flow 用参数永远到不了 0。要把最后 9 条清掉，必须自己插 buffer
+（本版 OpenROAD 没给 insert_buffer 命令，实测 STA-0160: no commands match 'insert_buffer'），
+或者把 max_fanout 约束明确改成 15 并在页面上写清楚为什么。
+
+方法（可复算）
+-------------
+每条都从同一份输入起跑，只改 CTS 的聚类参数：
+  read_lef  /designs/sha256_v7b/runs/tapeout16/tmp/merged.max.lef
+  read_liberty sky130_fd_sc_hd__ss_100C_1v60.lib
+  read_def  /designs/sha256_v7b/runs/tapeout16/results/placement/sha256_axil.def
+  read_sdc  /designs/sha256_v7b/runs/tapeout16/tmp/20-sha256_axil.sdc
+  set_wire_rc -clock -layer met2 ; set_propagated_clock [all_clocks]
+  clock_tree_synthesis -buf_list {clkbuf_8 clkbuf_4 clkbuf_2} -root_buf clkbuf_16 \
+      -sink_clustering_enable -sink_clustering_size N -sink_clustering_max_diameter D
+  detailed_placement
+  report_check_types -max_fanout -violators -verbose
+五个脚本：cts25.tcl（N=25,D=50 原配置）、cts8.tcl（8,50）、cts6.tcl（6,50）、
+cts8d20.tcl（8,20）、cts8d12.tcl（8,12）。输入 2205 个时序 sink，单一时钟 clk。
+
+五组实测
+--------
+| 聚类 N / 直径 D | 扇出违例（CTS 后立即量） | 时钟 buffer 数 | 布局面积 u^2 | 说明 |
+|---|---|---|---|---|
+| 25 / 50（原配置） | 143 | 238 | 142,952 | 与已上线那一版 signoff 量到的 143 逐条相同 |
+|  8 / 50 | **9** | 338 | 143,458 | 本轮最好；违例扇出 11–12 |
+|  6 / 50 | 31 | 419 | 144,406 | 更小反而更差 |
+|  8 / 20 | 57 | 725 | 149,119 | 直径压小 → 簇变多 → 上层 buffer 扇出反而超 |
+|  8 / 12 | 68 | 895 | 150,283 | 同上，且面积 +5% |
+
+原配置那一行是决定性的：用同一份 config 的 25/50 重跑，量到 143——
+和线上那版在布线后、用 RCX SPEF 做真 STA 量到的 143 一模一样。
+扇出违例是拓扑量（数一个引脚挂了多少个负载），不随布线漂移，所以
+「两边同为 143」正好把根因钉死：这批违例的条数由时钟树叶子的扇出结构决定，
+不是布线质量造成的。
+
+为什么只有 9、不是 0：工具自己的停止判据
+--------------------------------------
+每组日志里都有同一行：
+  [INFO CTS-0032]  Stop criterion found. Max number of sinks is 15.
+这就是上限：CTS 把叶子簇一直切到「每个簇不超过 15 个 sink」就停，
+不再往下切。15 > SDC 的 10，所以无论聚类参数怎么调，总会剩几条 11–15 的叶子。
+五组数据都证实这点：直径从 50 压到 12，buffer 从 338 涨到 895、面积涨 5%，
+违例却从 9 涨到 68——不是参数没调好，是这条判据在 15 上封顶。
+
+它证明什么
+----------
+1. 根因判断成立：同一份 config 重跑能重现 143，改聚类目标能把它降到 9。
+2. 修这个数是有效的，代价可量：面积 +0.35%、时钟 buffer 238 → 338（+100 个）。
+3. 剩下 9 条不是参数可解，是工具停止判据（15）高于约束（10）。
+
+它不证明什么
+------------
+- **没有重布线**。这是 CTS 后立刻量、在 placement 层面量的结果，不是 signoff。
+  这 9 条在真实布线后是否仍为 9、以及修完之后的 setup/hold 会变成多少，必须重跑
+  全局布线 + 详细布线 + RCX 提取 + 三 corner STA 才知道。本轮没跑。
+- **slew 没有可信读数**。没有 SPEF 就没有连线延迟，`report_check_types -max_slew`
+  在这种条件下报 MET 是假的宽容，不能当作 slew 已清。上一版 signoff 量的 255 条
+  slew 违例是否被这次 CTS 改善，本轮无法回答。
+- **面积不能和 signoff 的 178,778 u^2 直接比**。这里是 placement 阶段 util 37% 的
+  design area，分母不同，只用于比较这五组之间的相对代价。
+- 不证明 15 是唯一封顶处：只核对了时钟树这一路，数据路径上的扇出违例（92 条非叶
+  子 pin）没在这一轮单独归因。
+- 不证明把约束改成 15 是正确做法：那是「改文档去匹配工具」还是「改工具去匹配文档」，
+  取决于这颗芯片最终按谁签核，本轮不做主张。
+
+复现命令
+--------
+  sudo chroot $R <bash> -c "export LANG=C LC_ALL=C; exec <openroad> -no_init -no_splash \
+      -exit /tmp/signoff_new/cts8.tcl" > $R/tmp/signoff_new/cts8.log 2>&1
+  计数口径：日志中 `== AFTER_CTS_FANOUT ==` 与 `== AFTER_CTS_SLEW ==` 之间、
+  每个以 `Pin ` 起头的块计一条。
