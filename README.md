@@ -19,6 +19,7 @@
 
 - **天线**：本 run 的 `GRT_REPAIR_ANTENNAS = 0`，流水线出图后天线一项没做。我拿流水线的 OpenROAD 补跑 `check_antennas`，原报 **67 net / 87 pin 越限**；从 `22-global.odb` 出发、补上我前几次手写脚本漏传的 `global_route -allow_congestion` 后，三轮共插 **430 个二极管**，布后复测 **0 / 0**，流出新 GDS **18,618,660 B**（sha256 `a58cdfea…`）。
 - **新版签核**：在这两版新 GDS 上重跑 KLayout signoff DRC（**218 类 0 条**）、金属密度（**六层 0 条**）、Magic DRC（`No errors found`）；再用 Magic 从 GDS 提取晶体管级网表、netgen 与 OpenROAD 网表比对，原文 **`Final result: Circuits match uniquely.`**，两侧 **15,588 个器件 / 15,645 条网**相等，149 个叶子单元逐个 `Netlists match uniquely`。
+- **时序有没有被做坏**：没跑 RCX/SPEF，所以不是 signoff。用同一估算口径（`tt_025C_1v80` 单角 + `estimate_parasitics -global_routing`）对原版 `25-fill.odb` 与新布线 `fixed16.odb` 各跑一次：worst setup **+9.8329 → +9.9243 ns**、hold **+0.6247 → +0.6274 ns**，TNS 均为 0——插 430 个二极管并重新布线没有把时序做坏。注意新版不是「原版 + 二极管」，这个差值是整条重布线动作的净效果。证据：`docs/evidence/sta_est_compare.txt`。
 - **边界**：新版只到「**布线级修好**」，不是可交付流片版本——`RCX/STA`、功耗、`GDS XOR` 都还没在这一版重跑，上表全部时序 / 功耗 / 频率数字仍属**未修版**，不能挂到新版图上。先前四组 LVS 对照的失败是我自己的三个工具动作错了（`+` 续行没拼、只在网表侧并体端网、端口转换丢了总线位名与 4 条 `assign` 别名），不是版图不等价，已在页面上公开撤回。
 
 证据：`docs/evidence/antenna_repair_route_fixed.txt`（6,164 B，含前五次失败与真因）、`docs/evidence/antenna_repair_attempt.txt`（4,006 B，第一次插二极管的失败记录）、`docs/evidence/lvs_new_pass.txt`（4,572 B，附复现链与 md5）、`docs/evidence/lvs_top_level_gap.txt`（4,692 B，失败阶段的口径记录）。逐条数字追原文的页面：<https://1ouxilisi.github.io/sha256-openlane-tapeout/numbers.html>。
