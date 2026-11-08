@@ -145,6 +145,6 @@ db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13  lvs_port_graph
 - 同一次 run 的 detailed routing 收在 0 违例；
 - 同一次 run 的 RCX 三 corner STA 全部 MET。
 
-要说清的边界：flow 自己在第 36 步「Magic Spice Export from LEF」假死（chroot 环境限制），所以 `metrics.csv` 的 `flow_status` 是 `flow failed`，`lvs_total_errors` / `Magic_violations` / `pin_antenna_violations` / `net_antenna_violations` / `klayout_violations` 五列仍是 `-1`——那是**没跑**，不是 0。LVS 是在 flow 之外、用同一份 GDS 手跑出来的；KLayout DRC、GDS XOR、天线与密度检查这一版都没跑。
+要说清的边界：flow 自己在第 36 步「Magic Spice Export from LEF」假死（chroot 环境限制），所以 `metrics.csv` 的 `flow_status` 是 `flow failed`，`lvs_total_errors` / `Magic_violations` / `pin_antenna_violations` / `net_antenna_violations` / `klayout_violations` 五列仍是 `-1`——那是**没跑**，不是 0。LVS 是在 flow 之外、用同一份 GDS 单独跑出来的，现已固化成仓库 `tools/lvs/run_lvs.sh` 一条命令（`bash tools/lvs/run_lvs.sh <run目录> sha256_axil`，末行 `LVS PASS`；两侧各 34,182 个实例、94 个端口，实跑数字见 `tools/lvs/EXPECTED.txt`）；KLayout DRC、GDS XOR、天线与密度检查这一版都没跑。
 
 这一版第一次让「布线 0 违例」和「可交付 GDS + LVS 通过」落在同一个版本上，但仍不是签核：缺 DRC、天线、密度、XOR 四项。

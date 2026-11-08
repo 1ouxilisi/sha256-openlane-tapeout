@@ -374,6 +374,7 @@ check_antennas -verbose
       <li><b>悬空引脚要用「实例/引脚」命名</b>。CTS 加的均衡负载 <code>clkload*</code> 输出在版图里是悬空网，Magic 把它命名成 <code>clkload90/X</code>；网表侧如果写 <code>NC_Y</code> 这样的常量名，netgen 会把 178 个悬空输出归成同一个类，于是报 <b>222 个 Net mismatch</b>。把网表侧未连引脚也按 <code>实例/引脚</code> 命名，两侧一一对上，<b>222 归零</b>。</li>
     </ul>
     <p class="note">这四条都是实跑出来的，不是推的：每一条都先看到具体计数不一致，再定位到具体成因，改完再跑一次。上一版页面里「LVS 通过」是另一套口径（<code>VNB≡VGND</code> 全局替换 + 展平），这一版是<b>逐实例口径</b>，同一个结论，更硬的证据。</p>
+    <p class="note"><b>这四条现在不是手工步骤，是一条命令</b>：<code>bash tools/lvs/run_lvs.sh &lt;run目录&gt; sha256_axil</code>，只要 flow 产出的 <code>results/signoff/sha256_axil.gds</code> 与 <code>results/routing/sha256_axil.nl.v</code>，末行打 <code>LVS PASS</code>。从 GDS 起到 <code>Circuits match uniquely</code> 实跑过一遍：Magic 提取约 4 分钟、netgen 约 1 分钟；版图侧拼回 1,839 行续行、还原 6,270 行转义，网表侧从 47,559 个实例里删 13,377 个 fill/tap、端口 98 → 94，两侧各 34,182 个实例。<b>一处如实写明</b>：单元 <code>.subckt</code> 的端口顺序会随提取来源（<code>.mag</code> 还是 <code>gds read</code>）浮动，所以新提取的 <code>layout.ext.spice</code> 与归档件的 <code>sha256</code> 不同（名字、数量、拓扑与结论都相同）。脚本与逐项数字在仓库 <code>tools/lvs/</code>，方法说明在 <code>REPRODUCE.md</code> 第三节。</p>
   </div>
 
   <div class="box warn">
