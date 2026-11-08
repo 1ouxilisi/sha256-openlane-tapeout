@@ -1,0 +1,72 @@
+DRV 违例根因：这份 run 的配置自己跟自己对不上（扇出目标 16/25 vs SDC 卡 10）
+=====================================================================
+
+结论
+----
+上一份证据（sta_signoff_drv_3corner.txt）只说了「违例有多少、新旧各多少」。
+这一份说清「为什么必然违例」，并且是可以被人拿两行配置当场对出来的：
+这个 run 要求 max_fanout ≤ 10，同时又把时钟树的扇出目标设成 16、sink 聚类上限设成 25。
+时钟树按 16–25 造，SDC 按 10 查——那么时钟叶子 buffer 一条都过不了，是必然结果，
+不是布线质量差，也不是我修天线修坏的。
+
+四处原文，任何人可复核
+--------------------
+文件 A：designs/sha256_v7b/runs/tapeout16/config.tcl
+  第  10 行  set ::env(CLOCK_BUFFER_FANOUT)      "16"
+  第  29 行  set ::env(CTS_SINK_CLUSTERING_SIZE) "25"
+  第 207 行  set ::env(MAX_FANOUT_CONSTRAINT)    "10"
+  第 209 行  set ::env(MAX_TRANSITION_CONSTRAINT) "0.75"
+文件 B：designs/sha256_v7b/runs/tapeout16/tmp/20-sha256_axil.sdc（由上面 207/209 生成）
+  第 212 行  set_max_transition 0.7500 [current_design]
+  第 213 行  set_max_fanout     10.0000 [current_design]
+
+链条：第 207 行 → 生成 SDC 第 213 行 → 检查卡 10；
+      第 10 行 给 CTS 的时钟 buffer 扇出目标 16；
+      第 29 行 给 sink 聚类上限 25（CTS_SINK_CLUSTERING_MAX_DIAMETER 50 配套）。
+16 > 10、25 > 10，中间没有任何一步把时钟树压回 10 以内。
+
+实测分布支持这个解释
+------------------
+从 sta3c_chk.log（新版，Slowest 角）的 fanout 违例段逐条统计 fanout 实际值：
+  扇出 11: 73 条    12: 38    13: 32    14: 25    15: 22    16: 11
+  17: 8    18: 4    19: 2    20: 2    25: 1（= 聚类上限 25）    27: 1（最高，pin _15359_/X）
+  合计 219 条；其中 127 条是时钟叶子 buffer（clkbuf_leaf_*），92 条是其它 pin
+分布形状不是随机长尾，而是在 11–20 密集成团、另加一个孤立的 25——
+正好落在「CTS 目标 16 + 聚类上限 25」这两个设定值附近。若违例源自布线拥塞，
+分布应该更分散、且与 buffer 类型无关。
+
+为什么旧版同样违例（143 条）
+--------------------------
+旧版（同一 run 的原始布线结果，results/routing/sha256_axil.nl.v）用的是同一份
+config.tcl、同一份 SDC——所以旧版也必然撞这条。新旧差别（219 vs 143）出现在
+重布线、插 430 个二极管之后，我提出的解释是新增负载改变了部分网络的扇出，
+但这一步没有做隔离实验（只插二极管不重布线），所以只作为解释，不作为结论。
+
+要修，改的就是这两个数
+--------------------
+把 CLOCK_BUFFER_FANOUT 与 CTS_SINK_CLUSTERING_SIZE 降到 ≤10（例如 8 / 8），重跑 CTS
+（以及随后的布线、RCX、STA），时钟叶子那一批违例才有可能清掉。
+这不是「在 STA 里改约束糊过去」的反面：改约束会让数字好看但版图不变，
+改 CTS 目标才会让版图真的多插一层 buffer。代价是面积与功耗上升，且要重跑整条链。
+本轮没有执行这次重跑——只把根因定位到行号，避免在没有完整重跑的情况下宣布已修。
+
+slew 那 255 条（仅 Slowest 角）
+-----------------------------
+最差 1.17 ns（限 0.75）。这类违例与扇出一部分同源（扇出大 → 负载大 → transition 慢），
+但也有一些来自长走线，单靠改扇出目标未必全清。本轮不声称能清掉多少。
+
+它不证明什么
+-----------
+- 不证明改这两个参数就一定能全清：扇出目标改小会增加 buffer 层级，可能引入新的
+  布线拥塞与 slew 问题，必须重跑后实测才算。
+- 不证明旧版违例另有原因：旧版与新版共享同一 config，这一点是同源，不是巧合。
+- 不证明 219 与 143 的差额已归因：那是我按动作顺序提出的解释，未做隔离实验。
+- 不证明这是唯一根因：只核对了 fanout 与 transition 两类约束的来源，
+  max_capacitance 的限值来自 liberty，未逐一追溯。
+
+复核方式
+--------
+  sed -n '10p;29p;207p;209p' designs/sha256_v7b/runs/tapeout16/config.tcl
+  sed -n '212,213p'           designs/sha256_v7b/runs/tapeout16/tmp/20-sha256_axil.sdc
+  # 分布统计：取 evidence/sta3c_chk.log 中 "-- corner Slowest violators" 段，
+  # 每条 "Pin" 块内 "fanout <n>" 行取 n 计数
