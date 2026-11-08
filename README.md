@@ -31,7 +31,11 @@
 
 **边界（必须一起读）**：`metrics.csv` 的 `flow_status` 是 **`flow failed`** —— 第 36 步「Magic Spice Export from LEF」在 chroot 里假死（15 分钟 CPU 只跑 17 秒、fd 停在 155 不增长），LVS 是我在 flow 之外用同一份 GDS 手跑出来的。所以 `lvs_total_errors`、`Magic_violations`、`pin_antenna_violations`、`net_antenna_violations`、`klayout_violations` 五列仍是 **`-1`（没跑，不是 0）**；KLayout DRC 与 GDS XOR 这一版没跑（XOR 被 flow 跳过，原文警告 `…klayout.gds wasn't found. Skipping GDS XOR.`）；天线与密度检查没跑到；功耗本版没取。**这一版第一次同时具备「0 违例」与「可交付 GDS + LVS 通过」，但仍不是签核。**
 
-证据：`docs/evidence/cts9_route.txt`（710 B）、`cts9_cts.txt`（288 B）、`cts9_lvs.txt`（622 B）、`cts9_sta3c.txt`（469 B）、`cts9_metrics.csv`（1,955 B，原文件未改一字节），逐字节指纹在 `docs/evidence/README.md` 与 `docs/numbers.html` 第六节。
+证据：`docs/evidence/cts9_route.txt`（710 B）、`cts9_cts.txt`（288 B）、`cts9_lvs.txt`（622 B）、`cts9_sta3c.txt`（469 B）、`cts9_metrics.csv`（1,953 B）；逐字节指纹在 `docs/evidence/README.md` 与 `docs/numbers.html` 第六节。
+
+> **一处更正（2026-11-08）**：`cts9_metrics.csv` 最初按本机 Windows 口径记成 1,955 B（CRLF 行尾），上传后平台把行尾归一为 LF，线上实测 1,953 B / sha256 `dd0d88d7cb73f98423f3e30fa946ad841b9f7f8f1674edd5835268e81cb4034e`，与页面写的 1,955 B / `c33ea317…` 不符。已把本机文件归一为 LF、同步改掉 `docs/numbers.html` 与 `docs/evidence/README.md` 两处指纹，现在三处（本机 / 仓库 / 线上）都是 1,953 B 这一版；旧的 1,955 B / `c33ea317…` 作废。
+
+**这一版的配置已经入库、可以照着重跑**：设计目录 [`designs/sha256_v7b/`](designs/sha256_v7b/)（`config.tcl` 2,956 B / sha256 `a9018e78…`，含 CTS 聚类两行、`GRT_REPAIR_ANTENNAS`、`RUN_KLAYOUT` 四行改动），一条命令与判据见 [`REPRODUCE.md`](REPRODUCE.md)。
 
 ---
 
@@ -146,6 +150,11 @@ openlane-chips/
 │       ├── tb/tb_v7_core.v          # 压缩核锚点向量（3 条）
 │       ├── tb/tb_v7_axil.v          # AXI 握手 + 两块流式（2 条）
 │       └── config.tcl               # OpenLane 配置（最终版 18.0 ns）
+│   └── sha256_v7b/                  # 产出「0 违例 + GDS + LVS 通过」那一版的配置（tag ctsfix3）
+│       ├── src/sha256_core.v        # 与 sha256_v7/src 同名文件字节相同
+│       ├── src/sha256_axil.v
+│       ├── config.tcl               # 2,956 B，含 CTS 聚类 9/80、天线修复、RUN_KLAYOUT 0
+│       └── README.md                # 与原版 config 的差异、跑出来的数字、边界
 ├── tapeout/
 │   ├── deploy_openlane.sh           # 环境部署脚本
 │   ├── run_sha256_flow.sh           # 一键跑流片
@@ -194,6 +203,22 @@ sudo bash tapeout/run_sha256_flow.sh
 ```
 
 > `metrics.csv` 中 `flow_status` 显示 `flow failed`，系 STEP 37 chroot KLayout 崩溃所致，与设计无关；此前 GDSII 已正常产出，全部指标与版图数据有效。
+
+### 一条命令复现「0 违例 + GDS + LVS 通过」那一版
+
+上面那条命令跑的是早期 `designs/sha256`。要复现**最近这一版**（详细布线 0 违例、GDS 40,396,222 B、LVS 通过落在同一次 run，tag `ctsfix3`），用的是 [`designs/sha256_v7b/`](designs/sha256_v7b/)：
+
+```bash
+R=/home/user/openlane-rootfs
+cp -r designs/sha256_v7b "$R/designs/"
+nohup sudo chroot $R \
+  /nix/store/306znyj77fv49kwnkpxmb0j2znqpa8bj-bash-5.2p26/bin/bash -c \
+  "export LANG=C LC_ALL=C TERM=xterm-256color PDK_ROOT=/pdk; cd /; \
+   exec /nix/store/xpc7xd67rslanlqh566s6jph53bn830w-openlane1-1.1.1/bin/flow.tcl \
+   -design /designs/sha256_v7b -tag ctsfix3" > "$R/tmp/ctsfix3.out" 2>&1
+```
+
+跑约 37 分钟。判断跑对没跑对不看 `flow_status`（chroot 里 STEP 36 会假死，故必然 `flow failed`），看四处原文：`logs/cts/15-cts.log` 第 1049 / 1084 行、`logs/routing/26-detailed.log` 第 194…581 行收敛到 0、`results/signoff/sha256_axil.gds` **40,396,222 B**、`reports/metrics.csv` 的 `TotalCells 47559` / `Final_Util 46.2004`。逐步清单、LVS 的四条真缺陷、以及本版没做的事，都在 [`REPRODUCE.md`](REPRODUCE.md)。
 
 ---
 
