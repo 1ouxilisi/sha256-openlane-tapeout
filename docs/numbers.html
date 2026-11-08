@@ -46,6 +46,7 @@ h2::before{content:"";width:4px;height:16px;background:var(--accent2);border-rad
 .box{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:14px}
 .box.bad{border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.05)}
 .box.warn{border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.05)}
+.box.good{border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.05)}
 table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;margin-top:10px}
 th,td{border:1px solid var(--line);padding:7px 9px;text-align:right}
 th{color:var(--muted);font-weight:400;background:#12161c;letter-spacing:.04em}
@@ -251,13 +252,22 @@ check_antennas -verbose
     <p class="note"><b>我试过把这条路走通，五次尝试都因工具报错停住，这点我也写进了证据里</b>：① 从详细布线后的库插完二极管再跑详细布线，报 <code>DRT-0218 Guide is not connected to design</code>；② 先重跑全局布线再详细布线，仍报 <code>DRT-0218</code>；③ 改从全局布线后的检查点 <code>22-global.odb</code> 出发，插 114 个二极管后报 <code>GRT-0226 Type2 ripup not type L.</code>；④ 改从布线前的检查点 <code>20-sha256_axil.odb</code> 出发，同样报 <code>GRT-0226</code>；⑤ 再补上 OpenLane 流程里的全局布线层调整参数，仍报 <code>GRT-0226</code>。前者是顺序问题（二极管插在详细布线之后，guide 与连线已经固定在一起，重跑全局布线也补不回来），后者是工具内部错误，换起点、换参数都能复现。所以「修法可行」是真的，但「版图已修」目前<b>拿不出证据</b>。五次尝试的原文、日志字节数，以及下一步的两条路（打开 <code>GRT_REPAIR_ANTENNAS = 1</code> 整条 flow 重跑，或从电路侧消除长 met4 段）写在 <a href="evidence/antenna_repair_route_attempt.txt">evidence/antenna_repair_route_attempt.txt</a>。</p>
     <p class="note"><b>第八次：修成了——真因是我漏了一个参数，不是工具走不通</b>（这一句同时撤回上面「五次尝试都因工具报错停住」的结论）：OpenLane 的 <code>common/grt.tcl</code> 只有在 <code>GRT_ALLOW_CONGESTION = 1</code> 时才把 <code>-allow_congestion</code> 传给 <code>global_route</code>，本 run 的 <code>config.tcl</code> 第 144 行正是 <b>1</b>；我前五次手写的脚本只传了 <code>-congestion_iterations 200</code>，漏了这一个开关。补上后两类错误一起消失：guide 变完整，<code>DRT-0218</code> 不再出现；<code>repair_antennas</code> 的内部重布线不再踩 <code>GRT-0226</code>。同一份 <code>gr.odb</code> 只改这一个开关，<code>repair_antennas</code> 立刻跑通（<code>Found 1 → Inserted 1</code>）。</p>
     <p class="note"><b>实跑结果</b>：从 <code>tmp/routing/22-global.odb</code> 出发，<code>global_route -allow_congestion</code> + <code>repair_antennas</code> 共跑三轮，累计插入 <b>430 个二极管</b>；详细布线后复测 <b>0 net / 0 pin</b>（三轮依次 9/10 → 1/1 → 0/0，每轮的 <code>.drc</code> 报告都是 0 字节，即 0 条布线违例）。补 fill 后仍 0/0，并流出新 GDS <b>18,618,660 B</b>（sha256 <code>a58cdfea…</code>）。新 GDS 上重跑：KLayout signoff DRC <b>218 类 0 条</b>、密度 <b>六层全过 0 条</b>（li1 0.4986 / m1 0.7249 / m2 0.9049 / m3 0.9218 / m4 0.9470 / m5 0.9707）、Magic DRC <b>No errors found</b>。</p>
-    <p class="note"><b>还差什么，也说清楚</b>：这是「布线级修好」的版图，不是可交付流片版本——新版上 <b>RCX/STA、功耗、XOR、LVS 都还没重跑</b>。所以本页上面的频率、时序、功耗数字仍属于<b>未修版</b>，不能挂到新版图上；旧版上的 XOR「21 层全一致」与 LVS「<code>Circuits match uniquely</code>」也只在旧版成立。新版 LVS 做了四组对照，仍<b>没通过</b>，但失败的边界已经量出来了（见下一段）。全部命令、日志字节数，以及「撤回前五次结论」的说明写在 <a href="evidence/antenna_repair_route_fixed.txt">evidence/antenna_repair_route_fixed.txt</a>。</p>
+    <p class="note"><b>还差什么，也说清楚</b>：这是「布线级修好」的版图，不是可交付流片版本——新版上 <b>RCX/STA、功耗、XOR 都还没重跑</b>（LVS 已在新版通过，见下一段）。所以本页上面的频率、时序、功耗数字仍属于<b>未修版</b>，不能挂到新版图上；旧版上的 XOR「21 层全一致」只在旧版成立。全部命令、日志字节数，以及「撤回前五次结论」的说明写在 <a href="evidence/antenna_repair_route_fixed.txt">evidence/antenna_repair_route_fixed.txt</a>。</p>
+  </div>
+
+  <div class="box good">
+    <b>新版 LVS 通过了：<code>Final result: Circuits match uniquely.</code></b>
+    <p class="note">结果是原样抄的：两侧 <b>15,588 个器件 / 15,645 个网</b>，相等；149 个叶子单元逐个 <code>Netlists match uniquely</code>，最后一行 <code>Final result: Circuits match uniquely.</code>。比的是<b>天线修好那版</b>流出的 GDS（<code>fixed15.gds</code>，16,621,738 B）经 Magic 提出的网表，对 OpenROAD 写出的 <code>fixed2.nl.v</code>。日志 <code>phy9_lvs.out</code> 271,466 B / md5 <code>f0ecd26f…</code>；两份网表字节数与 md5 都写在证据文件里。</p>
+    <p class="note"><b>前面四组对照全军覆没，原因不在版图，在我的三个工具动作</b>：① 按行删物理单元时没处理 SPICE 的 <code>+</code> 续行，两侧删得不一样多（15,588 vs 15,839）；② 只在网表侧合并 <code>VPB→VPWR</code>、<code>VNB→VGND</code>，版图侧没动，于是每单元假性少 2 网；③ 我的 verilog→spice 脚本把总线压成一个网、又丢掉四条 <code>assign s_axil_bresp[0] = net389;</code> 这种端口别名，顶层端口 18 个对 97 个，netgen 直接报 <code>Top level cell failed pin matching</code>。再加上 <code>write_verilog</code> 根本不写电源脚（<code>.VGND(</code> 出现 0 次），必须按物理事实把 PG 脚接到全局轨、其余真悬空脚按实例唯一命名（206 个）。这四条改对，就过了。</p>
+    <p class="note"><b>收回上一版的「边界」说法</b>：上一次写「失败只在顶层、卡在物理单元口径与衬底网命名」，方向对了一半——真实原因是上面这些可修的动作，不是不可调和的「口径」。上一版那句「150 个叶子单元 match、只有顶层不齐」仍然成立，只是现在顶层也齐了。</p>
+    <p class="note">全链复现（脚本、命令行、四个中间文件、字节数与 md5）写在 <a href="evidence/lvs_new_pass.txt">evidence/lvs_new_pass.txt</a>。<b>它证明什么、不证明什么</b>也在里面：证明的是展平后晶体管级等价 + 149 个单元等价；不证明 RCX/STA/功耗/XOR/ERC/金属密度，也不把「布线级修好」升级成「可交付流片」。</p>
   </div>
 
   <div class="box bad">
-    <b>新版 LVS：失败的边界已经量出来了——卡在顶层，不在叶子单元</b>
-    <p class="note">先说结论：<b>新版 LVS 仍是 <code>Netlists do not match</code></b>，四组对照（合并衬底网、不合并、同内容无 fill、两侧都删物理单元）全部如此。但这次知道了失败在哪一层：<b>150 个叶子单元逐个 <code>Netlists match uniquely</code></b>，器件数与网数逐单元相等；不通过的只有顶层 <code>sha256_axil</code>。报告原文里这一层的分界写得明白：<code>Cell pin lists are equivalent.</code>、<code>Device classes … are equivalent.</code> 通过，<code>Final result: Netlists do not match.</code> 不通过。</p>
-    <p class="note">顶层差在两处，都不是逻辑不等价：① <b>物理单元口径</b>——版图侧顶层实例 16,472 个，网表侧 21,968 个，差 <b>5,496</b>，正好等于网表里 <code>sky130_fd_sc_hd__tapvpwrvgnd_1</code> 的实例数（<code>grep -c "tapvpwrvgnd_1$"</code> = 5,496）；tap 不带器件，只改实例数与网数。② <b>衬底网命名口径</b>——版图侧是每实例一份的 <code>VPB</code> / <code>VNB</code> 脚网（报告里出现 <code>sky130_fd_sc_hd__inv_2_71/VPB</code> 这样的网名），网表侧只有一个全局 <code>VNB</code> / <code>VPB</code>；PDK 的 netgen setup（<code>sky130A_setup.tcl</code>，19,712 B）里没有任何针对这两个网的规则。</p>
+    <b>（保留）新版 LVS 未通过时的失败边界与两次撤回</b>
+    <p class="note">上一轮记的四组对照（合并衬底网、不合并、同内容无 fill、两侧都删物理单元）全部 <code>Netlists do not match</code>；当时量出的两条顶层差（tap 实例 5,496 的口径差、衬底网每实例 vs 全局网）作为过程记录保留。四组对照的字节数、md5、关键词行号，以及「不能拿这些数说什么」，在 <a href="evidence/lvs_top_level_gap.txt">evidence/lvs_top_level_gap.txt</a>。</p>
+    <p class="note"><b>顺带撤回上一版的一个说法</b>：上一版写「逐单元网数差 2（nets 14 vs 12）」，那是<b>实验方法造成的</b>，不是版图问题。把网表里 <code>VNB→VGND</code>、<code>VPB→VPWR</code> 全量替换时，连 PDK 单元定义内部的体端网也一起被合并，每个单元内部就少 2 个网。保留 <code>VNB/VPB</code> 原样、其它不变再跑，同一批单元两侧都是 <b>14 网 / 12 器件</b>、<code>Netlists match uniquely</code>——所以「差 2」是我改网表改出来的。</p>
+  </div>
     <p class="note"><b>顺带撤回上一版的一个说法</b>：上一版写「逐单元网数差 2（nets 14 vs 12）」，那是<b>实验方法造成的</b>，不是版图问题。把网表里 <code>VNB→VGND</code>、<code>VPB→VPWR</code> 全量替换时，连 PDK 单元定义内部的体端网也一起被合并，每个单元内部就少 2 个网。保留 <code>VNB/VPB</code> 原样、其它不变再跑，同一批单元两侧都是 <b>14 网 / 12 器件</b>、<code>Netlists match uniquely</code>——所以「差 2」是我改网表改出来的。</p>
     <p class="note">四组对照的字节数、md5、关键词所在行号，以及「不能拿这些数说什么」，写在 <a href="evidence/lvs_top_level_gap.txt">evidence/lvs_top_level_gap.txt</a>。</p>
   </div>
@@ -335,7 +345,7 @@ check_antennas -verbose
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、二十二份证据文件的指纹</h2>
+  <h2>五、二十三份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -360,6 +370,7 @@ check_antennas -verbose
     <div class="fp" style="margin-top:14px">evidence/antenna_repair_route_fixed.txt · 6,164 B<br>f949e0d0ec5a81c30de9db98e4cc8851d40ecb1196e1470f5464cd79cccaccaf</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_pass.txt · 8,292 B<br>956ff1a4cc9d2db595a722be26ac7fa53b5af0f15e24af613eef56fd169aaf9f</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_top_level_gap.txt · 4,692 B<br>ea954e06f4182e4fd0f88058c402824bf3f0eeb6ff6b81ef172233d080cb5c0c</div>
+    <div class="fp" style="margin-top:14px">evidence/lvs_new_pass.txt · 4,572 B<br>a3dd1f65f39b93bf20eefe2d5458efba3053d073cacdf5fe275f73b0113193ee</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>
 </div></section>

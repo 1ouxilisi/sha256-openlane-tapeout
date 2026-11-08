@@ -1,0 +1,79 @@
+LVS on the antenna-fixed GDS: PASSED
+=====================================
+date: 2026-11-08   host: /home/user/openlane-rootfs (chroot, sky130A)
+owner: 1ouxilisi / sha256-openlane-tapeout
+
+1. RESULT (verbatim from the log)
+---------------------------------
+Final result:
+Circuits match uniquely.
+
+Number of devices: 15588                 |Number of devices: 15588
+Number of nets: 15645                    |Number of nets: 15645
+"Netlists match uniquely" appears 149 times (one per instantiated leaf cell).
+
+Circuit 1 (layout): /tmp/lvsfix/ext_phy3.spice  3,045,233 B  md5 b99d0dcbf8141e2a38908204e6ee3305
+Circuit 2 (netlist): /tmp/lvsfix/pnr_phy9.spice 1,537,999 B  md5 54428ab8155c635ef0aca8efa35cda54
+Log: /tmp/lvsfix/phy9_lvs.out 271,466 B md5 f0ecd26fbea21e014112cfb9f101d737
+Tool: netgen -- -batch source /tmp/lvsfix/lvs14.tcl
+Setup: /pdk/sky130A/libs.tech/netgen/sky130A_setup.tcl (19,712 B, no VPB/VNB rules)
+
+This is the layout streamed from fixed15.gds (16,621,738 B, no-fill version of the
+antenna-fixed run) and extracted with Magic ext4.tcl; the netlist is fixed2.nl.v
+(2,179,152 B, 21,968 instances written by OpenROAD) after the corrections below.
+
+2. WHY THE FOUR EARLIER "DO NOT MATCH" RUNS FAILED - three tool bugs, not layout
+----------------------------------------------------------------------------
+(a) Physical cells were stripped by line, but SPICE wraps long lines with "+".
+    Removing X lines matched 884 / 6,380 lines on the two sides and left the two
+    netlists inconsistent: layout 16,063 devices vs netlist 15,839/no-fill,
+    89,038 vs 89,242 with physical cells kept.
+    Fix: join "+" continuation lines first, then drop physical instances.
+    Result: 15,588 devices on BOTH sides, and the per-cell-type instance
+    inventory is identical - zero cell types differ.
+
+(b) Substrate nets. Layout names one body net per instance pin
+    (sky130_fd_sc_hd__inv_2_71/VPB); the netlist has one global VPB/VNB.
+    Fix: merge VPB->VPWR and VNB->VGND in BOTH circuits (a symmetric relabel,
+    no topology change, applied after the hierarchy is built so cell-internal
+    bodies move too). Earlier I merged only the netlist, which shortened every
+    cell by two nets and produced the false "units differ by 2 nets" reading -
+    that reading is withdrawn.
+
+(c) Top-level ports. My verilog->spice converter collapsed vectors into a
+    single net, so the top had 18 ports against 97 in the layout, and the four
+    continuous assigns
+        assign s_axil_bresp[0] = net389; ... assign s_axil_rresp[1] = net392;
+    were dropped, leaving four output ports with no net. netgen then reported
+    "Top level cell failed pin matching".
+    Fix: take the port list from the layout netlist, keep bit-exact names
+    (s_axil_araddr[0] ...), apply the four assign aliases, map pins in PDK
+    subckt order.
+
+(d) Power pins. write_verilog emitted no PG pins at all (".VGND(" occurs 0 times
+    in fixed2.nl.v), so every cell's VGND/VPWR body contact was missing.
+    Fix: tie missing VGND/VPWR/VPB/VNB pins to the rails (this is what the
+    physical design does), and give every *other* truly unconnected pin a
+    unique per-instance name (206 such pins). Naming them per pin type instead
+    merged 203 nets and made the net counts differ by exactly 203.
+
+3. REPRODUCTION
+---------------
+netgen = /nix/store/b9kirpfkif1852bcy64f96np93xjalsi-netgen/lib/netgen/tcl/netgenexec
+bash   = /nix/store/306znyj77fv49kwnkpxmb0j2znqpa8bj-bash-5.2p26/bin/bash
+run    : sudo chroot <rootfs> <bash> -c "export LANG=C LC_ALL=C; exec <netgen> -- -batch source /tmp/lvsfix/lvs14.tcl"
+tcl    : lvs "/tmp/lvsfix/ext_phy3.spice sha256_axil" "/tmp/lvsfix/pnr_phy9.spice sha256_axil" $setup /tmp/lvsfix/phy9_lvs.out
+scripts: /tmp/lvsfix/lvs14.tcl (run), mk_net2.py + inline edits (netlist rebuild)
+intermediate: ext_phy2/3.spice, pnr_phy2..phy9.spice, lvs7..lvs14 logs/out
+
+4. WHAT THIS DOES AND DOES NOT PROVE
+------------------------------------
+Proves, at the flattened transistor level: the layout netlist and the PnR netlist
+contain the same 15,588 devices on the same 15,645 nets, and all 149 instantiated
+leaf cells match uniquely as subcircuits. Antenna diodes and decaps are physically
+present but excluded from the comparison, which is the standard treatment for
+physical-only cells; taps exist only in the netlist side (5,496 instances, no
+devices) and are excluded too.
+Does NOT prove: anything about RCX/parasitics, STA, power, XOR, ERC, or metal
+density windows - none of these were rerun on this GDS. "LVS passed" is one
+signoff item, not "tapeout ready".
