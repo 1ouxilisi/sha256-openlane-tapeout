@@ -38,7 +38,7 @@
 | `cts9_cts.txt` | 288 B | 同一次 run 的 CTS 原文：第 1049 行聚类后 sink 248、第 1084 行扇出分布 `9:244, 10:2`（上界等于 SDC 限值 10） | 原样摘录 |
 | `cts9_lvs.txt` | 622 B | **这一版的 LVS 结论**：`Circuits match uniquely`、151 处叶子单元 `Netlists match uniquely`、顶层 pin 表与器件类等价 | 生成结果（netgen 原文截取） |
 | `cts9_sta3c.txt` | 469 B | 同一次 run 的三 corner 签核时序：Slowest +0.51/+0.41、Typical +0.74/+0.41、Fastest +0.99/+0.40（全 MET） | 生成结果 |
-| `cts9_metrics.csv` | 1,955 B | 同一次 run 的 `reports/metrics.csv` 原文件：0 违例五列全 0，`flow_status` 为 `flow failed`，五列 `-1` | 原样，未改一个字节 |
+| `cts9_metrics.csv` | 1,953 B | 同一次 run 的 `reports/metrics.csv` 原文件：0 违例五列全 0，`flow_status` 为 `flow failed`，五列 `-1` | 原样，未改一个字节 |
 | `drv_fix_pilot.txt` | 5,065 B | **DRV 修复试点（CTS 阶段）**：从 placement 重跑 CTS 只改聚类目标，143 → 9（原配置 25/50 重跑量到 143，与线上 signoff 的 143 逐条相同）；当时把残留 9 条归因到 `CTS-0032 Max number of sinks is 15` 这一工具内部判据——**该结论已被 `drv_fix_routed.txt` 推翻，本文件原样保留不改** | 本轮新增 |
 | `cts25.log` | 20,148 B | CTS 聚类 25/50（原配置）原始日志：`== AFTER_CTS_FANOUT ==` 段 143 条 | 本轮新增 |
 | `cts8.log` | 5,322 B | CTS 聚类 8/50 原始日志：同段 9 条，含 `CTS-0032 ... Max number of sinks is 15` 原文 | 本轮新增 |
@@ -88,7 +88,7 @@ de5d8a91e1c8e36f55e4e33edc1fbe966473d0a7d9e1f6a73f49ebf999ba3e32  cts9_route.txt
 4d09b720220a0125efe446c6fbb2be7bbc83e9cd5c752ff431ab72fffdd9ca33  cts9_cts.txt
 36b37506fc99d13cca0bebb73ad8e54d36fd038b60a267bdb2a9308e1a0f170d  cts9_lvs.txt
 af75ba9599faedab25c24cd38e785e1d29b1e9385c6640d8b43a06990c5b8c8e  cts9_sta3c.txt
-c33ea3177d7ac75ee086803df8aa519cea1cbac8774c6cc5fccada04461322aa  cts9_metrics.csv
+dd0d88d7cb73f98423f3e30fa946ad841b9f7f8f1674edd5835268e81cb4034e  cts9_metrics.csv
 3b1129de86ff8517cd6fca6b027f8ab403fc6df2e877aad3450cc3d1e37507e3  cts25.log
 1aa40f480db24a43f57d40d6b975f97a561db32e31ed3c50bff53b4efa2e5e36  cts8.log
 304a4406735091a1425df27420ac6d395089c25bb655cfb248f8b720b4082683  lvs_attempt.txt
