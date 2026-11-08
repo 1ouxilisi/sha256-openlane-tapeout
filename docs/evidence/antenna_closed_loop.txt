@@ -1,0 +1,68 @@
+# ctsfix3 天线闭环：39/49 -> 0/0（同一次 run 的 ODB，多轮 repair -> dpl -> grt -> drt）
+# 生成时间：2026-11-08；全部数字取自下列日志原文行号，可逐行核对。
+
+## 0. 起点（未修）
+run     = /home/user/openlane-rootfs/designs/sha256_v7b/runs/ctsfix3/results/routing/sha256_axil.odb
+log     = tmp/antc/ctsfix3.log  (15,608 行 / 521,220 B / sha256 99fd2c0c40b3...)
+summary = "Found 39 net violations." / "Found 49 pin violations."
+        见 docs/evidence/antenna_ctsfix3.txt（同一份证据里还有正对照 tapeout16 = 67/87）
+
+## 1. 循环修复（每轮一条 openroad 命令，脚本 /home/user/antloop.sh）
+每轮 tcl 原文（round1.tcl）：
+  read_liberty /pdk/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+  read_db  <上一轮 .odb>
+  set_routing_layers -signal met1-met5 -clock met3-met5
+  set_macro_extension 0
+  set_global_routing_layer_adjustment * 0.3
+  set_global_routing_layer_adjustment li1 0.99
+  set_global_routing_layer_adjustment met1 0 / met2 0 / met3 0 / met4 0 / met5 0
+  global_route -congestion_iterations 200 -verbose -allow_congestion
+  repair_antennas sky130_fd_sc_hd__diode_2 -iterations 15 -ratio_margin 10
+  detailed_placement
+  global_route -congestion_iterations 200 -verbose -allow_congestion
+  detailed_route -bottom_routing_layer met1 -top_routing_layer met5 -output_drc <round>.drc -droute_end_iter 64 -or_seed 42 -verbose 1
+  check_antennas -verbose
+  write_db <round>.odb ; write_def <round>.def
+
+## 2. 逐轮结果（原文行号）
+round1.log：
+  L645  [INFO DRT-0199]   Number of violations = 0.
+  L668  [INFO DRT-0198] Complete detail routing.
+  L11309 [INFO ANT-0002] Found 32 net violations.
+  L11310 [INFO ANT-0001] Found 38 pin violations.
+round2.log：
+  L619  [INFO DRT-0199]   Number of violations = 0.
+  L642  [INFO DRT-0198] Complete detail routing.
+  L1523 [INFO ANT-0002] Found 2 net violations.
+  L1524 [INFO ANT-0001] Found 2 pin violations.
+round3.log：
+  L509  [INFO DRT-0198] Complete detail routing.
+  L534  [INFO ANT-0002] Found 0 net violations.
+  L535  [INFO ANT-0001] Found 0 pin violations.
+loop_progress.txt 四行原文：
+  round1 exit=0 Found 32 net / 38 pin
+  round2 exit=0 Found 2 net / 2 pin
+  round3 exit=0 Found 0 net / 0 pin
+  round3 CLEAN
+
+说明：round1 的 detailed_route 从 13,894 条违例收敛到 0（同一 log L305 首报 13,894，L645 归零，共 8 次迭代），
+但布线后复检仍有 32/38；每轮把复检后的 ODB 再送回 repair_antennas，二极管位置才按真实走线重算，
+故 round2 = 2/2、round3 = 0/0。这个顺序（先 repair 再 dpl 再 grt 再 drt）是必需的：
+早先一版漏掉 detailed_placement，二极管没有合法位置，DRT 违例从 2,636 涨到 116,774，收敛不了。
+
+## 3. 独立复检（另起进程、只读最终 ODB，不复用循环内的结论）
+cmd  = openroad -no_init -no_splash -exit /tmp/antc/ant_clean.tcl
+tcl  = read_liberty sky130_fd_sc_hd__tt_025C_1v80.lib ; read_db /tmp/antv7c/antclean_fill.odb ; check_antennas -verbose
+log  = tmp/antc/antclean.log  3 行 / 209 B / sha256 996101078a3fcc5b2c0d028c2ad14a45d746c754b6823b09d20acade0ecd1bb6
+原文  [INFO ANT-0002] Found 0 net violations.
+      [INFO ANT-0001] Found 0 pin violations.
+
+## 4. 本版物理产物（含 fill，供签核链）
+DEF  /tmp/antv7c/antclean_fill.def   16,742,332 B  sha256 0f032ded52f81dfcfad80d5a62f447aba6eb025592805b2d07cb1bc9ad4baef9
+ODB  /tmp/antv7c/antclean_fill.odb   32,054,884 B  sha256 d2c5d8f0fc519e4dd502de85095600abf85b42e242c0d2c7c2fb2895791f00e3
+GDS  /tmp/antv7c/antclean_fill.gds   40,666,588 B  sha256 89cda7602ad0a7f827a98491a64193b917deb3d501ffc7981adb71e5d17c1038
+网表 /tmp/antv7c/nl_antclean_fill.v    3,386,854 B  sha256 b547bca3ab5e2a099868d4085a3de7bf5058053a63bf3bc193f9cae1d3427397
+
+二极管 327 个（ctsfix3 原 196 + 本轮增补 131）；filler 25,656 个
+（fill 步骤 log ev/fill_antclean.log L2 "[INFO DPL-0001] Placed 25656 filler instances."）
+filler 清单与 config.tcl L46 DECAP_CELL / L65 FILL_CELL 一致。

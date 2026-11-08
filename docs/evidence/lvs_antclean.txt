@@ -1,0 +1,26 @@
+# LVS：反天线闭环后的完工 GDS（antclean_fill.gds） vs 同版网表（nl_antclean_fill.v）
+# 判据：netgen 末行 "Final result: Circuits match uniquely."
+
+命令  bash tools/lvs/run_lvs.sh <run> sha256_axil
+      （run 内 results/signoff/sha256_axil.gds = antclean_fill.gds；
+        results/routing/sha256_axil.nl.v = nl_antclean_fill.v）
+log   ev/lvs_antfill.log  321 行 / sha256 1c17c6da95a64254...
+
+四步关键行：
+  [1/4] Magic 提取：layout.ext.spice 2,815,680 B
+  [2/4] 清洗：UNWRAPPED 1184 / SUBCKTS 150 (empty 0) / TOP_PORTS 94 / TOP_INST 34,289
+  [3/4] 网表侧：INSTANCES 34,289 (dropped fill/tap 13,382) / CELL_TYPES 149 / PORTS 94 (dropped 2 duplicate)
+  [4/4] netgen：L152 "Cell pin lists are equivalent."（共 152 次）
+        L304 "Device classes sha256_axil and sha256_axil are equivalent."
+        L319 "Device classes ... are equivalent."（两侧器件类逐个等价，共 304 行）
+        L320 "Final result: Circuits match uniquely."
+        L321 "LVS PASS"
+
+对照：ctsfix3 那版 LVS 也是 Circuits match uniquely（evidence/cts9_lvs.txt），
+      两侧 34,182 实例；本版 34,289 实例（+107）。二极管 196 -> 327（+131）、filler 25,675 -> 25,656，
+      两者相抵后仍有小幅出入，未逐条追查；netgen 已判定 Circuits match uniquely。
+
+## 本版未重跑的项目（如实标注）
+时序 / DRV：本版没有重跑 RCX + 三 corner STA，页面上 ctsfix3 的 +0.51 / +0.74 / +0.99 与
+hold +0.41 / +0.41 / +0.40 属于上一版（无增补二极管、走线不同），不能直接用在本版。
+功耗：未取。

@@ -394,11 +394,24 @@ check_antennas -verbose
     <b>这一版同样有不能吹的地方，先说清楚</b>
     <ul>
       <li><b>flow 自己没有跑完</b>。<code>metrics.csv</code> 的 <code>flow_status</code> 就是 <code>flow failed</code>：第 36 步「Magic Spice Export from LEF」在 chroot 里假死（15 分钟 CPU 只跑了 17 秒、打开的文件描述符停在 155 不增长）。我是在 flow 之外、用 Magic 直接从这份 GDS 提取 SPICE 完成 LVS 的，所以 <code>lvs_total_errors</code>、<code>Magic_violations</code>、<code>pin_antenna_violations</code>、<code>net_antenna_violations</code>、<code>klayout_violations</code> 五列仍是 <code>-1</code>——<b>是「没跑」，不是「0」</b>。</li>
-      <li><b>GDS XOR 这一版没跑</b>。XOR 需要 KLayout 出的那份 GDS，而 KLayout 在 chroot 起不来，所以 flow 直接跳过了（原文警告 <code>…klayout.gds wasn't found. Skipping GDS XOR.</code>）。KLayout DRC 与密度这两项已经在 flow 之外用这份 GDS 补跑（218 类 0 条 / 六层 0 条，正对照各报 1 条），见上面对应两段。</li>
-      <li><b>天线没做复检</b>。<code>GRT_REPAIR_ANTENNAS</code> 这一版是开的（1），布线阶段会插二极管，但 signoff 的 antenna 检查步骤没跑到；密度已在同一份 GDS 上补跑通过，天线这一项本页不给结论。</li>
+      <li><b>flow 里的 GDS XOR 这一步被跳过了，但 XOR 本身后来补跑了两版</b>。flow 原文警告是 <code>…klayout.gds wasn't found. Skipping GDS XOR.</code>（KLayout 在 chroot 起不来）；我改用「KLayout 读同一份 DEF + 用 PDK 单元 GDS 回填空 cell」出第二份版图，再与 Magic 的 GDS flatten 后逐层几何异或：ctsfix3 版 <code>TOTAL_DIFF=0</code>（42 个共同层 0 差异，Magic 独有 (81,14) 1 个边界层图形），天线归零版同样 <code>TOTAL_DIFF=0</code>。口径写在 <a href="evidence/xor_antclean.txt">evidence/xor_antclean.txt</a>：它证明两条 stream-out 路径几何一致，不替代 LVS。</li>
+      <li><b>天线复检跑了，结论不是 0</b>。<code>GRT_REPAIR_ANTENNAS</code> 这一版是开的（1），实际插了 196 个二极管，但布线后复检仍是 <b>39 条 net / 49 条 pin 违例</b>（正对照 <code>tapeout16</code> 报 67 / 87，证明脚本有分辨力），原文见 <a href="evidence/antenna_ctsfix3.txt">evidence/antenna_ctsfix3.txt</a>。随后在<b>同一份布线后 ODB</a> 上跑「修天线 → 详细布局 → 全局布线 → 详细布线 → 复检」三轮，把 39/49 压到 <b>0 / 0</b>，并由另起进程独立复检确认，见下一段与 <a href="evidence/antenna_closed_loop.txt">evidence/antenna_closed_loop.txt</a>。</li>
       <li><b>功耗数字这一版没取</b>。时序取到了三 corner，功耗报告没解析，先不写，避免拿旧版的数填新版的空。</li>
-      <li><b>这不是签核</b>。LVS 通过 + 时序 MET + 布线 0 违例 + KLayout DRC 0 条 + 密度 0 条，缺天线与 GDS XOR 两项 signoff 检查，所以只能说「这一版第一次同时具备 0 违例与可交付 GDS，且这份 GDS 的 LVS / DRC / 密度都过」，不能说「已签核」。</li>
+      <li><b>「天线归零」那一版没有重跑时序与 DRV</b>（增补二极管改变了走线与电容），所以上面三 corner 的 setup / hold 只能挂在本节这一版上，不能顺延到天线归零版。</li>
+      <li><b>这不是签核</b>。同一版上凑齐了「布线 0 违例 + LVS 通过 + KLayout DRC 0 条 + 密度 0 条 + 天线 0/0 + GDS XOR 0 差异」六项，但时序与 DRV 没有在这版重跑、功耗没取，所以只能说「这一版拿到了六项物理验证结论」，不能说「已签核」。</li>
     </ul>
+  </div>
+
+  <div class="box good">
+    <b>天线冲 0 的全过程：39 / 49 → 32 / 38 → 2 / 2 → 0 / 0</b>
+    <p class="note">对象不是新跑一版 flow，而是 ctsfix3 那份 <code>results/routing/sha256_axil.odb</code>。每轮固定一条序列：<code>global_route -allow_congestion</code> → <code>repair_antennas sky130_fd_sc_hd__diode_2 -iterations 15 -ratio_margin 10</code> → <code>detailed_placement</code> → <code>global_route</code> → <code>detailed_route -droute_end_iter 64 -or_seed 42</code> → <code>check_antennas -verbose</code>。逐轮原文行号都在证据文件里，可以一行一行点开核对。</p>
+    <div class="raw">round1 : 布线 13,894 → 0（L305 首报、L645 归零、8 次迭代）  天线 32 net / 38 pin（L11309 / L11310）
+round2 : 布线 0（L619）                                  天线 2 net / 2 pin（L1523 / L1524）
+round3 : 布线 0（L509）                                  天线 0 net / 0 pin（L534 / L535）
+独立复检（另起 openroad 进程、只读最终 ODB）              0 net / 0 pin（3 行日志，209 B）</div>
+    <p class="note"><b>为什么一轮不够</b>：详细布线会改走线，二极管按旧走线插的位置就未必还合适；所以每轮必须把复检后的 ODB 再送回 <code>repair_antennas</code>，二极管位置才按真实走线重算。<code>detailed_placement</code> 也不能省——早先一版漏了它，二极管没有合法位置，布线违例从 2,636 涨到 116,774，64 轮都收敛不下来。二极管最终 <b>327</b> 个（原 196 + 增补 131）。</p>
+    <p class="note">补齐 fill（<code>Placed 25656 filler instances</code>，清单取 <code>config.tcl</code> 第 46 / 65 行）后，从新 DEF 重出 GDS：<b>40,666,588 B / sha256 <code>89cda760…</code></b>，网表 3,386,854 B / <code>b547bca3…</code>。在这一份 GDS 上：KLayout DRC <b>218 类 0 条</b>（<a href="evidence/klayout_drc_antclean.txt">evidence/klayout_drc_antclean.txt</a>）、密度 <b>六层 0.4991 / 0.7232 / 0.9033 / 0.9223 / 0.9478 / 0.9716、0 条</b>（<a href="evidence/density_antclean.txt">evidence/density_antclean.txt</a>）、netgen <b><code>Final result: Circuits match uniquely.</code></b>（两侧各 34,289 实例，<a href="evidence/lvs_antclean.txt">evidence/lvs_antclean.txt</a>）、GDS XOR <b><code>TOTAL_DIFF=0</code></b>（<a href="evidence/xor_antclean.txt">evidence/xor_antclean.txt</a>）。</p>
+    <p class="note"><b>一处不对齐就照写</b>：本版 LVS 两侧 34,289 实例，ctsfix3 原版是 34,182（+107）。二极管 +131、filler −19，相抵后仍有小幅出入，没有逐条追到单元级——netgen 的判据是 <code>Circuits match uniquely</code>，它不看这个总数差；但既然页面上摆着两个数，出入就写出来。</p>
   </div>
 </div></section>
 
@@ -411,7 +424,7 @@ check_antennas -verbose
       <li>时序的 9 个 setup 值、9 个 hold 值，都能对到具体日志的具体行号。</li>
       <li><b>两份 GDS 在 21 个制造层上逐层几何一致</b>（42 层中仅 areaid.lowTapDensity 一层有 1 处差异，那是 flow 标记层，流水线本身就排除）。层号已对到 PDK 的图层名表。</li>
       <li>每个证据文件的指纹写在下面，你可以下载后自己 <code>sha256sum</code> 对一遍。</li>
-      <li>失败步骤的原文也在，包括它为什么失败；连「后来怎么补跑成功」的方法和脚本也一起给了——以及<b>补跑之后没过的那一项（天线）</b>也在这页上，没有只摆好消息。</li>
+      <li>失败步骤的原文也在，包括它为什么失败；连「后来怎么补跑成功」的方法和脚本也一起给了——以及<b>补跑时一开始没过的那一项（天线 39 / 49）</b>、后来怎么把它在同一份 ODB 上压到 0 / 0 也在这页上，没有只摆好消息。</li>
     </ul>
   </div>
   <div class="box">

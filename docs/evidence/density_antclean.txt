@@ -1,0 +1,19 @@
+# 金属密度：反天线闭环后的完工 GDS（antclean_fill.gds）
+# 判据：六层空孔率都在阈值以上 = 0 条违例
+
+对象  40,666,588 B  sha256 89cda7602ad0a7f827a98491a64193b917deb3d501ffc7981adb71e5d17c1038
+deck  /pdk/sky130A/libs.tech/klayout/drc/met_min_ca_density.lydrc
+log   tmp/kl/dens_antfill.log   （Total elapsed: 5.400s）
+rpt   tmp/kl/density_antfill.xml
+
+六层空孔率（log L48 / L54 / L60 / L66 / L72 / L78）：
+  li1 0.4991372324829102
+  m1  0.7232360866088867
+  m2  0.9033209996948243
+  m3  0.9223074668579101
+  m4  0.9478303185424805
+  m5  0.971580625
+违例 0 条（log 中无 error / violation 行）
+
+对照：ctsfix3 那版为 0.4993 / 0.7275 / 0.9055 / 0.9264 / 0.9460 / 0.9763，同样 0 条；
+正对照 ctl.gds 报 1 条 m1.pd.1d。

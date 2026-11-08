@@ -50,6 +50,18 @@
 
 证据：`docs/evidence/antenna_repair_route_fixed.txt`（6,164 B，含前五次失败与真因）、`docs/evidence/antenna_repair_attempt.txt`（4,006 B，第一次插二极管的失败记录）、`docs/evidence/lvs_new_pass.txt`（4,572 B，附复现链与 md5）、`docs/evidence/lvs_top_level_gap.txt`（4,692 B，失败阶段的口径记录）。逐条数字追原文的页面：<https://1ouxilisi.github.io/sha256-openlane-tapeout/numbers.html>。
 
+### ctsfix3 那一版：天线 39/49 → 0/0，四项在同一份 GDS 上复核（2026-11-08）
+
+上面两段的对象是 `fixed15.gds` 那条线。整条 flow 重跑的 `ctsfix3` 是另一条线，它此前被记成「缺天线复检与 GDS XOR 两项」，现已补齐并**解决**：
+
+- **天线复检：结果不是 0**。同一引擎 `check_antennas -verbose` 对 `results/routing/sha256_axil.odb` 报 **39 net / 49 pin**（正对照 `tapeout16` 报 67 / 87，证明脚本有分辨力），见 `docs/evidence/antenna_ctsfix3.txt`。
+- **三轮压到 0/0**：每轮 `global_route -allow_congestion` → `repair_antennas sky130_fd_sc_hd__diode_2` → `detailed_placement` → `global_route` → `detailed_route -droute_end_iter 64` → `check_antennas`；三轮依次 **32/38 → 2/2 → 0/0**，每轮布线违例都是 0；再另起 openroad 进程、只读最终 ODB 独立复检，仍 **0 net / 0 pin**。`detailed_placement` 不能省（漏掉时二极管没有合法位置，布线违例 2,636 → 116,774 收敛不了），二极管最终 **327** 个。
+- **补 fill 重出 GDS**：`filler_placement` 按 `config.tcl` 第 46 / 65 行，`Placed 25656 filler instances`；Magic 从新 DEF 重出 **40,666,588 B**（sha256 `89cda760…`），网表 3,386,854 B（`b547bca3…`）。
+- **同一份 GDS 上四项复核全部 0 / PASS**：KLayout DRC **218 类 0 条**、密度 **六层 0.4991 / 0.7232 / 0.9033 / 0.9223 / 0.9478 / 0.9716、0 条**、netgen **`Final result: Circuits match uniquely.`**（两侧各 34,289 实例）、GDS XOR **`TOTAL_DIFF=0`**（Magic 出图 vs KLayout「读同一份 DEF + PDK 单元 GDS 回填空 cell」出图，flatten 后 42 个共同层 0 差异，Magic 独有 (81,14) 1 个边界层图形）。
+- **边界**：这一版**没有重跑 RCX + 三 corner STA 与 DRV**（增补二极管改变了走线与电容），功耗未取，所以上面 `ctsfix3` 的 setup / hold 数字不能顺延；本版 LVS 两侧 34,289 实例、原版 34,182（+107；二极管 +131、filler −19，相抵后仍小幅出入，未逐条追到单元级）。所以是「六项物理验证拿到结论」，不是签核。
+
+证据：`docs/evidence/antenna_ctsfix3.txt`、`antenna_closed_loop.txt`、`klayout_drc_antclean.txt`、`density_antclean.txt`、`lvs_antclean.txt`、`xor_antclean.txt`（六份都在 `docs/evidence/`，逐字节指纹见该目录 `README.md`）。
+
 ---
 
 ## 成果速览（七代迭代）

@@ -40,6 +40,12 @@
 | `sta_cts9.log` | 159,550 B | 修好版三 corner STA + DRV + 功耗 + 面积原始报告：setup/hold 六格在 1006–1037 行，`-- corner Slowest violators` 第 1064 行（90 个 max slew 块），`==DONE==` 第 1690 行 | 原始输出 |
 | `cts9_route.txt` | 710 B | **整条 flow 重跑版的布线收敛原文**：`logs/routing/26-detailed.log` 里 9 条 `DRT-0199 Number of violations =` 全列，带行号：194/245/295/345/395/442/489/535/581，序列 12,932 → 4,974 → 4,733 → 1,076 → 79 → 34 → 1 → 1 → **0** | 原样摘录 |
 | `cts9_cts.txt` | 288 B | 同一次 run 的 CTS 原文：第 1049 行聚类后 sink 248、第 1084 行扇出分布 `9:244, 10:2`（上界等于 SDC 限值 10） | 原样摘录 |
+| `antenna_ctsfix3.txt` | 707 B | **ctsfix3 的天线复检结果：不是 0**。OpenROAD `check_antennas -verbose` 对 `results/routing/sha256_axil.odb` → **39 net / 49 pin**；正对照 `tapeout16` → **67 / 87**（证明脚本有分辨力）；附两份日志的字节数、行数、sha256 与违例块内各层出现次数（met1/li1 229、met2 220、met3 205、met4 145、met5 2） | 生成结果 |
+| `antenna_closed_loop.txt` | 4,062 B | **天线 39/49 → 32/38 → 2/2 → 0/0 的完整闭环**：每轮 tcl 原文、逐轮日志行号（round1 L305/L645/L11309/L11310、round2 L619/L1523/L1524、round3 L509/L534/L535）、`loop_progress.txt` 四行、独立进程复检 0/0、四件产物（DEF/ODB/GDS/网表）字节与 sha256、二极管 327 与 filler 25,656 的出处 | 生成结果 |
+| `klayout_drc_antclean.txt` | 1,182 B | **天线归零那版 GDS（40,666,588 B, `89cda760…`）的 KLayout DRC**：`sky130A_mr.drc` 五个开关全开，**218 个规则类 / 0 条**（`<item>` 计数），日志 2,146 行、报告 2,824,878 B；附 ctsfix3 版与 `ctl.gds` 两组对照 | 生成结果 |
+| `density_antclean.txt` | 780 B | **同一份 GDS 的金属密度**：li1 0.4991 / m1 0.7232 / m2 0.9033 / m3 0.9223 / m4 0.9478 / m5 0.9716，六层全在阈值之上、**0 条**；日志 5.400 s，附 ctsfix3 对照与 `m1.pd.1d` 正对照 | 生成结果 |
+| `lvs_antclean.txt` | 1,616 B | **同一份 GDS 的 LVS**：Magic 提取 `layout.ext.spice` 2,815,680 B → 清洗 `TOP_INST 34,289` → 网表侧 `INSTANCES 34,289 (dropped fill/tap 13,382)` → netgen **`Final result: Circuits match uniquely.` / `LVS PASS`**（日志 321 行）；写明与 ctsfix3 的 34,182 相差 +107 尚未逐条追查，以及「本版未重跑 STA/DRV、功耗未取」 | 生成结果 |
+| `xor_antclean.txt` | 1,706 B | **GDS XOR：两条 stream-out 路径 0 差异**。A = Magic 出图 40,666,588 B，B = KLayout「读同一份 DEF + PDK 单元 GDS 回填空 cell」18,758,880 B；flatten 后逐层 `Region ^` → `common=42 A_only=[(81,14)] B_only=[]`、`TOTAL_DIFF=0`、**RESULT PASS**；含上一版同法 PASS 的对照，以及「为何不拿逐层形状数相减当判据」的口径说明 | 生成结果 |
 | `cts9_lvs.txt` | 622 B | **这一版的 LVS 结论**：`Circuits match uniquely`、151 处叶子单元 `Netlists match uniquely`、顶层 pin 表与器件类等价 | 生成结果（netgen 原文截取） |
 | `cts9_sta3c.txt` | 469 B | 同一次 run 的三 corner 签核时序：Slowest +0.51/+0.41、Typical +0.74/+0.41、Fastest +0.99/+0.40（全 MET） | 生成结果 |
 | `cts9_metrics.csv` | 1,953 B | 同一次 run 的 `reports/metrics.csv` 原文件：0 违例五列全 0，`flow_status` 为 `flow failed`，五列 `-1` | 原样，未改一个字节 |
@@ -106,6 +112,12 @@ e2be16bc18b791c16b99030f0691d7c17f2b638748cdf4c7fdda2597cbce9bc0  lvs_selfcheck.
 42237b91ed66826eabb58405c2acedce88fa9c6262b6c7847c72e1af5a2b4a42  lvs_pin_parity.txt
 db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13  lvs_port_graph.txt
 37329768afd8f27f5f0f900d9f0fb987973d18a2912e03c9a6fec439259c012c  lvs_pass.txt（上一版 5,517 B）
+1252cf940453f64f2005ef99570b61d938b48dffac49243cdcb5cba189d4b278  antenna_ctsfix3.txt
+551a7a0bcf9f91bb68cc0ecc45562c5b57770c3aaba6f9b062a5c47204eab746  antenna_closed_loop.txt
+0df4a6f8778ff8dc56b3c82251078f62a7273cfde723e69d7ce007efa7fc3626  klayout_drc_antclean.txt
+4a07da9d1b4b3e2594359580cf6591b60e859be5a5a1676dc9d4a03736ce4715  density_antclean.txt
+975e7494941bc0af0f38618f6029832f26bd07c106403af2ef50d41c469ccc98  lvs_antclean.txt
+0edaf51f2610f8644283c700238b92739ca02fa190cb2ce5034589494a00f8a3  xor_antclean.txt
 ```
 
 ## 一个必须知道的读数陷阱
@@ -153,6 +165,6 @@ db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13  lvs_port_graph
 - 同一次 run 的 detailed routing 收在 0 违例；
 - 同一次 run 的 RCX 三 corner STA 全部 MET。
 
-要说清的边界：flow 自己在第 36 步「Magic Spice Export from LEF」假死（chroot 环境限制），所以 `metrics.csv` 的 `flow_status` 是 `flow failed`，`lvs_total_errors` / `Magic_violations` / `pin_antenna_violations` / `net_antenna_violations` / `klayout_violations` 五列仍是 `-1`——那是**没跑**，不是 0。LVS 是在 flow 之外、用同一份 GDS 单独跑出来的，现已固化成仓库 `tools/lvs/run_lvs.sh` 一条命令（`bash tools/lvs/run_lvs.sh <run目录> sha256_axil`，末行 `LVS PASS`；两侧各 34,182 个实例、94 个端口，实跑数字见 `tools/lvs/EXPECTED.txt`）。KLayout DRC 与金属密度也已在这一版 GDS 上补跑（`klayout_drc_ctsfix3.txt`：218 类 / 0 条，正对照报 1 条 `m1.2`；`density_ctsfix3.txt`：六层空孔率 0.4993–0.9763 全高于阈值 / 0 条）；GDS XOR 与天线检查这一版仍没跑。
+要说清的边界：flow 自己在第 36 步「Magic Spice Export from LEF」假死（chroot 环境限制），所以 `metrics.csv` 的 `flow_status` 是 `flow failed`，`lvs_total_errors` / `Magic_violations` / `pin_antenna_violations` / `net_antenna_violations` / `klayout_violations` 五列仍是 `-1`——那是**没跑**，不是 0。LVS 是在 flow 之外、用同一份 GDS 单独跑出来的，现已固化成仓库 `tools/lvs/run_lvs.sh` 一条命令（`bash tools/lvs/run_lvs.sh <run目录> sha256_axil`，末行 `LVS PASS`；两侧各 34,182 个实例、94 个端口，实跑数字见 `tools/lvs/EXPECTED.txt`）。KLayout DRC 与金属密度也已在这一版 GDS 上补跑（`klayout_drc_ctsfix3.txt`：218 类 / 0 条，正对照报 1 条 `m1.2`；`density_ctsfix3.txt`：六层空孔率 0.4993–0.9763 全高于阈值 / 0 条）；GDS XOR 与天线检查在这一版 GDS 上当时没跑（flow 原文 `…klayout.gds wasn't found. Skipping GDS XOR.`），**后来补跑并解决了**：`antenna_ctsfix3.txt` 记录复检结果是 39 net / 49 pin（不是 0），随后在同一份布线后 ODB 上按 `antenna_closed_loop.txt` 的三轮流程压到 **0 / 0**（独立进程复检仍 0/0），补 fill 后重出 GDS 40,666,588 B（`89cda760…`），并在这一份上四项同版复核：`klayout_drc_antclean.txt` 218 类 0 条、`density_antclean.txt` 六层 0 条、`lvs_antclean.txt` `Circuits match uniquely`、`xor_antclean.txt` `TOTAL_DIFF=0`。
 
-这一版第一次让「布线 0 违例」「可交付 GDS + LVS 通过」「KLayout DRC 0 条 + 密度 0 条」落在同一个版本上，但仍不是签核：缺天线与 GDS XOR 两项。
+这一版第一次让「布线 0 违例」「可交付 GDS + LVS 通过」「KLayout DRC 0 条 + 密度 0 条」落在同一个版本上；天线归零的那一版又把天线与 GDS XOR 补齐，六项在同一份 GDS 上拿到结论。**但仍不是签核**：天线归零版没有重跑 RCX + 三 corner STA 与 DRV、功耗未取（`lvs_antclean.txt` 末段写明），所以 ctsfix3 的 setup / hold 数字不能顺延到该版；本版 LVS 两侧 34,289 实例与 ctsfix3 的 34,182 相差 +107，未逐条追到单元级。

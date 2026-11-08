@@ -1,0 +1,19 @@
+# KLayout DRC：反天线闭环后的完工 GDS（antclean_fill.gds）
+# 判据：违例条数 = lyrDB 里 <item> 节点数；0 即 PASS
+
+对象  antclean_fill.gds  40,666,588 B  sha256 89cda7602ad0a7f827a98491a64193b917deb3d501ffc7981adb71e5d17c1038
+deck  /pdk/sky130A/libs.tech/klayout/drc/sky130A_mr.drc（sky130A_mr，feol/beol/offgrid/seal/floating_metal 全开）
+call  klayout -b -zz -r sky130A_mr.drc -rd top_cell=sha256_axil -rd topcell=sha256_axil \
+      -rd input=/tmp/antv7c/antclean_fill.gds -rd report=/tmp/kl/drc_antfill.lyrdb \
+      -rd feol=true -rd beol=true -rd floating_metal=true -rd seal=true -rd offgrid=true -rd thr=4 -rd thread=4
+log   tmp/kl/drc_antfill.log   2,146 行
+      L2135 "Writing report database: /tmp/kl/drc_antfill.lyrdb .."
+      L2146 "release 2023.6.14_01.08"
+rpt   tmp/kl/drc_antfill.lyrdb  2,824,878 B
+
+统计  218 个规则类（<category> 节点），违例条目 <item> = 0
+      即 KLayout DRC 全开、0 条。
+
+附（同一 deck 的两组对照）
+      上一版 ctsfix3 results/signoff/sha256_axil.gds：218 类 0 条（evidence/klayout_drc_ctsfix3.txt）
+      正对照 ctl.gds：报 1 条 m1.2（证明 deck 有分辨力）

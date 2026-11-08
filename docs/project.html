@@ -219,8 +219,34 @@ footer p{margin:6px 0}
     <p class="sub">这次 LVS 之前卡了四轮，每轮都是真缺陷：fill/tap 在版图里没有器件却被展平成「unmatched」；电源引脚口径没对齐（<code>VNB→VGND</code>、<code>VPB→VPWR</code>），一版报出 13,961 个 <code>Net:</code> 片段；Magic 写出的网表在固定列宽折行、<code>+</code> 续行让按行首统计的脚本数错实例；CTS 加的 <code>clkload*</code> 悬空输出在版图侧被命名成 <code>clkload90/X</code>，网表侧写成 <code>NC_Y</code> 这类常量名后 178 个悬空输出被归成一类、报 222 个 Net mismatch —— 两侧统一按「实例/引脚」命名，归零。</p>
     <div class="box warn">
       <b>边界，必须一起读</b>
-      <p class="note"><code>metrics.csv</code> 的 <code>flow_status</code> 是 <b><code>flow failed</code></b>：第 36 步「Magic Spice Export from LEF」在 chroot 里假死（15 分钟 CPU 只跑 17 秒、打开的文件描述符停在 155 不增长），LVS 是在 flow 之外用同一份 GDS 单独跑出来的（现已固化成仓库里的 <code>tools/lvs/run_lvs.sh</code> 一条命令，末行打 <code>LVS PASS</code>）。因此 <code>lvs_total_errors</code>、<code>Magic_violations</code>、<code>pin_antenna_violations</code>、<code>net_antenna_violations</code>、<code>klayout_violations</code> 五列仍是 <b><code>-1</code>（没跑，不是 0）</b>；KLayout DRC 与 GDS XOR 这一版没跑（flow 原文跳过警告 <code>…klayout.gds wasn't found. Skipping GDS XOR.</code>）；天线复检这一步也没跑到（配置里 <code>GRT_REPAIR_ANTENNAS</code> 是开的，但 signoff 的 antenna 检查没执行），本页不给天线结论；功耗本版没取。<b>KLayout DRC 与密度这两项后来在 flow 之外用同一份 GDS 补跑了</b>——DRC 218 个规则类、0 条（正对照 <code>ctl.gds</code> 报 1 条 <code>m1.2</code>），密度六层空孔率 0.4993 / 0.7275 / 0.9055 / 0.9264 / 0.9460 / 0.9763、0 条（正对照报 1 条 <code>m1.pd.1d</code>），原文见 <a href="evidence/klayout_drc_ctsfix3.txt">evidence/klayout_drc_ctsfix3.txt</a> 与 <a href="evidence/density_ctsfix3.txt">evidence/density_ctsfix3.txt</a>。所以准确说法是：<b>这一版第一次同时具备「布线 0 违例」与「可交付 GDS + LVS 通过 + DRC / 密度补跑 0 条」，但仍不是签核</b>——缺天线复检与 GDS XOR 两项。证据文件与逐字节指纹见 <a href="numbers.html">numbers.html</a> 第四节与第六节。</p>
+      <p class="note"><code>metrics.csv</code> 的 <code>flow_status</code> 是 <b><code>flow failed</code></b>：第 36 步「Magic Spice Export from LEF」在 chroot 里假死（15 分钟 CPU 只跑 17 秒、打开的文件描述符停在 155 不增长），LVS 是在 flow 之外用同一份 GDS 单独跑出来的（现已固化成仓库里的 <code>tools/lvs/run_lvs.sh</code> 一条命令，末行打 <code>LVS PASS</code>）。因此 <code>lvs_total_errors</code>、<code>Magic_violations</code>、<code>pin_antenna_violations</code>、<code>net_antenna_violations</code>、<code>klayout_violations</code> 五列仍是 <b><code>-1</code>（没跑，不是 0）</b>；flow 里 GDS XOR 这一步当时也确实跳过了（原文 <code>…klayout.gds wasn't found. Skipping GDS XOR.</code>）；功耗本版没取。<b>KLayout DRC、密度、天线复检、GDS XOR、LVS 这五项后来都在 flow 之外补跑了</b>：DRC 218 个规则类、0 条（正对照 <code>ctl.gds</code> 报 1 条 <code>m1.2</code>），密度六层空孔率 0.4993 / 0.7275 / 0.9055 / 0.9264 / 0.9460 / 0.9763、0 条（正对照报 1 条 <code>m1.pd.1d</code>），原文见 <a href="evidence/klayout_drc_ctsfix3.txt">evidence/klayout_drc_ctsfix3.txt</a> 与 <a href="evidence/density_ctsfix3.txt">evidence/density_ctsfix3.txt</a>；天线复检给出 <b>39 条 net / 49 条 pin 违例</b>（不是 0，正对照 <code>tapeout16</code> 报 67 / 87，证明脚本有分辨力），见 <a href="evidence/antenna_ctsfix3.txt">evidence/antenna_ctsfix3.txt</a>。<b>此处更正</b>：本页上一版写「天线复检没跑到、本页不给天线结论」「缺天线复检与 GDS XOR 两项」，这两句已被实测推翻——天线不但跑了，还在同一次 run 的 ODB 上把 39/49 压到了 <b>0 / 0</b>；GDS XOR 也跑了，42 个共同层 0 差异（见下一节）。仍要守住的边界是：<b>「天线归零」那一版没有重跑时序与 DRV</b>，上面表格里的 setup +0.51 / +0.74 / +0.99、hold +0.41 / +0.41 / +0.40 属于这一版（无增补二极管、走线不同），不能顺延；功耗仍未取。证据文件与逐字节指纹见 <a href="numbers.html">numbers.html</a> 第四节与第六节。</p>
     </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>把天线也压到 0：同一次 run 的 ODB 上补三轮</h2>
+    <p class="sub">上一节的天线复检结果如实是 39 / 49 违例。这一步不是重新跑一遍 flow，而是<b>在同一份 <code>results/routing/sha256_axil.odb</code> 上反复做「修天线 → 详细布局 → 全局布线 → 详细布线 → 复检」</b>：每轮把复检后的 ODB 再送回 <code>repair_antennas</code>，二极管的位置才按真实走线重算。</p>
+    <table>
+      <tr><th>轮 / 步骤</th><th>布线违例</th><th>天线复检</th><th>原文</th></tr>
+      <tr><td>起点（flow 原样）</td><td>0</td><td><b>39 net / 49 pin</b></td><td><a href="evidence/antenna_ctsfix3.txt">evidence/antenna_ctsfix3.txt</a></td></tr>
+      <tr><td>round 1</td><td>13,894 → … → <b>0</b>（8 次迭代）</td><td>32 net / 38 pin</td><td><code>round1.log</code> 第 305 / 645 行、第 11309 / 11310 行</td></tr>
+      <tr><td>round 2</td><td><b>0</b></td><td>2 net / 2 pin</td><td><code>round2.log</code> 第 619 行、第 1523 / 1524 行</td></tr>
+      <tr><td>round 3</td><td><b>0</b>（122 → 49 → 40 → 0）</td><td><b>0 net / 0 pin</b></td><td><code>round3.log</code> 第 509 行、第 534 / 535 行</td></tr>
+      <tr><td>独立复检（另起进程、只读最终 ODB）</td><td>—</td><td><b>0 net / 0 pin</b></td><td><code>check_antennas -verbose</code>，日志 3 行 / 209 B / <code>99610107…</code></td></tr>
+    </table>
+    <p class="sub">每轮的命令是固定的一条序列：<code>global_route -allow_congestion</code> → <code>repair_antennas sky130_fd_sc_hd__diode_2 -iterations 15 -ratio_margin 10</code> → <code>detailed_placement</code> → <code>global_route</code> → <code>detailed_route -droute_end_iter 64 -or_seed 42</code> → <code>check_antennas</code>。顺序里 <b>detailed_placement 不能省</b>：早先一版漏了它，二极管没有合法位置，详细布线违例从 2,636 一路涨到 116,774，64 轮都收敛不下来。二极管最终 327 个（原 196 + 增补 131），filler 25,656 个（清单与 <code>config.tcl</code> 第 46 / 65 行一致）。全部过程写在 <a href="evidence/antenna_closed_loop.txt">evidence/antenna_closed_loop.txt</a>。</p>
+    <table>
+      <tr><th>项</th><th>天线归零这一版（含 fill）</th><th>判据原文 / 证据</th></tr>
+      <tr><td>GDS / 网表 / DEF</td><td>40,666,588 B / 3,386,854 B / 16,742,332 B<br><code>89cda760…</code> / <code>b547bca3…</code> / <code>0f032ded…</code></td><td><a href="evidence/antenna_closed_loop.txt">evidence/antenna_closed_loop.txt</a> 第 4 节</td></tr>
+      <tr><td>KLayout DRC</td><td><b>218 个规则类、0 条</b></td><td><a href="evidence/klayout_drc_antclean.txt">evidence/klayout_drc_antclean.txt</a></td></tr>
+      <tr><td>金属密度</td><td>六层 0.4991 / 0.7232 / 0.9033 / 0.9223 / 0.9478 / 0.9716，<b>0 条</b></td><td><a href="evidence/density_antclean.txt">evidence/density_antclean.txt</a></td></tr>
+      <tr><td>LVS</td><td><b><code>Final result: Circuits match uniquely.</code></b>；两侧各 34,289 实例</td><td><a href="evidence/lvs_antclean.txt">evidence/lvs_antclean.txt</a></td></tr>
+      <tr><td>GDS XOR</td><td><b>42 个共同层 0 差异</b>（<code>TOTAL_DIFF=0</code>），Magic 独有 (81,14) 1 个边界层图形</td><td><a href="evidence/xor_antclean.txt">evidence/xor_antclean.txt</a></td></tr>
+      <tr><td>时序 / DRV / 功耗</td><td><b>这一版没有重跑</b>（增补二极管改变了走线与电容），功耗未取</td><td>同上，末尾「未重跑」段</td></tr>
+    </table>
+    <p class="sub">XOR 的口径也一并公开：左边是 Magic 从 DEF 出的 GDS，右边是 KLayout 读同一份 DEF、再用 PDK 单元 GDS 回填空 cell 出的图；两边 flatten 后按几何做逐层异或。所以它证明的是<b>两条 stream-out 路径产出一致的图形</b>，不是「版图与网表一致」（后者由 LVS 负责）。另外，前期按「逐层形状数」相减得到 1,719,510 的差，是统计口径差（一侧把 fill/tap 重复展开成 170,800 个实例，另一侧 47,559），不是真实图形差——这也是为什么判据取 flatten 后的几何异或。</p>
   </div>
 </section>
 
