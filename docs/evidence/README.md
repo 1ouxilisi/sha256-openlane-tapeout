@@ -31,6 +31,8 @@
 | `lvs_top_level_gap.txt` | 4,692 B | **新版 LVS 的失败边界**：四组对照（合并衬底网 / 不合并 / 同内容无 fill / 两侧删物理单元）全部 `Netlists do not match`，但 **150 个叶子单元逐个 `Netlists match uniquely`**、器件与网数逐单元相等，失败只在顶层；顶层差 = 物理单元口径（版图 16,472 实例 vs 网表 21,968，差 5,496 正好是 `tapvpwrvgnd_1` 实例数）+ 衬底网命名口径（版图每实例一份 `VPB`/`VNB`，网表单个全局网，PDK setup 无此规则）。同时撤回上一版「逐单元网数差 2」——那是把 `VNB→VGND`/`VPB→VPWR` 全量替换时连单元内部定义一起合并造成的 | 生成结果 |
 | `lvs_new_pass.txt` | 4,572 B | **新版 LVS 通过**：天线修好那版 GDS 提出的网表 vs OpenROAD 网表，`Final result: Circuits match uniquely.`；两侧 **15,588 器件 / 15,645 网**相等，149 个叶子单元逐个 `Netlists match uniquely`。文件逐条写清先前四组对照为何全败——`+` 续行导致两侧删物理单元不一致、只在网表侧合并 `VPB/VNB`、总线被压成单网并丢 4 条 `assign` 端口别名、`write_verilog` 不写电源脚——附复现链、字节数、md5 与「这证明不了什么」 | 生成结果 |
 | `sta_signoff_3corner.txt` | 7,176 B | **RCX + 三 corner 的 signoff 口径时序对照**：寄生由 OpenROAD rcx 从 `fixed16.def` 直接提取（`extract_parasitics -lef_res -ext_model_file rules.openrcx.sky130A.{max,nom,min}.calibre`，三份 SPEF 19.9/18.9/18.6 MB），三工艺角 `ss_100C_1v60`/`tt_025C_1v80`/`ff_n40C_1v95` 各算一次。结果：最差 setup **+0.4058 ns**（Slowest）、最差 hold **+0.4096 ns**（Fastest）、TNS 0；对比未修版 +0.5619 / +0.4021，setup 少 0.156 ns。方法自证：同一脚本跑旧版官方 `nl.v` + SPEF 复现 +0.5619（与已公布值逐位一致）。同时**撤回**估算口径的 +9.83 → +9.92 | 生成结果 |
+| `sta3c.log` | 167,259 B | 新版三 corner STA 的**原始 OpenROAD 报告**（逐字，未剪裁）：`==SETUP==` / `==HOLD==` 每角 `report_checks`、`==POWER==` 三角功耗、`==AREA==`、`==PARASITIC_ANNOTATION==` 210 个未标注 driver。**第 1096 行就是 `0.4058 slack (MET)`** | 原始输出 |
+| `sta3c_old.log` | 167,264 B | 旧版同脚本三 corner 原始报告，**第 1096 行 `0.5619 slack (MET)`**——两行落在同一行号，因为脚本形状完全一样，只换了网表与 SPEF | 原始输出 |
 | `sta_est_compare.txt` | 3,585 B | **估算口径 STA 对照（已被 `sta_signoff_3corner.txt` 取代，保留作过程记录）**：同一口径（`tt_025C_1v80` 单角 + `estimate_parasitics -global_routing`，无 RCX/SPEF）对 `25-fill.odb` 与 `fixed16.odb` 各跑一次：worst setup +9.8329 → +9.9243 ns、hold +0.6247 → +0.6274 ns。**这组数过于乐观，不能当 signoff** | 生成结果（作废） |
 | `lvs_pass.txt` | 8,292 B | **LVS 结案**：两侧网名集合做差，真正多出的只有 `VNB`/`VPB` 两个网（井/衬底由 5,496 个 tap 接电源，Magic 提取时体端并入电源，而网表里 tap 引脚为空被整批丢掉）；`47 = 43 + 4`，两处都补后展平顶层 **166,353 器件 / 84,178 网**两侧相等，`Circuits match uniquely`；第 7 节记两次对照实跑：tap 单元在 PDK 里只有 `VGND VPWR` 两脚、body 为空，补回 5,496 个 tap 仍 47 行，强加 VNB/VPB 脚仍 47 行——另一条路线做不到，口径由定义决定 | 生成结果 |
 
@@ -57,6 +59,8 @@ ea954e06f4182e4fd0f88058c402824bf3f0eeb6ff6b81ef172233d080cb5c0c  lvs_top_level_
 a3dd1f65f39b93bf20eefe2d5458efba3053d073cacdf5fe275f73b0113193ee  lvs_new_pass.txt
 e0b905155bdb1fcb4793feebc2570029536d69ed4abcd1e65d592ca3b694a221  sta_est_compare.txt
 681637a543e750b338077d1ded658785f90cd198342277a78878c2e48f8bd2e2  sta_signoff_3corner.txt
+7dd34ffaa667dc8dc6b6662083993c709e5754f9f80a5119dbd44947253271e0  sta3c.log
+2ceda13c54e277c081cdad1dbf81c58eac5428c9110d799a40d1309ab4222200  sta3c_old.log
 304a4406735091a1425df27420ac6d395089c25bb655cfb248f8b720b4082683  lvs_attempt.txt
 8397535d6d8f3a804c7d4d320699f815764eb261d09a7a57117ef40df1eda35e  lvs_rootcause.txt
 23d7022ac3cb9136bed59ba43baf67adb5a137a0f5790ebe33549b12b6db1af9  lvs_instance_audit.txt
