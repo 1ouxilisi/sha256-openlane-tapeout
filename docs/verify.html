@@ -136,10 +136,17 @@ li{margin:4px 0;color:var(--muted)}
     <div class="row"><span class="k">同一份版图</span><span class="v"><a href="images/sha256_antclean_layout.png">六层渲染</a>，展平 3,021,383 个多边形、640 × 640 µm</span></div>
   </div>
   <div class="box">
-    <p style="margin:0 0 6px;color:var(--warn);font-family:var(--mono);font-size:12px">这一版没有的</p>
+    <p style="margin:0 0 6px;color:var(--accent);font-family:var(--mono);font-size:12px">这一版补上的：寄生提取 + 三 corner STA + DRV</p>
+    <div class="row"><span class="k">RCX</span><span class="v">三 corner 各提 15,587 net / 131,195 段线；SPEF 18,878,430 / 19,148,078 / 20,231,383 B → <code>evidence/sta_drv_antclean.txt</code></span></div>
+    <div class="row"><span class="k">STA 六格</span><span class="v">setup <b>+11.9732 / +9.1690 / +0.4543</b>、hold <b>+0.4042 / +0.7551 / +1.5854</b>（Fastest / Typical / Slowest），TNS 0.00、WNS 0.00</span></div>
+    <div class="row"><span class="k">corner 与寄生</span><span class="v">Fastest←min、Typical←nom、Slowest←max，一个进程里三份 SPEF 同时读；旧三份日志每次只喂一个角给三个角，这条口径差写在证据第九节</span></div>
+    <div class="row"><span class="k">DRV（PDK 库口径）</span><span class="v">三 corner slew 0 / cap 0；库本身不设 fanout 上限，所以扇出那一格是「无上限可违」，不是「已清」</span></div>
+    <div class="row"><span class="k">DRV（自加严 0.75 / 10）</span><span class="v">slew 275（Slowest）/ 8（Typical）/ 0（Fastest），fanout 61，cap 0；相对 ctsfix3 基线多 34 条 slew、21 条 fanout，逐条归因见证据第七、八节</span></div>
+  </div>  <div class="box">
+    <p style="margin:0 0 6px;color:var(--warn);font-family:var(--mono);font-size:12px">这一版仍然没有的</p>
     <ul style="padding-left:18px">
-      <li>没重跑 RCX + 三 corner STA 与 DRV，所以时序结论属于上一版（ctsfix3）原版，不能顺延到这一版</li>
-      <li>上一版跑 STA 的那一次，DRV 五列是 <code>-1</code>（没跑，不是 0）；真正跑过 DRV 的派生版还留 90 条 max slew</li>
+      <li>IR-drop 没跑，这一版仍没有电压降结论；功耗没取（STA 有输出但没解析），不与旧版数字混用</li>
+      <li>项目自己加严的 0.75 ns / fanout 10 口径下 <b>DRV 未清</b>：Slowest 275 条 slew、61 条 fanout（基线 ctsfix3 同口径 241 / 40）；要清得插 buffer 或改时钟树，会动版图，上面六项得重跑，本轮没做</li>
       <li>LVS 两侧 34,289 与上一版 34,182 差 +107，没追到单元级，照写不抹平</li>
     </ul>
   </div>

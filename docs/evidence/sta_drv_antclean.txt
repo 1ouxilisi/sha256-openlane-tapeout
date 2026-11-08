@@ -1,0 +1,111 @@
+antclean_fill：寄生提取（RCX）+ 三 corner STA + DRV 复跑
+生成日期 2026-11-08
+
+一句话：这一版第一次在同一份 GDS 对应的版图上，拿到「三工艺角 + 真实寄生」的时序与设计规则（DRV）结论。时序六格全为正；DRV 在 PDK 库自身口径下 0 条，在项目自己加严的 0.75 ns / fanout 10 口径下未清，条数与增量全部列在下面，不给一个笼统的「通过」。
+
+一、对象（同一份版图）
+antclean_fill.gds   40,666,588 B   sha256 89cda7602ad0a7f827a98491a64193b917deb3d501ffc7981adb71e5d17c1038
+antclean_fill.def   16,742,332 B   0f032ded…
+antclean_fill.odb   32,054,884 B   d2c5d8f0…
+网表                3,386,854 B    b547bca3…
+merged.min/nom/max.lef  1,429,503 / 1,429,507 / 1,429,506 B
+liberty  sky130_fd_sc_hd__ff_n40C_1v95 / __tt_025C_1v80 / __ss_100C_1v60
+
+二、寄生提取（OpenRCX，每角一次，规则取 PDK 自带三份）
+角    nets    rsegs   caps    ccs      SPEF 字节数   SPEF sha256
+min   15,587  76,535  76,535  167,501  18,878,430    2035f7a9…
+nom   15,587  78,826  78,826  168,623  19,148,078    23f38cb0…
+max   15,587  99,766  99,766  171,659  20,231,383    d2de091f…
+布线段 131,195 段（ctsfix3 为 126,480 段，差在 fill 与二极管）
+命令形：read_lef → read_def → read_liberty → define_process_corner → extract_parasitics -ext_model_file rules.openrcx.sky130A.<corner>.calibre -lef_res → write_spef
+日志逐角打 Extract 15587 nets。
+
+三、STA 约束（与 ctsfix3 同源，不是为好看重设的）
+CLOCK_PORT clk / CLOCK_PERIOD 18.0 / IO_PCT 0.2 → 输入输出外部延迟各 3.6 ns
+SYNTH_CLOCK_UNCERTAINTY 0.25 / SYNTH_CLOCK_TRANSITION 0.15 / SYNTH_TIMING_DERATE 0.05
+SYNTH_DRIVING_CELL sky130_fd_sc_hd__inv_2 / 引脚 Y / OUTPUT_CAP_LOAD 33.442
+set_max_transition 0.75、set_max_fanout 10（来自 config.tcl 第 212 / 210 行生成）
+
+四、corner 与 SPEF 的配对（这一版第一次在一个进程里成对读）
+Fastest ← min、Typical ← nom、Slowest ← max
+
+五、结果：setup / hold 六格（单位 ns）
+              Fastest   Typical   Slowest
+setup(max)    11.9732    9.1690    0.4543
+hold(min)      0.4042    0.7551    1.5854
+tns 0.00 / wns 0.00，三 corner 都没有负 slack。
+最差 setup 路径：_20154_ → _20185_（clocked FF → clocked FF，Path Group clk），Slowest，报表打 0.45，原值 0.4543。
+最差 hold 路径：_20714_ → _20682_（FF → FF），Fastest，报表打 0.40，原值 0.4042。
+最松的一条：setup Fastest，_19369_ → s_axil_wready，11.97。
+寄生标注：report_parasitic_annotation 报 214 个未标注 driver，与 ctsfix3 同数，都是没有 RC 的时钟负载/填充类单元。
+
+六、DRV：两套口径分开写，缺一条就不诚实
+(1) PDK 库自身口径：三个 liberty 的 default_max_transition 都是 1.5000000000 ns；库里不设 default_max_fanout，也不设 default_max_capacitance。
+    三 corner 结果：max slew 0 / max capacitance 0；max fanout 这一格写 0 的含义是「没有上限可违」，不等于扇出干净。
+    即：按 PDK 自己的规则，这一版设计规则是干净的。
+(2) 项目自己加严的口径（set_max_transition 0.75、set_max_fanout 10）：
+    Fastest  slew 0   / fanout 61 / cap 0
+    Typical  slew 8   / fanout 61 / cap 0
+    Slowest  slew 275 / fanout 61 / cap 0
+    最大 slew 1.25 ns（限 0.75，超 0.50）。
+    只报 275 会让人以为是硅上的硬伤；只报 0 等于把口径偷偷换成宽松那一档。所以两行都留。
+
+七、同一脚本跑 ctsfix3 原版（基线对照，用它自己的 ODB 与三份旧 SPEF）
+setup 11.9755 / 9.1864 / 0.5077；hold 0.4041 / 0.7477 / 1.6083
+DRV：Fastest 0 / 40 / 0、Typical 0 / 40 / 0、Slowest 241 / 40 / 0
+归零这一版的净变化：
+  setup Slowest 0.5077 → 0.4543（−53 ps）；hold Slowest 1.6083 → 1.5854（−23 ps）
+  slew 违例 Slowest 241 → 275（新增 44 条、消失 10 条；新增的 44 条里 6 条落在 ANTENNA_*/DIODE 引脚本身）
+  slew 违例 Typical 0 → 8（8 条全是逻辑节点，无二极管引脚）
+  fanout 违例 40 → 61（新增 21 条，三 corner 相同，因为扇出是拓扑量）
+
+八、+21 条扇出逐条归因（扣掉二极管后全部回到上限内）
+driver      net       负载数  其中二极管  扣掉后的逻辑负载
+_09393_/_05257_  11   1   10
+_09445_/_05306_  15   5   10
+_09716_/_05543_  12   2   10
+_09719_/_05546_  11   1   10
+_10759_/_06073_  12   2   10
+_11567_/_06394_  11   1   10
+_12224_/_07014_  11   2    9
+_12306_/_07094_  11   1   10
+_12388_/_07173_  11   1   10
+_12431_/_07215_  12   2   10
+_13032_/_07796_  11   1   10
+_13053_/_07816_  11   1   10
+_13133_/_07894_  11   1   10
+_13421_/_08174_  11   1   10
+_14720_/_09188_  11   1   10
+_14728_/_09196_  11   1   10
+_14821_/_02220_  13   3   10
+_14849_/_02246_  11   1   10
+_14891_/_02284_  14   4   10
+_15280_/_02633_  12   2   10
+input9 / net9    11  10    1
+（表由 fanout_probe2.tcl 直接读 ODB 打印，不是估的；脚本在同目录）
+
+结论：21 条新违例里，逻辑负载全部 ≤10（最大正好 10）。把物理专用的天线二极管引脚从扇出计数里去掉，21 条全部回到限值内，扇出违例回到基线那 40 条。也就是说天线修复没有把任何一条网真的压过逻辑扇出上限，越线的全是二极管自己那 1–10 个引脚（net9 一条网上挂了 10 个二极管）。
+但这只是口径解释，不能当「已清」：OpenSTA 的 report_check_types 默认把二极管引脚算进 fanout，本文件没有改这个判据，也没有为了好看去改 SDC。
+
+九、口径自检：旧三份 mcsta 日志为什么「grep 不到 read_spef」却仍是带寄生的
+io.tcl 的 read_spefs（第 306 行）读 $CURRENT_SPEF，然后 foreach 循环写进全部三个 corner，全程不打印。所以日志里 grep 不到 read_spef 不等于没读寄生。
+代价是：每次 run 只有一个角的 SPEF 被复制到三个角，三次 run 之间数字因此不同（Slowest setup 0.9853 / 0.5077 / 0.7417）。
+正确读法是每个角取对应那次 run：Fastest 取 min 那次 11.9755、Typical 取 nom 那次 9.1864、Slowest 取 max 那次 0.5077。
+本次单进程逐角配对的结果与这个「分取」逐位相同（基线 11.9755 / 9.1864 / 0.5077）——说明两种读法等价，旧页面的数没有错；错的是「一份 run 就能给三个角」这个隐含前提，这一版才第一次真正成对读。
+
+十、复现
+工作目录 /home/user/openlane-rootfs/tmp/antfill_sig/
+rcx_one.tcl        env: RCX_LEF / RCX_DEF / RCX_LIB / RCX_RULESET / SAVE_SPEF
+sta_mc_antfill.tcl env: CURRENT_ODB / SPEF_MIN / SPEF_NOM / SPEF_MAX / 三份 liberty / 约束见第三节
+sta_mc_antfill.log               28,857,248 B / 442,674 行（本版三 corner 全量报表）
+sta_mc_ctsfix3.log               28,832,292 B（基线对照，脚本同一份）
+sta_mc_antfill_pdklimit.log      28,823,584 B（拿掉 0.75/10、只剩库上限的那一跑，第六节 (1) 的来源）
+fanout_probe2.tcl  env: PROBE_ODB（第八节那张表的来源）
+跑法：openroad -exit <tcl>，每份 11 秒左右。
+
+十一、它不证明什么
+- 没跑 IR-drop，这一版仍没有电压降结论。
+- 没取功耗：report_power 有输出但没解析，不与旧版数字混用。
+- 没做 ECO：275 / 61 是实测，不是「已修」。要清得插 buffer 或改时钟树，会改版图，前面六项物理结论需重跑。
+- 不是硅结果：三个角都是库模型 + 提取寄生。
+- fill 与二极管在 STA 里当真实负载，与版图一致；但 STA 用的是连接关系 + SPEF，不是 DRC/LVS 的几何判据。

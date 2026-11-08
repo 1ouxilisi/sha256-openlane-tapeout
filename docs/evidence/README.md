@@ -46,6 +46,7 @@
 | `density_antclean.txt` | 780 B | **同一份 GDS 的金属密度**：li1 0.4991 / m1 0.7232 / m2 0.9033 / m3 0.9223 / m4 0.9478 / m5 0.9716，六层全在阈值之上、**0 条**；日志 5.400 s，附 ctsfix3 对照与 `m1.pd.1d` 正对照 | 生成结果 |
 | `lvs_antclean.txt` | 1,616 B | **同一份 GDS 的 LVS**：Magic 提取 `layout.ext.spice` 2,815,680 B → 清洗 `TOP_INST 34,289` → 网表侧 `INSTANCES 34,289 (dropped fill/tap 13,382)` → netgen **`Final result: Circuits match uniquely.` / `LVS PASS`**（日志 321 行）；写明与 ctsfix3 的 34,182 相差 +107 尚未逐条追查，以及「本版未重跑 STA/DRV、功耗未取」 | 生成结果 |
 | `xor_antclean.txt` | 1,706 B | **GDS XOR：两条 stream-out 路径 0 差异**。A = Magic 出图 40,666,588 B，B = KLayout「读同一份 DEF + PDK 单元 GDS 回填空 cell」18,758,880 B；flatten 后逐层 `Region ^` → `common=42 A_only=[(81,14)] B_only=[]`、`TOTAL_DIFF=0`、**RESULT PASS**；含上一版同法 PASS 的对照，以及「为何不拿逐层形状数相减当判据」的口径说明 | 生成结果 |
+| `sta_drv_antclean.txt` | 7,702 B | **同一份 ODB 的 RCX + 三 corner STA + DRV**：逐角提 SPEF（各 15,587 net / 131,195 段线；18,878,430 / 19,148,078 / 20,231,383 B），一个进程成对读（Fastest←min、Typical←nom、Slowest←max）→ setup **+11.9732 / +9.1690 / +0.4543**、hold **+0.4042 / +0.7551 / +1.5854**，TNS 0.00 / WNS 0.00；DRV 两套口径：PDK 库自身（`default_max_transition 1.5`、无 fanout/cap 上限）三 corner 全 0，自加严 0.75 / 10 口径则 Slowest 275 slew、61 fanout（基线 ctsfix3 同口径 241 / 40）；逐条 ODB 探针证明 21 条新增扇出**扣掉二极管引脚后逻辑负载 ≤10**；含旧三份日志的口径自检与复现命令 | 生成结果 |
 | `../images/sha256_antclean_layout.png` | 1,600,361 B | **天线 0/0 那版 GDS 自己的金属层渲染**：输入就是 `antclean_fill.gds`（40,666,588 B / `89cda760…`），`gdspy` 展平后 3,021,383 个多边形、bbox 0,0 – 640,640 µm，只画 li1 与 m1–m5 共六层，4200×4200 px，sha256 `33179acd…`；渲染脚本 `render_antclean.py`（gdspy + matplotlib，非查看器截图）。**它与页面早先那张 `fixed15.gds`（16,621,738 B）的渲染不是同一份版图** | 本轮新增 |
 | `cts9_lvs.txt` | 622 B | **这一版的 LVS 结论**：`Circuits match uniquely`、151 处叶子单元 `Netlists match uniquely`、顶层 pin 表与器件类等价 | 生成结果（netgen 原文截取） |
 | `cts9_sta3c.txt` | 469 B | 同一次 run 的三 corner 签核时序：Slowest +0.51/+0.41、Typical +0.74/+0.41、Fastest +0.99/+0.40（全 MET） | 生成结果 |
@@ -119,6 +120,7 @@ db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13  lvs_port_graph
 4a07da9d1b4b3e2594359580cf6591b60e859be5a5a1676dc9d4a03736ce4715  density_antclean.txt
 975e7494941bc0af0f38618f6029832f26bd07c106403af2ef50d41c469ccc98  lvs_antclean.txt
 0edaf51f2610f8644283c700238b92739ca02fa190cb2ce5034589494a00f8a3  xor_antclean.txt
+289559dac8ba8843d9b02f0573ec0f80ae4641c6540b089ff1a34b319963ecb7  sta_drv_antclean.txt
 ```
 
 ## 一个必须知道的读数陷阱
@@ -168,4 +170,4 @@ db6dc46de5298354ba0af0169a9086e94f085f949fae6bd92f11a003643edd13  lvs_port_graph
 
 要说清的边界：flow 自己在第 36 步「Magic Spice Export from LEF」假死（chroot 环境限制），所以 `metrics.csv` 的 `flow_status` 是 `flow failed`，`lvs_total_errors` / `Magic_violations` / `pin_antenna_violations` / `net_antenna_violations` / `klayout_violations` 五列仍是 `-1`——那是**没跑**，不是 0。LVS 是在 flow 之外、用同一份 GDS 单独跑出来的，现已固化成仓库 `tools/lvs/run_lvs.sh` 一条命令（`bash tools/lvs/run_lvs.sh <run目录> sha256_axil`，末行 `LVS PASS`；两侧各 34,182 个实例、94 个端口，实跑数字见 `tools/lvs/EXPECTED.txt`）。KLayout DRC 与金属密度也已在这一版 GDS 上补跑（`klayout_drc_ctsfix3.txt`：218 类 / 0 条，正对照报 1 条 `m1.2`；`density_ctsfix3.txt`：六层空孔率 0.4993–0.9763 全高于阈值 / 0 条）；GDS XOR 与天线检查在这一版 GDS 上当时没跑（flow 原文 `…klayout.gds wasn't found. Skipping GDS XOR.`），**后来补跑并解决了**：`antenna_ctsfix3.txt` 记录复检结果是 39 net / 49 pin（不是 0），随后在同一份布线后 ODB 上按 `antenna_closed_loop.txt` 的三轮流程压到 **0 / 0**（独立进程复检仍 0/0），补 fill 后重出 GDS 40,666,588 B（`89cda760…`），并在这一份上四项同版复核：`klayout_drc_antclean.txt` 218 类 0 条、`density_antclean.txt` 六层 0 条、`lvs_antclean.txt` `Circuits match uniquely`、`xor_antclean.txt` `TOTAL_DIFF=0`。
 
-这一版第一次让「布线 0 违例」「可交付 GDS + LVS 通过」「KLayout DRC 0 条 + 密度 0 条」落在同一个版本上；天线归零的那一版又把天线与 GDS XOR 补齐，六项在同一份 GDS 上拿到结论。**但仍不是签核**：天线归零版没有重跑 RCX + 三 corner STA 与 DRV、功耗未取（`lvs_antclean.txt` 末段写明），所以 ctsfix3 的 setup / hold 数字不能顺延到该版；本版 LVS 两侧 34,289 实例与 ctsfix3 的 34,182 相差 +107，未逐条追到单元级。
+这一版第一次让「布线 0 违例」「可交付 GDS + LVS 通过」「KLayout DRC 0 条 + 密度 0 条」落在同一个版本上；天线归零的那一版又把天线与 GDS XOR 补齐，六项在同一份 GDS 上拿到结论。**但仍不是签核**：天线归零版的 RCX + 三 corner STA + DRV 现已补跑（`sta_drv_antclean.txt`：时序六格全正、TNS 0.00；DRV 按 PDK 库自身口径 0 条，按自加严 0.75 / 10 口径 Slowest 275 slew / 61 fanout，属「时序通过、DRV 未清」，本轮未做 ECO），功耗仍未取；本版 LVS 两侧 34,289 实例与 ctsfix3 的 34,182 相差 +107，未逐条追到单元级。
