@@ -145,7 +145,7 @@ li{margin:4px 0;color:var(--muted)}
   </div>  <div class="box">
     <p style="margin:0 0 6px;color:var(--warn);font-family:var(--mono);font-size:12px">这一版仍然没有的</p>
     <ul style="padding-left:18px">
-      <li>IR-drop 没跑，这一版仍没有电压降结论；功耗没取（STA 有输出但没解析），不与旧版数字混用</li>
+      <li>IR-drop 与功耗：<b>已在同一份 <code>antclean_fill.odb</code> 上补取</b>——三个工艺角合计 7.58 / 9.57 / 11.1 mW，VPWR 最差压降 1.09 mV（0.06%），命令与原文在 <a href="evidence/power_irdrop_antclean.txt">evidence/power_irdrop_antclean.txt</a>，解读在 <a href="numbers.html">数字溯源</a> 第五节。此前那一版这两项确实都没跑，旧记录不覆盖。</li>
       <li>项目自己加严的 0.75 ns / fanout 10 口径下 <b>DRV 未清</b>：Slowest 275 条 slew、61 条 fanout（基线 ctsfix3 同口径 241 / 40）；要清得插 buffer 或改时钟树，会动版图，上面六项得重跑，本轮没做</li>
       <li>LVS 两侧 34,289 与上一版 34,182 差 +107，没追到单元级，照写不抹平</li>
     </ul>

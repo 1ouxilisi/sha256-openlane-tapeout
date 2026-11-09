@@ -1,0 +1,109 @@
+功耗与 iRdrop（新版 antclean_fill 上的补取）
+==================================================
+
+对象：/tmp/antv7c/antclean_fill.odb（32,054,884 B，天线归零 + 补齐 fill 的那一版，
+      与出 GDS 40,666,588 B 的同一份数据库）
+寄生：/tmp/antfill_sig/antclean_fill.nom.spef（19,148,078 B；min 18,878,430 / max 20,231,383）
+时钟：SDC create_clock -period 18.0000 ns → 55.56 MHz
+工具：OpenROAD b16bda7e82721d10566ff7e2b68f1ff0be9f9e38（chroot 内 /nix/store/…-openroad/bin/openroad）
+      功耗用 OpenSTA report_power；电源网络用 PDNSim analyze_power_grid
+
+一、命令（可复跑）
+--------------------------------------------------
+# 功耗
+read_liberty <corner lib>
+read_db       /tmp/antv7c/antclean_fill.odb
+read_sdc      /designs/sha256_v7b/runs/ctsfix3/results/final/sdc/sha256_axil.sdc
+read_spef     /tmp/antfill_sig/antclean_fill.nom.spef
+set_power_activity -input -activity 0.1 -duty 0.5
+report_power
+
+# iRdrop（顺序照 OpenLane 的 irdrop.tcl：必须先读 liberty，否则工作条件里电压是 0）
+read_liberty /pdk/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+read_db      /tmp/antv7c/antclean_fill.odb
+read_sdc     /designs/sha256_v7b/runs/ctsfix3/results/final/sdc/sha256_axil.sdc
+read_spef    /tmp/antfill_sig/antclean_fill.nom.spef
+analyze_power_grid -net VPWR -voltage_file /tmp/irdrop_vpwr.rpt
+set_pdnsim_net_voltage -net VGND -voltage 0
+analyze_power_grid -net VGND -voltage_file /tmp/irdrop_vgnd.rpt
+
+二、功耗：三个工艺角，输入活动率 0.1 / duty 0.5（向量无关假设）
+--------------------------------------------------
+tt 1v80 25C（sky130_fd_sc_hd__tt_025C_1v80）
+Group                  Internal  Switching    Leakage      Total
+Sequential             4.97e-03   4.99e-05   2.93e-08   5.02e-03  52.5%
+Combinational          1.27e-04   2.51e-04   5.68e-08   3.79e-04   4.0%
+Clock                  2.08e-03   2.09e-03   3.24e-08   4.17e-03  43.6%
+Total                  7.18e-03   2.39e-03   1.19e-07   9.57e-03 100.0%
+                          75.1%      24.9%       0.0%
+
+ss 1v60 100C（sky130_fd_sc_hd__ss_100C_1v60）
+Sequential             3.80e-03   3.94e-05   4.14e-05   3.89e-03  51.3%
+Combinational          1.03e-04   1.93e-04   6.45e-05   3.60e-04   4.8%
+Clock                  1.71e-03   1.62e-03   4.75e-06   3.33e-03  44.0%
+Total                  5.62e-03   1.85e-03   1.11e-04   7.58e-03 100.0%
+                          74.1%      24.4%       1.5%
+
+ff 1v95 -40C（sky130_fd_sc_hd__ff_n40C_1v95）
+Sequential             5.78e-03   5.88e-05   4.47e-08   5.84e-03  52.4%
+Combinational          1.44e-04   2.96e-04   1.58e-07   4.40e-04   3.9%
+Clock                  2.37e-03   2.49e-03   4.79e-08   4.86e-03  43.6%
+Total                  8.30e-03   2.84e-03   2.50e-07   1.11e-02 100.0%
+                          74.5%      25.5%       0.0%
+
+合计（总数，取合计列）：ss 7.58 mW / tt 9.57 mW / ff 11.1 mW；最差 11.1 mW（ff）。
+漏电最大出现在 ss：1.11e-04 W = 111 µW（占 ss 合计 1.5%）。
+
+三、功耗对活动率假设的敏感度（tt 角）
+--------------------------------------------------
+activity 0.01 → 合计 9.16e-03 W（组合 3.59e-05）
+activity 0.10 → 合计 9.57e-03 W
+activity 0.50 → 合计 1.07e-02 W（组合 1.49e-03，开关 3.24e-03）
+时钟组在 0.10 那档是 4.17e-03 W（43.6%），三档都不随输入活动率变化——
+时钟树本身就占了四成多，所以「把输入打满」也不会让总数翻倍。
+
+四、iRdrop（PDNSim，静压降，PDN 为 OpenLane 默认网格）
+--------------------------------------------------
+分析 VPWR：
+[INFO PSM-0040] All shapes on net VPWR are connected.
+########## IR report #################
+Net              : VPWR
+Corner           : default
+Supply voltage   : 1.80e+00 V
+Worstcase voltage: 1.80e+00 V
+Average voltage  : 1.80e+00 V
+Average IR drop  : 1.13e-04 V
+Worstcase IR drop: 1.09e-03 V
+Percentage drop  : 0.06 %
+######################################
+
+分析 VGND（源电压置 0）：
+[INFO PSM-0040] All shapes on net VGND are connected.
+Net              : VGND
+Supply voltage   : 0.00e+00 V
+Worstcase voltage: 1.08e-03 V
+Average voltage  : 1.11e-04 V
+Average IR drop  : 1.11e-04 V
+Worstcase IR drop: 1.08e-03 V
+Percentage drop  : 0.06 %
+
+即：最差节点在 1.80 V 上掉 1.09 mV（0.06%），地网最差 1.08 mV。
+
+五、它证明什么、不证明什么
+--------------------------------------------------
+证明：在同一份最终 ODB（含天线二极管与 fill）上，功耗与电源网络压降都真的算过一遍，
+      三个工艺角的数都能从上面的命令重跑出来。
+不证明：
+1) 不是硅上实测，是工具按 liberty 内部功耗表 + 向量无关活动率假设算出来的估算；
+   活动率换一档总数就动（tt 角 9.16 / 9.57 / 10.7 mW），所以只能当工程估算，不能当签核数。
+2) iRdrop 是静态压降：电流来自 PDNSim 自己的默认估算，没有 di/dt 动态项，
+   没有封装 / 焊盘 / 外部供电模型；PDN 用的是 OpenLane 默认条纹网格，没做网格优化对比。
+3) 功耗没有做时钟树功耗优化（时钟占 43.6%），也没做多阈值 / 电源门控之类的手段。
+
+六、本次用到但没在上一版记录里出现的两个坑
+--------------------------------------------------
+1) analyze_power_grid 先读 ODB 不读 liberty 时，报告会「跑成功」但 Supply voltage 是 0.00e+00 V，
+   全部 IR drop 打印 0——看起来像「没有压降」，其实是没电源。必须按 OpenLane irdrop.tcl 的顺序
+   先 read_liberty（工作条件里带 1.8 V），再 analyze。
+2) report_power 一次进程只能干净地跑一个 corner；想在一次脚本里循环两个 liberty 会报
+   invalid command name "reset_path"，所以 ss 与 ff 是分两个进程跑的。

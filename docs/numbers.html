@@ -107,7 +107,7 @@ footer{padding:34px 0 60px;color:var(--muted);font-size:12.5px;font-family:var(-
     <div class="top"><span class="v">9.41 mW</span><span class="k">典型角功耗</span></div>
     <div class="src">列 power_typical_internal_uW + switching + leakage（单位 µW）</div>
     <div class="raw">…,0.00683,0.00258,1.76e-06,…   → 6.83 + 2.58 + 0.00176 ≈ 9.41 mW</div>
-    <div class="note">同三列还给出另外两个角：Fastest 0.0079+0.00307+1.89e-06 ≈ <b>11.0 mW</b>，Slowest 0.00533+0.002+0.00011 ≈ <b>7.44 mW</b>。三个都列，不挑好看的。</div>
+    <div class="note">同三列还给出另外两个角：Fastest 0.0079+0.00307+1.89e-06 ≈ <b>11.0 mW</b>，Slowest 0.00533+0.002+0.00011 ≈ <b>7.44 mW</b>。三个都列，不挑好看的。<b>注意这是最初那次 flow 的数（未修版）</b>；天线归零那一版在 <code>antclean_fill.odb</code> 上重算了三个角，见<a href="#power">第五节</a>——ss 7.58 / tt 9.57 / ff 11.1 mW，与这里的数不能混着看。</div>
   </div>
 
   <div class="num">
@@ -265,7 +265,7 @@ check_antennas -verbose
     <p class="note"><b>我试过把这条路走通，五次尝试都因工具报错停住，这点我也写进了证据里</b>：① 从详细布线后的库插完二极管再跑详细布线，报 <code>DRT-0218 Guide is not connected to design</code>；② 先重跑全局布线再详细布线，仍报 <code>DRT-0218</code>；③ 改从全局布线后的检查点 <code>22-global.odb</code> 出发，插 114 个二极管后报 <code>GRT-0226 Type2 ripup not type L.</code>；④ 改从布线前的检查点 <code>20-sha256_axil.odb</code> 出发，同样报 <code>GRT-0226</code>；⑤ 再补上 OpenLane 流程里的全局布线层调整参数，仍报 <code>GRT-0226</code>。前者是顺序问题（二极管插在详细布线之后，guide 与连线已经固定在一起，重跑全局布线也补不回来），后者是工具内部错误，换起点、换参数都能复现。所以「修法可行」是真的，但「版图已修」目前<b>拿不出证据</b>。五次尝试的原文、日志字节数，以及下一步的两条路（打开 <code>GRT_REPAIR_ANTENNAS = 1</code> 整条 flow 重跑，或从电路侧消除长 met4 段）写在 <a href="evidence/antenna_repair_route_attempt.txt">evidence/antenna_repair_route_attempt.txt</a>。</p>
     <p class="note"><b>第八次：修成了——真因是我漏了一个参数，不是工具走不通</b>（这一句同时撤回上面「五次尝试都因工具报错停住」的结论）：OpenLane 的 <code>common/grt.tcl</code> 只有在 <code>GRT_ALLOW_CONGESTION = 1</code> 时才把 <code>-allow_congestion</code> 传给 <code>global_route</code>，本 run 的 <code>config.tcl</code> 第 144 行正是 <b>1</b>；我前五次手写的脚本只传了 <code>-congestion_iterations 200</code>，漏了这一个开关。补上后两类错误一起消失：guide 变完整，<code>DRT-0218</code> 不再出现；<code>repair_antennas</code> 的内部重布线不再踩 <code>GRT-0226</code>。同一份 <code>gr.odb</code> 只改这一个开关，<code>repair_antennas</code> 立刻跑通（<code>Found 1 → Inserted 1</code>）。</p>
     <p class="note"><b>实跑结果</b>：从 <code>tmp/routing/22-global.odb</code> 出发，<code>global_route -allow_congestion</code> + <code>repair_antennas</code> 共跑三轮，累计插入 <b>430 个二极管</b>；详细布线后复测 <b>0 net / 0 pin</b>（三轮依次 9/10 → 1/1 → 0/0，每轮的 <code>.drc</code> 报告都是 0 字节，即 0 条布线违例）。补 fill 后仍 0/0，并流出新 GDS <b>18,618,660 B</b>（sha256 <code>a58cdfea…</code>）。新 GDS 上重跑：KLayout signoff DRC <b>218 类 0 条</b>、密度 <b>六层全过 0 条</b>（li1 0.4986 / m1 0.7249 / m2 0.9049 / m3 0.9218 / m4 0.9470 / m5 0.9707）、Magic DRC <b>No errors found</b>。</p>
-    <p class="note"><b>还差什么，也说清楚</b>：这是「布线级修好」的版图，不是可交付流片版本——新版上 <b>功耗、XOR、ERC、iRdrop 与金属密度窗口都还没重跑</b>（LVS 已在新版通过；RCX + 三 corner STA、以及 DRV（max transition / max fanout）检查已在新版跑完——时序通过、DRV 有违例未清，见下面两段）。所以本页上面的频率、时序、功耗数字仍属于<b>未修版</b>，不能挂到新版图上；旧版上的 XOR「21 层全一致」只在旧版成立。全部命令、日志字节数，以及「撤回前五次结论」的说明写在 <a href="evidence/antenna_repair_route_fixed.txt">evidence/antenna_repair_route_fixed.txt</a>。</p>
+    <p class="note"><b>还差什么，也说清楚</b>：这是「布线级修好」的版图，不是可交付流片版本——这一版上 <b>XOR、金属密度、LVS、RCX + 三 corner STA、功耗与 iRdrop 都已补跑</b>（时序通过、DRV 有违例未清，见下面两段；功耗与 iRdrop 见第五节），<b>ERC 仍未跑</b>。所以本页上面的频率、时序、功耗数字仍属于<b>未修版</b>（即最初那次 flow 的 metrics.csv），不能挂到新版图上；新版自己的时序与功耗数字在上面两段与第五节。全部命令、日志字节数，以及「撤回前五次结论」的说明写在 <a href="evidence/antenna_repair_route_fixed.txt">evidence/antenna_repair_route_fixed.txt</a>。</p>
   </div>
 
   <div class="box good">
@@ -394,9 +394,9 @@ check_antennas -verbose
       <li><b>flow 自己没有跑完</b>。<code>metrics.csv</code> 的 <code>flow_status</code> 就是 <code>flow failed</code>：第 36 步「Magic Spice Export from LEF」在 chroot 里假死（15 分钟 CPU 只跑了 17 秒、打开的文件描述符停在 155 不增长）。我是在 flow 之外、用 Magic 直接从这份 GDS 提取 SPICE 完成 LVS 的，所以 <code>lvs_total_errors</code>、<code>Magic_violations</code>、<code>pin_antenna_violations</code>、<code>net_antenna_violations</code>、<code>klayout_violations</code> 五列仍是 <code>-1</code>——<b>是「没跑」，不是「0」</b>。</li>
       <li><b>flow 里的 GDS XOR 这一步被跳过了，但 XOR 本身后来补跑了两版</b>。flow 原文警告是 <code>…klayout.gds wasn't found. Skipping GDS XOR.</code>（KLayout 在 chroot 起不来）；我改用「KLayout 读同一份 DEF + 用 PDK 单元 GDS 回填空 cell」出第二份版图，再与 Magic 的 GDS flatten 后逐层几何异或：ctsfix3 版 <code>TOTAL_DIFF=0</code>（42 个共同层 0 差异，Magic 独有 (81,14) 1 个边界层图形），天线归零版同样 <code>TOTAL_DIFF=0</code>。口径写在 <a href="evidence/xor_antclean.txt">evidence/xor_antclean.txt</a>：它证明两条 stream-out 路径几何一致，不替代 LVS。</li>
       <li><b>天线复检跑了，结论不是 0</b>。<code>GRT_REPAIR_ANTENNAS</code> 这一版是开的（1），实际插了 196 个二极管，但布线后复检仍是 <b>39 条 net / 49 条 pin 违例</b>（正对照 <code>tapeout16</code> 报 67 / 87，证明脚本有分辨力），原文见 <a href="evidence/antenna_ctsfix3.txt">evidence/antenna_ctsfix3.txt</a>。随后在<b>同一份布线后 ODB</a> 上跑「修天线 → 详细布局 → 全局布线 → 详细布线 → 复检」三轮，把 39/49 压到 <b>0 / 0</b>，并由另起进程独立复检确认，见下一段与 <a href="evidence/antenna_closed_loop.txt">evidence/antenna_closed_loop.txt</a>。</li>
-      <li><b>功耗数字这一版没取</b>。时序取到了三 corner，功耗报告没解析，先不写，避免拿旧版的数填新版的空。</li>
+      <li><b>功耗与 iRdrop 后来补取了</b>，就在出 GDS 的那份 <code>antclean_fill.odb</code> 上（第五节）：三个工艺角合计 7.58 / 9.57 / 11.1 mW，VPWR 最差压降 1.09 mV。当时这一版确实没取，所以旧页面上那行「没取」保留不改，只在这里补上落点。</li>
       <li><b>「天线归零」那一版现在也补跑了时序与 DRV</b>：同一份 <code>antclean_fill.odb</code> 上逐角提 SPEF（各 15,587 net / 131,195 段线、18.9 / 19.1 / 20.2 MB）再在一个进程里成对读三份跑三 corner，setup <b>+11.9732 / +9.1690 / +0.4543</b>、hold <b>+0.4042 / +0.7551 / +1.5854</b>，TNS 0.00 / WNS 0.00；DRV 按 PDK 库自身口径（<code>default_max_transition 1.5</code>、库不设 fanout 上限）三 corner 全 0，按本 run 自加严的 0.75 / 10 口径则 Slowest 275 条 slew、61 条 fanout（基线 ctsfix3 同口径 241 / 40）。所以它是「时序通过、DRV 未清」，仍不叫签核。<a href="evidence/sta_drv_antclean.txt">evidence/sta_drv_antclean.txt</a></li>
-      <li><b>这不是签核</b>。同一版上凑齐了「布线 0 违例 + LVS 通过 + KLayout DRC 0 条 + 密度 0 条 + 天线 0/0 + GDS XOR 0 差异」六项，但时序与 DRV 没有在这版重跑、功耗没取，所以只能说「这一版拿到了六项物理验证结论」，不能说「已签核」。</li>
+      <li><b>这不是签核</b>。同一版上凑齐了「布线 0 违例 + LVS 通过 + KLayout DRC 0 条 + 密度 0 条 + 天线 0/0 + GDS XOR 0 差异」六项，时序与 DRV 也在这版上重跑过（时序通过、DRV 按更严的 0.75 ns / 扇出 10 口径还剩 275 条 slew 与 61 条 fanout），功耗与 iRdrop 同样补取了。所以可以说「六项物理验证结论都在这一版上」，仍然不能说「已签核」——差的是 DRV 清零与 ERC。</li>
     </ul>
   </div>
 
@@ -415,7 +415,43 @@ round3 : 布线 0（L509）                                  天线 0 net / 0 pi
 </div></section>
 
 <section><div class="wrap">
-  <h2>五、这一页能证明什么、不能证明什么</h2>
+  <h2 id="power">五、功耗与 iRdrop：新版 ODB 上补取的两个数</h2>
+  <p class="sub">对象是出 GDS 的那份 <code>antclean_fill.odb</code>（32,054,884 B，含天线二极管 327 个与 25,656 个 filler），寄生用同一套 RCX 的 nom 那份 SPEF（19,148,078 B），时钟 18 ns / 55.56 MHz。功耗走 OpenSTA 的 <code>report_power</code>，电源网络走 OpenROAD PDNSim 的 <code>analyze_power_grid</code>。命令与三份 report_power、两份 IR 报告原文都在 <a href="evidence/power_irdrop_antclean.txt">evidence/power_irdrop_antclean.txt</a>。</p>
+
+  <table>
+    <tr><th>工艺角 / 条件（输入活动率 0.1，duty 0.5）</th><th>内部分</th><th>开关</th><th>漏电</th><th>合计</th></tr>
+    <tr><td>ss 1.60 V · 100 °C</td><td>5.62 mW</td><td>1.85 mW</td><td>111 µW</td><td>7.58 mW</td></tr>
+    <tr><td>tt 1.80 V · 25 °C</td><td>7.18 mW</td><td>2.39 mW</td><td>0.119 µW</td><td>9.57 mW</td></tr>
+    <tr><td>ff 1.95 V · −40 °C</td><td>8.30 mW</td><td>2.84 mW</td><td>0.25 µW</td><td class="hi">11.1 mW</td></tr>
+  </table>
+  <p class="note">最差的是 ff 角的 <b>11.1 mW</b>；漏电最大的是 ss 角的 <b>111 µW</b>（占该角 1.5%）。时钟组单独算：0.10 活动率那档 <b>4.17 mW</b>（43.6%），三档活动率下都不变——所以这版设计里时钟树本身就吃掉四成多，把输入打满也不会让总数翻倍。</p>
+
+  <div class="box warn">
+    <b>活动率是个假设，所以把三档都列出来：</b>
+    <div class="raw">tt 角 activity 0.01 → 9.16 mW    0.10 → 9.57 mW    0.50 → 10.7 mW</div>
+    <p class="note">这是向量无关（vectorless）估算，不是硅上实测；换一档总数就动，所以只能当工程估算与热点定位，不能当签核数。上面三个角的数也不是同一档活动率之外的差异——三个角都用 0.10 / 0.5。</p>
+  </div>
+
+  <table>
+    <tr><th>电源网络（PDNSim，源 1.80 V）</th><th>平均压降</th><th>最差压降</th><th>百分比</th></tr>
+    <tr><td>VPWR</td><td>0.113 mV</td><td>1.09 mV</td><td>0.06 %</td></tr>
+    <tr><td>VGND</td><td>0.111 mV</td><td>1.08 mV</td><td>0.06 %</td></tr>
+  </table>
+  <p class="note">两张网都报 <code>[INFO PSM-0040] All shapes on net … are connected</code>，也就是网格没有断点。压降这么小是因为这份设计只有 11 mW 量级、且 sky130 默认条纹网格很密——换个更大的设计，这个 0.06% 不能顺延。</p>
+
+  <div class="box warn">
+    <b>两个坑，都在这一轮踩过，写在这里免得别人重复：</b>
+    <ul>
+      <li><b>先读 ODB、不读 liberty，<code>analyze_power_grid</code> 会「跑成功」但供电电压是 0.00e+00 V</b>，IR drop 全打印 0，看起来像「没有压降」。必须按 OpenLane 的 <code>irdrop.tcl</code> 顺序先 <code>read_liberty</code>（工作条件里带 1.80 V），再分析。第一遍我就是这么被自己骗过去一次的。</li>
+      <li><b><code>report_power</code> 一个进程只能干净跑一个 corner</b>：想在同一脚本里循环两个 liberty 会报 <code>invalid command name "reset_path"</code>，所以 ss 与 ff 是分两个进程跑的。</li>
+    </ul>
+  </div>
+
+  <p class="note"><b>它证明什么、不证明什么</b>：证明这份最终 ODB 上的功耗与电源网络压降真的算过一遍，三个角的数都能按上面的命令重跑出来。不证明——① 不是硅上实测，活动率换档总数就变；② iRdrop 是静态压降，电流用 PDNSim 自己的默认估算，没有 di/dt 动态项、没有封装 / 焊盘 / 外部供电模型，PDN 也没做网格优化对比；③ 没做时钟树功耗优化（时钟占 43.6%），也没做多阈值替换或电源门控。</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2>六、这一页能证明什么、不能证明什么</h2>
   <div class="box">
     <b style="color:var(--accent)">能证明</b>
     <ul>
@@ -432,7 +468,7 @@ round3 : 布线 0（L509）                                  天线 0 net / 0 pi
       <li>这份 metrics.csv 不是我伪造的——这一点只能靠「文件在仓库里、指纹可核对、内容自洽」来逼近，不能靠数学证明。真要做到不可否认，得由第三方重跑一次 flow。</li>
       <li>Magic 的 signoff DRC 跑过一遍、结果 0 条违例（<b>不含天线与密度</b>）；KLayout 侧的 218 类规则同样 0 条（tapeout16 与 ctsfix3 两版各跑一次，都是 0 条）；密度 deck 六层空孔率全部在阈值之上、0 条（修天线那版与 ctsfix3 版各一次）。这几项都是事后补跑，各自都带了一个故意违规的正对照，证明引擎不是在空转。</li>
       <li><b>LVS 的「通过」是有口径的通过</b>：netgen 在 <code>VNB≡VGND</code>、<code>VPB≡VPWR</code> 的前提下、把叶子单元展平之后，顶层 166,353 器件与 84,178 条网两侧完全相等（<code>Circuits match uniquely</code>）。它证明的是<b>顶层晶体管级连接等价</b>，不证明「每个标准单元内部逐管等价」；另一条本该给出同样结论的路线（把 5,496 个 tap 补回网表再跑）也实跑过了，走不通——PDK 里那个单元只有两个脚、body 为空。</li>
-      <li><b>天线这一项<b>已修好，但只到「布线级」</b>：原始 run 的 ODB 上报 <b>67 个 net / 87 个 pin</b>（本 run <code>DiodeCells = 0</code>，一个二极管都没插）。后来补上 <code>-allow_congestion</code> 重跑，插 <b>430 个二极管</b>，复测 <b>0 / 0</b>，并流出新 GDS、重跑两套 DRC 与密度（都是 0 条）。但新版的 STA / 功耗 / XOR / LVS 还没重跑，所以本页的时序与功耗数字仍属<b>未修版</b>。</li>
+      <li><b>天线这一项<b>已修好，但只到「布线级」</b>：原始 run 的 ODB 上报 <b>67 个 net / 87 个 pin</b>（本 run <code>DiodeCells = 0</code>，一个二极管都没插）。后来补上 <code>-allow_congestion</code> 重跑，插 <b>430 个二极管</b>，复测 <b>0 / 0</b>，并流出新 GDS、重跑两套 DRC 与密度（都是 0 条）。新版的 STA / 功耗 / XOR / LVS 后来都在同一份 ODB 上重跑过（STA 三 corner 全正、DRV 未清；功耗三 corner 7.58 / 9.57 / 11.1 mW；XOR 21 层 0 差异；LVS 34,289 实例两侧相等），所以本页上面的时序与功耗数字属于<b>未修版</b>，新版数字在第一、四、五节。</li>
       <li>功耗数字是 OpenLane 内部功耗估算（向量无关的活动率假设），不是硅上实测。</li>
       <li>时序基于 sky130 的 signoff 库与寄生提取，不等于流片后的硅结果。</li>
     </ul>
@@ -440,7 +476,7 @@ round3 : 布线 0（L509）                                  天线 0 net / 0 pi
 </div></section>
 
 <section><div class="wrap">
-  <h2>六、四十四份证据文件的指纹</h2>
+  <h2>七、四十五份证据文件的指纹</h2>
   <p class="sub">下载后执行 <code>sha256sum 文件名</code>，与下面逐字比对。这些值也可以在本页的 <a href="verify.html">在线自证</a> 里被两套独立实现复算一次。</p>
   <div class="box">
     <div class="fp">evidence/metrics.csv · 1,945 B<br>6526d0c4d2b608dd60fcaf46326d8379b000d74d83ee6399d0877c12cce492a4</div>
@@ -470,6 +506,7 @@ round3 : 布线 0（L509）                                  天线 0 net / 0 pi
     <div class="fp" style="margin-top:14px">evidence/lvs_pass.txt · 8,292 B<br>956ff1a4cc9d2db595a722be26ac7fa53b5af0f15e24af613eef56fd169aaf9f</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_top_level_gap.txt · 4,692 B<br>ea954e06f4182e4fd0f88058c402824bf3f0eeb6ff6b81ef172233d080cb5c0c</div>
     <div class="fp" style="margin-top:14px">evidence/lvs_new_pass.txt · 4,572 B<br>a3dd1f65f39b93bf20eefe2d5458efba3053d073cacdf5fe275f73b0113193ee<br>evidence/sta_est_compare.txt · 3,585 B（估算口径，已被取代）<br>e0b905155bdb1fcb4793feebc2570029536d69ed4abcd1e65d592ca3b694a221<br>evidence/sta_signoff_3corner.txt · 7,176 B<br>681637a543e750b338077d1ded658785f90cd198342277a78878c2e48f8bd2e2<br>evidence/sta_signoff_drv_3corner.txt · 6,686 B<br>8af0d95e2a966bf7f01a49275332ea2a503c28379aa65b10860e365218b897fa<br>evidence/sta3c_chk.log · 244,996 B<br>6e34a60a9205b7b39ad6f42b216c64ac0b6c0ef301b4a83fcdadc048686750e1<br>evidence/sta3c_chk_old.log · 217,799 B<br>8b9893df273506ec51a28b23c8931ed799f95bddcd3ffb3ac851b702bafeed9d<br>evidence/drv_rootcause.txt · 4,475 B<br>32d6e89d569bfa377c1130a464044c947fd503be845759cfc1f0cd9c251c7dcf<br>evidence/drv_fix_pilot.txt · 5,065 B<br>b67a197da8c234c707755ba41dd20bbc96e1b9e05905dbf5158f4daeb0716675<br>evidence/cts25.log · 20,148 B<br>3b1129de86ff8517cd6fca6b027f8ab403fc6df2e877aad3450cc3d1e37507e3<br>evidence/cts8.log · 5,322 B<br>1aa40f480db24a43f57d40d6b975f97a561db32e31ed3c50bff53b4efa2e5e36<br>evidence/drv_fix_routed.txt · 7,204 B<br>d08e23fe2fc94e5a1cb056e63cce7300cd2152948d5196237cbb60fbaaa079ac<br>evidence/cts9d80_adj.log · 27,498 B<br>1ffb8c6c42292230d848da5176fb5d8aaade1c7e10bf7b6466d81ca95eb67975<br>evidence/sta_cts9.log · 159,550 B<br>0931bfeea7efc11f22631b6a73c3de52878c179c8e06c533008a169d467be16b<br>evidence/cts9_route.txt · 710 B<br>de5d8a91e1c8e36f55e4e33edc1fbe966473d0a7d9e1f6a73f49ebf999ba3e32<br>evidence/cts9_cts.txt · 288 B<br>4d09b720220a0125efe446c6fbb2be7bbc83e9cd5c752ff431ab72fffdd9ca33<br>evidence/cts9_lvs.txt · 622 B<br>36b37506fc99d13cca0bebb73ad8e54d36fd038b60a267bdb2a9308e1a0f170d<br>evidence/cts9_sta3c.txt · 469 B<br>af75ba9599faedab25c24cd38e785e1d29b1e9385c6640d8b43a06990c5b8c8e<br>evidence/cts9_metrics.csv · 1,953 B<br>dd0d88d7cb73f98423f3e30fa946ad841b9f7f8f1674edd5835268e81cb4034e</div>
+    <div class="fp" style="margin-top:14px">evidence/power_irdrop_antclean.txt · 5,876 B<br>df77e80c1df3b97419d0f4687e44b006d95e30d7c8f64eb533922fa685923afe</div>
   </div>
   <p class="note">三份 STA 原始日志各约 33 MB，没有放进仓库（Pages 不适合托管这么大且一次性的日志）；这里放的是其中 <code>worst slack corner</code> 行的原样摘录，带行号，可以逐行对回去。<code>xor_layers.txt</code> 是补跑 XOR 的完整输出，同目录 <code>xor_layers.py</code> 是生成它的脚本——脚本与报告都要在，结论才可复算。</p>
 </div></section>
