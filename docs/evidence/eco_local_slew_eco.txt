@@ -154,3 +154,102 @@ magic 出 GDS 这条路能出图，但上面第 4 条已经说明它对单元视
 
 因此对外页面与 PDF 的数字仍然没有替换：六项复核还没跑完，
 不能拿半套结果去改“数字自证”的账。
+--------------------------------------------------------------------------
+九、订正与补齐（2026-11-14 追加；第八节原文保留，不做覆盖）
+--------------------------------------------------------------------------
+第八节写于密度 / DRC / XOR / 官方出图路线跑出来之前，其中三处判断已被
+实测推翻，另有三项补上了数值，一项确认仍无结果。逐条如下。
+
+1) 721 条 implant DRC 的归因订正
+   第八节把「先 gds read 再 lef read」当成 721 条违例的成因，这个归因不成立。
+   本轮实测：手写脚本 mag_gds_it2b.tcl（gds read -> lef -> def）出的
+   eco_it2b.gds 45,931,716 B，跑 sky130A_mr.drc 得 721 条
+   （hvtp.2 443 / psd.2 96 / psd.1 79 / nsd.1 49 / nsd.2 22 / hvtp.1 13 /
+     npc.2 13 / li.6 6）；
+   而同一个脚本跑 tapeout 版官方 GDS 是 0 条。
+   改用 OpenLane 官方 mag_gds.tcl（read_pdk_gds -> gds noduplicates true ->
+   load (NEWCELL) -> read_tech_lef -> read_def -> load 设计 ->
+   cif *hier write disable -> gds nodatestamp yes），环境变量：
+   SCRIPTS_DIR / DESIGN_NAME / CELL_GDS / CELL_LEFS / TECH_LEF / CURRENT_DEF /
+   MAGIC_MACRO_STD_CELL_SOURCE=PDK / MAGIC_ZEROIZE_ORIGIN=0 /
+   DIE_AREA="0 0 640 640" / STEP_DIR / SAVE_MAG_GDS /
+   MAGIC_DISABLE_CIF_INFO=1 / MAGIC_GDS_POLYGON_SUBCELLS=1，
+   得到 eco_it2c.gds 41,419,812 B，DRC 同样是 6 条 li.6。
+   因此：出图顺序不是 LVS 差异的原因；第八节第 4 条里
+   「eco_it2b.gds 才是可用于比对的那一版」需要按本条修正为
+   「三版 GDS 对 LVS 给出的数字完全相同」（见第 6 条）。
+
+2) KLayout 这条路径恢复可用（第八节第 6 条的工具限制已作废）
+   真因不是 chroot 的 /proc，而是 chroot 默认 PATH 里没有 coreutils，
+   klayout 启动时要 mkdir / ln 一个 /proc/<pid>/exe 符号链接，缺 coreutils
+   就地崩。补上 coreutils 的 PATH 后 klayout 0.29.1 正常跑脚本：
+   DEF -> GDS 得 eco_it2b_kl.gds 19,466,372 B
+   （日志：def read cells=159 / missing gds cells: [] count 0 / wrote）。
+   另外官方 stream_out.py 不能用 "klayout -r stream_out.py -- ..." 传参
+   （它用 click 解析，报 ERROR: Unknown option: --），改成 python3 + pya
+   直调即可（脚本 /tmp/kl/so_it2b.py，PYTHONPATH 指向 klayout-pymod）。
+
+3) 密度（eco_it2b.gds，klayout check_density，5.450 s，items 为空 = 0 违例）
+   li1 0.7424973667602539   m1 0.7231207860107423
+   m2  0.9032449227905274  m3 0.922803524597168
+   m4  0.9481101244506835  m5 0.97229390625
+   对照 tapeout 版 0.4991372 / 0.7232361 / 0.9033210 / 0.9223075 /
+   0.9478303 / 0.9715806：六值均不低于 tapeout，且无密度违例。
+
+4) signoff DRC（sky130A_mr.drc）四组实测
+   eco_it2b.gds（手写 magic）  721 条（见第 1 条逐类计数）
+   eco_it2b_kl.gds（klayout）    6 条，全 li.6
+   eco_it2c.gds（官方 mag_gds）  6 条，全 li.6
+   tapeout 官方 GDS              0 条
+   6 条 li.6 的位置（各为 0.17 x 0.17 um 的 li1 小方块，即 li1 尺寸临界）：
+   (319.845,376.465)-(320.015,376.635)
+   (340.085,510.085)-(340.255,510.255)
+   (415.525,430.185)-(415.695,430.355)
+   (415.525,430.865)-(415.695,431.035)
+   (320.305,377.145)-(320.475,377.315)
+   (161.605,248.965)-(161.775,249.135)
+   两套彼此独立的出图工具（magic / klayout）给出完全相同的 6 条，
+   说明这是 DEF 里 6 处 li1 几何临界，而不是某一版生成器的缺陷。
+   结论：这一版 DRC 不是 0 条，是 6 条 li.6。
+
+5) XOR（klayout XOR：klayout 出图 vs 手写 magic 出图，43 层）
+   rc 0，TOTAL_DIFF = 94,607。逐层非零：
+   236/0 = 16,727    67/16 = 2,576    78/44 = 231    81/14 = 1
+   81/4  = 4         93/44 = 5,884    94/20 = 7,489  95/20 = 61,695
+   其余 35 层为 0。注意：这些层号在 sky130A.map 里没有对应条目
+   （map 内唯一的 23x 条目是 DIEAREA ALL 235 4，与 236/0 不同），
+   层语义未确认。因此这个 XOR 只能作为「两版 GDS 不等价」的证据，
+   不能反过来当作「版图一致」的证据使用。
+
+6) LVS：三版 GDS 给出的数字完全相同（含官方 mag_gds 版）
+   eco_it2b.gds / eco_it2b_kl.gds / eco_it2c.gds 三次跑，
+   结果一致：Number of devices 15,983 | 15,983（相等）
+             Number of nets    15,931 | 15,828（差 103）
+             Cell pin lists altered to match / Device classes equivalent
+             最终 Final result: Top level cell failed pin matching
+   对照实验：网表换 eco_it2nl_nofill.v 仍是 15,931 | 15,828；
+   netgen 加 -flatten 数字一字不变。
+   即 103 条网差与 fill、层级命名、GDS 生成方式都无关。
+
+7) 天线：三次尝试均未出结果，判为工具路径受阻
+   三次都停在 magic 的 "Processing sha256_axil" 之后：
+   (a) 手写 dereference 版（lef -> def -> gds read -> load -dereference）；
+   (b) 完整复刻 LVS 里已跑通的提取配方，末尾换成 antennacheck；
+   (c) 同 (b) 但去掉 extract unique。
+   进程状态：sleeping，wchan = request_wait_answer（阻塞在 openat），
+   CPU 约 2%，RSS 185-318 MB，工作目录始终无 .ext 落盘，20-40 分钟无进展。
+   对照事实：同一台机、同一 magic 版本，LVS 里那一步提取能在约 13-22 分钟
+   正常产出 layout.ext.spice。所以这不是「慢」，是这条脚本组合在本设计上
+   卡住。天线这项在 ECO 库上记作「未复核」，不给数值。
+
+8) 与第八节一致的部分（不再重复展开）
+   功耗 9.57e-03 / 9.16e-03 / 1.07e-02 W（act 0.10 / 0.01 / 0.50）；
+   iRdrop VPWR 最差 1.09 mV、VGND 最差 1.08 mV；filler 35,334；
+   it2nom.spef 18,554,283 B（131,428 wires / 15,620 nets）。
+
+九节结论：
+   ECO 版的六项复核里，功耗 / iRdrop / 密度有数且与 tapeout 对齐，
+   XOR 有数但只能证明两版不等价，DRC 从 0 条变成 6 条 li.6，
+   LVS 从 uniquely match 退成 15,931 | 15,828，
+   天线没有结果。按这个状态，① 项不能写成「六项复核通过」，
+   页面与 PDF 的数字继续保持 tapeout 版口径，不替换。
