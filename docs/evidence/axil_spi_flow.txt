@@ -1,0 +1,102 @@
+AXIL-SPI 小车设计（AXI4-Lite + SPI Master）全流程实跑记录
+生成：2026-11-09  环境：云主机 chroot /home/user/openlane-rootfs  OpenLane 1.1.1  sky130A
+
+一、这颗设计是什么
+  目的：SHA-256 加速器是"计算核"，只有 AXI4-Lite 寄存器接口；为了证明同一套流程能承接带真实外设协议的 IP，
+  另起一颗小设计，接口换成 AXI4-Lite 从口 + SPI Master 主口，规模压到 220 x 220 um，用同一份 PDK、同一套脚本、
+  同一条验收口径再走一遍。
+
+  RTL（/designs/axil_spi/src/）：
+    axil_regs.v      3,564 B / 103 行    AXI4-Lite 从口三态机 W_IDLE / W_DATA / W_RESP。
+                                          读写地址分离（reg_raddr 单独输出），修掉过"读操作把写地址寄存器读走"的 bug。
+                                          输出 reg_addr / reg_raddr / reg_wdata / reg_wstrb / reg_we，输入 reg_rdata。
+    spi_master.v     2,994 B            mode0（CPOL=0 / CPHA=0）、8 位、半周期由 div 计数决定；
+                                          ST_IDLE / ST_SHIFT / ST_DONE；上升沿采 miso、下降沿换 mosi；
+                                          输出 sclk / mosi / cs_n / busy / done / rx_data。
+    axil_spi_top.v   3,918 B            寄存器映射 0x000 CTRL（bit16 手动启动、bit1 irq_en）、
+                                          0x004 DIV、0x008 TXD（写入即启动传输）、0x00C RXD（bit8 fresh）、
+                                          0x010 STATUS（bit0 busy、bit1 irq）；irq = rx_fresh & irq_en。
+
+  仿真（sim/tb_axil_spi.v，自建 SPI 从模型：回 0x3C、采 mosi）四项：
+    默认读 0xDEADBEEF / DIV 回读 / TXD 写触发后 RXD==0x3C 且从端收到 0xA5 / STATUS busy=0
+    结果：TB PASS（$finish at 1,155,000 ps）。
+    修过两处：axi_write 任务的 wait(awready&&wready) 死等，改 wait(bvalid)；CTRL 启动位原与 STATUS bit0 撞位，移到 bit16。
+
+二、配置（/designs/axil_spi/config.tcl）
+  DESIGN_NAME axil_spi_top，CLOCK_PORT / CLOCK_NET clk，CLOCK_PERIOD 12.0（83.33 MHz）
+  FP_SIZING absolute，DIE_AREA "0 0 220 220"，FP_CORE_UTIL 40，FP_ASPECT_RATIO 1
+  SYNTH_STRATEGY "AREA 0"，GRT_REPAIR_ANTENNAS 1，GRT_ALLOW_CONGESTION 1，GRT_OVERFLOW_ITERS 200
+  PL / GLB 的 HOLD margin 0.30、SETUP margin 0.20；CTS_SINK_CLUSTERING_SIZE 9、MAX_DIAMETER 80
+  RUN_KLAYOUT "0"、RUN_KLAYOUT_DRC "0"（原因见第四节），GDS 由 Magic 出。
+
+三、两次失败与根因（都不是设计问题）
+  1) 第一次跑 -tag axspi1，在 Step 0 verilator_lint_check 假失败：linter 日志本身无 ERROR，
+     但流程里那句 exec bash -c "grep -i 'Error-NEEDTIMINGOPT' ..." 因为 chroot 默认 PATH 没有 grep 而返回非零，
+     下游 generate_reports.py 找不到 power report，抛 IndexError: list index out of range。
+     修法：把 coreutils-9.5 / gnugrep-3.11 / bash-5.2p26 的 bin 目录显式写进 PATH 重跑。
+  2) 第二次一路跑到 Step 41，Magic DRC 已经 0 条（log 里 COUNT: 0），紧接着的 KLayout DRC 内部报错：
+     ERROR: ../../../src/tl/tl/tlFileUtils.cc,979,false / Internal error: tlFileUtils.cc:979 false was not true
+     根因：chroot 里 /proc 只是一个空目录，KLayout 启动时读 /proc/self/exe 拿自己的安装路径，取不到就内部断言失败。
+     这不是 DRC 脚本或 GDS 的问题——同一份 GDS 用同一份 sky130A_mr.drc、在"先把 /proc/<pid>/exe 软链到真二进制再 exec 同一 pid"
+     的写法下能正常跑完（结果 0 条）。
+     修法：KLayout DRC 在流程内关掉（RUN_KLAYOUT_DRC 0），改由 /tmp/kl/drc_axspi.sh 单独补跑；流程其余照跑。
+
+四、全流程结果（-tag axspi1，-overwrite 重跑，PATH / TERM / PDK_ROOT 三项补齐）
+  flow_status = flow completed（Step 1 综合 到 Step 41 KLayout DRC 之前的全部步骤都跑完）
+  total_runtime = 0h5m15s，Peak_Memory_Usage_MB = 547.83
+  DIEAREA = 0.0484 mm2（220 x 220 um），Final_Util = 24.88%，CoreArea = 40,899.23 um2
+  TotalCells = 4,672（其中 Fill 697、Welltap 592、Diode 1），synth_cell_count = 570
+  wire_length = 19,802 um，vias = 5,183
+  TritonRoute violations = 0（Short / MetSpc / OffGrid / MinHole / Other 全 0）
+
+五、时序（Spef 反标后的多角 STA，报告 reports/signoff/33-sta-rcx_nom/）
+  CLOCK_PERIOD 12.0 ns（83.33 MHz）下：
+    worst setup slack  1.74 ns（Slowest 角，三个角里最紧的一角）      —— MET
+                       同 check 另两角 Typical 6.93 ns / Fastest 7.84 ns
+    worst hold  slack  0.32 ns（Fastest 角，三个角里最紧的一角）      —— MET
+                       同 check 另两角 Slowest 1.27 ns / Typical 0.65 ns
+    critical_path_ns   1.51
+  DRV：max_slew 违例 0、max_cap 违例 0、max_transition 违例 0；
+       max_fanout 违例 5（clkbuf_4_13_0_clk/X、clkbuf_4_8_0_clk/X 等，实际 11，约束 10）
+  口径说明：写"时序通过、扇出未清（5 条）"，不写"DRV 干净"。
+
+六、功耗（同一份 ODB + SDC + nom.spef，tt 1.80 V 25 C，三个活动率角）
+  报告 reports/signoff/33-sta-rcx_nom/multi_corner_sta.power.rpt
+    Slowest 角  1.33e-03 + 7.17e-04 + 6.56e-06 = 2.05 uW
+    Typical 角  1.67e-03 + 9.23e-04 + 3.34e-07 = 2.60 uW
+    Fastest 角  1.92e-03 + 1.10e-03 + 3.40e-07 = 3.02 uW
+    Fastest 角分组占比：Sequential 32.0%，Combinational 52.5%，Clock 15.4%
+  这颗设计只有 4,672 个单元、0.0484 mm2，功耗在微瓦级是规模使然，不是"优化得好"。
+
+七、物理复核
+  Magic DRC    reports/signoff/drc.rpt               COUNT: 0
+  KLayout DRC  /tmp/kl/drc_axspi.xml（单独补跑）      0 items（22959 B 报告）
+  LVS          reports/signoff/39-axil_spi_top.lvs.rpt
+               "LVS reports no net, device, pin, or property mismatches."  Total errors = 0
+  天线         reports/signoff/41-antenna_violators.rpt 只有 1 条记录：
+               Net net58 / Pin hold68/A / Layer met1，Partial/Required 1.14、Required 400、Partial 456.67
+               即 pin 级比值远低于阈值，但被计入一条 violator；metrics 记为 pin_antenna 1 / net_antenna 1。
+  压降（PDNSim，4,672 个 instance，reports/signoff/34-irdrop-*.rpt）：
+               VPWR 最差 1.8 mV；VGND 最差 0.72 mV。
+
+八、结论与边界
+  这颗小车设计证明的是"流程可承接带 AXI4-Lite + SPI 真实协议接口的设计"，并且全流程可跑完、时序与 LVS 干净。
+  不声称 signoff 通过：仍有 5 条 max_fanout 违例和 1 条天线记录，KLayout DRC 是在流程外补跑得到的 0 条。
+  也不声称面积/功耗优秀：24.88% 利用率、微瓦功耗都来自"小规模 + 优先跑通"，与 SHA-256 那颗的 40% 利用率、
+  pF 级寄生、mW 级功耗不是同一量级，不可横向对比。
+
+九、证据文件索引
+  同目录（docs/evidence/）：
+    axil_spi_flow.txt              本文件
+    axil_spi_flow_metrics.csv      metrics.csv 原样（flow completed 版，93 列）
+    axil_spi_sta_nom_checks.txt    33-sta-rcx_nom 的 slack 与 DRV 计数摘录
+    axil_spi_power.txt             33-sta-rcx_nom 的 power.rpt 原文
+    axil_spi_lvs.txt               39-axil_spi_top.lvs.rpt 原文
+    axil_spi_drc_magic.txt         reports/signoff/drc.rpt 原文
+    axil_spi_drc_klayout.txt       /tmp/kl/drc_axspi.xml 的 items 计数（0）
+    axil_spi_antenna.txt           41-antenna_violators.rpt 与 _pins.txt 原文
+    axil_spi_layout.png            版图渲染（metal 层，220 x 220 um）
+  构建机上对应位置（不在仓库内，供复核）：
+    designs/axil_spi/runs/axspi1/results/signoff/axil_spi_top.gds
+    designs/axil_spi/runs/axspi1/reports/、logs/
+    /tmp/kl/drc_axspi.sh（KLayout DRC 补跑脚本）

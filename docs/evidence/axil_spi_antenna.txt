@@ -1,0 +1,3 @@
+Partial/Required:  1.14, Required:    400.0, Partial:   456.67, Net: net58, Pin: hold68/A, Layer: met1
+--- pins ---
+hold68/A

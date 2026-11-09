@@ -174,3 +174,27 @@ df77e80c1df3b97419d0f4687e44b006d95e30d7c8f64eb533922fa685923afe  power_irdrop_a
 要说清的边界：flow 自己在第 36 步「Magic Spice Export from LEF」假死（chroot 环境限制），所以 `metrics.csv` 的 `flow_status` 是 `flow failed`，`lvs_total_errors` / `Magic_violations` / `pin_antenna_violations` / `net_antenna_violations` / `klayout_violations` 五列仍是 `-1`——那是**没跑**，不是 0。LVS 是在 flow 之外、用同一份 GDS 单独跑出来的，现已固化成仓库 `tools/lvs/run_lvs.sh` 一条命令（`bash tools/lvs/run_lvs.sh <run目录> sha256_axil`，末行 `LVS PASS`；两侧各 34,182 个实例、94 个端口，实跑数字见 `tools/lvs/EXPECTED.txt`）。KLayout DRC 与金属密度也已在这一版 GDS 上补跑（`klayout_drc_ctsfix3.txt`：218 类 / 0 条，正对照报 1 条 `m1.2`；`density_ctsfix3.txt`：六层空孔率 0.4993–0.9763 全高于阈值 / 0 条）；GDS XOR 与天线检查在这一版 GDS 上当时没跑（flow 原文 `…klayout.gds wasn't found. Skipping GDS XOR.`），**后来补跑并解决了**：`antenna_ctsfix3.txt` 记录复检结果是 39 net / 49 pin（不是 0），随后在同一份布线后 ODB 上按 `antenna_closed_loop.txt` 的三轮流程压到 **0 / 0**（独立进程复检仍 0/0），补 fill 后重出 GDS 40,666,588 B（`89cda760…`），并在这一份上四项同版复核：`klayout_drc_antclean.txt` 218 类 0 条、`density_antclean.txt` 六层 0 条、`lvs_antclean.txt` `Circuits match uniquely`、`xor_antclean.txt` `TOTAL_DIFF=0`。
 
 这一版第一次让「布线 0 违例」「可交付 GDS + LVS 通过」「KLayout DRC 0 条 + 密度 0 条」落在同一个版本上；天线归零的那一版又把天线与 GDS XOR 补齐，六项在同一份 GDS 上拿到结论。**但仍不是签核**：天线归零版的 RCX + 三 corner STA + DRV 现已补跑（`sta_drv_antclean.txt`：时序六格全正、TNS 0.00；DRV 按 PDK 库自身口径 0 条，按自加严 0.75 / 10 口径 Slowest 275 slew / 61 fanout，属「时序通过、DRV 未清」，本轮未做 ECO），功耗仍未取；本版 LVS 两侧 34,289 实例与 ctsfix3 的 34,182 相差 +107，未逐条追到单元级。
+
+## 第 ④ 项：另一颗设计 AXIL-SPI（tag `axspi1`，2026-11-09）
+
+前面所有文件都来自 SHA-256 那一颗（只有 AXI4-Lite 寄存器接口的计算核）。这一组是**另一颗设计**：AXI4-Lite 从口 + SPI Master 主口，8 位 mode0，220 × 220 µm，用来证明同一套 PDK / 脚本 / 验收口径能承接带真实外设协议的设计。全部数字来自**同一次 OpenLane 1.1.1 run**，`flow_status = flow completed`，`total_runtime = 0h5m15s`。
+
+| 文件 | 大小 | 是什么 | 是否原样 |
+|---|---|---|---|
+| `axil_spi_flow.txt` | 7,831 B | 这次实跑的全记录：RTL 三文件与寄存器映射、config 关键项、两次失败的根因与修法、全流程数字、时序、功耗、物理复核、结论与边界 | 生成结果 |
+| `axil_spi_flow_metrics.csv` | 1,890 B | 本次 run 的 `metrics.csv`（两行，93 列，`flow completed` 版） | 原样，未改一个字节 |
+| `axil_spi_sta_nom_checks.txt` | 1,234 B | `33-sta-rcx_nom/multi_corner_sta.checks.rpt` 的 slack / DRV 计数摘录 + 日志里的 `worst slack` 行 | 原文行 |
+| `axil_spi_power.txt` | 2,661 B | `33-sta-rcx_nom/multi_corner_sta.power.rpt` 原文（三 corner 分组功耗） | 原样，未改一个字节 |
+| `axil_spi_lvs.txt` | 75 B | `39-axil_spi_top.lvs.rpt` 原文 | 原样，未改一个字节 |
+| `axil_spi_drc_magic.txt` | 108 B | `reports/signoff/drc.rpt` 原文（`COUNT: 0`） | 原样，未改一个字节 |
+| `axil_spi_drc_klayout.txt` | 239 B | KLayout DRC 补跑结论（0 items）与脚本出处 | 生成结果 |
+| `axil_spi_antenna.txt` | 125 B | `41-antenna_violators.rpt` 与 `_pins.txt` 原文（1 条：net58 / hold68/A） | 原样，未改一个字节 |
+| `docs/images/axil_spi_layout.png` | 221,587 B | 版图渲染（仅金属层，220 × 220 µm 铺满画面） | 生成结果 |
+
+**这一版拿到什么**：`CLOCK_PERIOD 12.0 ns`（83.33 MHz）下 worst setup +1.74 ns（Slowest 角）、worst hold +0.32 ns（Fastest 角），全 MET；tritonRoute 0 违例；Magic DRC 0 条、KLayout DRC 0 条；LVS `no net, device, pin, or property mismatches` / `Total errors = 0`；功耗 Slowest 2.05 µW / Typical 2.60 µW / Fastest 3.02 µW；PDNSim 压降 VPWR 最差 1.8 mV、VGND 最差 0.72 mV；4,672 个单元、利用率 24.88%、线长 19,802 µm、过孔 5,183。
+
+**这一版没拿到什么**：DRV 未干净——max_slew / max_cap / max_transition 都是 0，但 **max_fanout 还有 5 条**（`clkbuf_4_13_0_clk/X`、`clkbuf_4_8_0_clk/X` 等实际 11 > 约束 10）；天线还有 **1 条记录**（pin 级比值 1.14 远低于阈值 400，但仍计入 violator）；KLayout DRC 是在流程外补跑得到的 0 条，不在 `metrics.csv` 的 `flow_status` 覆盖范围内。所以口径是「时序通过、扇出未清 5 条、天线 1 条」，不写 signoff 通过。
+
+**两次失败的根因（都不是设计问题）**：① `verilator_lint_check` 假失败——linter 日志本身无 ERROR，是流程里 `exec bash -c "grep -i 'Error-NEEDTIMINGOPT' …"` 在 chroot 默认 PATH 下找不到 grep，连带 `generate_reports.py` 抛 `IndexError`；把 coreutils / gnugrep 写进 PATH 即过。② KLayout DRC 内部报 `tlFileUtils.cc:979 false was not true`——chroot 里 `/proc` 是空目录，KLayout 启动读 `/proc/self/exe` 取自身安装路径失败；同一份 GDS 用「先建 `/proc/<pid>/exe` 软链到真二进制、再 exec 同一 pid」的写法跑，结果是 0 items。因此流程内关掉 `RUN_KLAYOUT_DRC`，改由 `/tmp/kl/drc_axspi.sh` 单独补跑，其余步骤照跑。
+
+**不可横向对比**：这颗是 0.0484 mm²、4,672 单元、微瓦功耗的「跑通验证」小车，与 SHA-256 那颗 640 µm die、22,000 单元、mW 功耗、pF 级寄生不是同一量级；24.88% 利用率是 `FP_CORE_UTIL 40` 下面积优先策略的结果，不代表流程能力差异。

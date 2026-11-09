@@ -1,0 +1,32 @@
+                                  9.10   slack (MET)
+                                  7.84   slack (MET)
+                                  8.77   slack (MET)
+                                  1.74   slack (MET)
+                                  8.99   slack (MET)
+                                  6.93   slack (MET)
+max slew violations count Fastest: 0
+max fanout violations count Fastest: 5
+max cap violations count Fastest: 0
+max slew violations count Slowest: 0
+max fanout violations count Slowest: 5
+max cap violations count Slowest: 0
+max slew violations count Typical: 0
+max fanout violations count Typical: 5
+max cap violations count Typical: 0
+worst slack corner Fastest: 0.3207
+worst slack corner Slowest: 1.2734
+worst slack corner Typical: 0.6512
+worst slack corner Fastest: 7.8391
+worst slack corner Slowest: 1.7449
+worst slack corner Typical: 6.9264
+max slew violations count Fastest: 0
+max fanout violations count Fastest: 5
+max cap violations count Fastest: 0
+max slew violations count Slowest: 0
+max fanout violations count Slowest: 5
+max cap violations count Slowest: 0
+max slew violations count Typical: 0
+max fanout violations count Typical: 5
+max cap violations count Typical: 0
+worst slack 1.74
+worst slack 0.32
