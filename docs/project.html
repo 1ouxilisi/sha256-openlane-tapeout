@@ -298,6 +298,35 @@ footer p{margin:6px 0}
 
 <section>
   <div class="wrap">
+    <h2>第二颗设计：AXI4-Lite + SPI，从综合一路跑到 signoff</h2>
+    <p class="sub">上面那颗证明的是「算得对、做得出来」。这一颗回答另一个问题：<b>同一套 PDK、同一套脚本、同一套判据，能不能接住一个带真实外设协议的设计。</b></p>
+    <p class="sub">所以它刻意做小：AXI4-Lite 从口 + SPI Master 主口，寄存器映射 <code>0x000 CTRL</code>（bit16 手动启动 / bit1 irq_en）、<code>0x004 DIV</code>、<code>0x008 TXD</code>、<code>0x00C RXD</code>、<code>0x010 STATUS</code>，SPI 走 mode0、8 位、半周期分频，<code>irq = rx_fresh &amp; irq_en</code>；die 220 × 220 µm，时钟 12.0 ns（83.33 MHz）。自建 SPI 从模型的行为级 TB 先跑通（四项全 PASS），再进 flow。</p>
+    <table>
+      <tr><th>项</th><th>结果（全部出自同一次 run）</th><th>证据</th></tr>
+      <tr><td>流程状态</td><td><b>flow completed</b>，5 分 15 秒，峰值内存 547.83 MB</td><td><a href="evidence/axil_spi_flow_metrics.csv">evidence/axil_spi_flow_metrics.csv</a></td></tr>
+      <tr><td>时序（12.0 ns）</td><td>setup <b>+1.74（Slowest）/ +6.93（Typical）/ +7.84（Fastest）</b>；hold <b>+0.32（Fastest）/ +0.65（Typical）/ +1.27（Slowest）</b>，六格全 MET，critical path 1.51 ns</td><td><a href="evidence/axil_spi_sta_nom_checks.txt">evidence/axil_spi_sta_nom_checks.txt</a></td></tr>
+      <tr><td>DRV</td><td>slew <b>0</b> / cap <b>0</b> / max_transition <b>0</b>；<b>max_fanout 5 条未清</b>（实际 11 &gt; 约束 10）</td><td>同上</td></tr>
+      <tr><td>DRC（Magic）</td><td><b><code>COUNT: 0</code></b></td><td><a href="evidence/axil_spi_drc_magic.txt">evidence/axil_spi_drc_magic.txt</a></td></tr>
+      <tr><td>DRC（KLayout）</td><td><b>0 items</b>（流程外补跑，见下方说明）</td><td><a href="evidence/axil_spi_drc_klayout.txt">evidence/axil_spi_drc_klayout.txt</a></td></tr>
+      <tr><td>LVS</td><td><b><code>no net, device, pin, or property mismatches</code></b>，Total errors 0</td><td><a href="evidence/axil_spi_lvs.txt">evidence/axil_spi_lvs.txt</a></td></tr>
+      <tr><td>天线</td><td><b>1 条</b>：<code>net58 / hold68·A / met1</code>，比值 1.14、阈值 400（远低于阈值，但仍计入违例）</td><td><a href="evidence/axil_spi_antenna.txt">evidence/axil_spi_antenna.txt</a></td></tr>
+      <tr><td>功耗</td><td>Slowest <b>2.05 µW</b> / Typical 2.60 µW / Fastest 3.02 µW</td><td><a href="evidence/axil_spi_power.txt">evidence/axil_spi_power.txt</a></td></tr>
+      <tr><td>压降（PDNSim）</td><td>VPWR 最差 <b>1.8 mV</b>、VGND 最差 <b>0.72 mV</b>（源 1.8 V）</td><td><code>reports/signoff/34-irdrop-{VPWR,VGND}.rpt</code></td></tr>
+      <tr><td>规模与布线</td><td>0.0484 mm²、利用率 <b>24.88%</b>、4,672 cells（fill 697 / welltap 592 / diode 1）、线长 19,802 µm、过孔 5,183，TritonRoute <b>0 违例</b></td><td><a href="evidence/axil_spi_flow_metrics.csv">metrics.csv</a></td></tr>
+    </table>
+    <p class="sub">口径照旧，两句话必须写：<b>这是「时序通过、DRV 未清」</b>，不写 signoff 通过；<b>KLayout DRC 那 0 items 是流程外补跑得到的</b>，不在 <code>flow_status</code> 的覆盖范围内。这颗也不能和主设计横向比——它是 0.0484 mm²、微瓦级功耗的验证车，24.88% 的利用率是「面积优先 + 40% 目标」的结果，不代表流程能力差异。</p>
+    <div class="card" style="margin-top:18px">
+      <h3>两次失败都不是设计问题，是环境问题</h3>
+      <p style="margin-top:10px"><b>① lint 假失败。</b><code>verilator_lint_check</code> 报错，但 linter 日志里没有一条 ERROR：流程内用 <code>exec bash -c "grep -i 'Error-NEEDTIMINGOPT' …"</code> 取结果，chroot 的默认 PATH 里没有 grep，返回非零后 <code>generate_reports.py</code> 接着抛 <code>IndexError: list index out of range</code>。把 coreutils / gnugrep / bash 三个目录写进 PATH 即过。</p>
+      <p style="margin-top:10px"><b>② KLayout 内部断言崩溃。</b>KLayout DRC 报 <code>tlFileUtils.cc:979 false was not true</code>。真因是 chroot 里 <code>/proc</code> 是空目录（<code>mount -t proc</code> 被拒），KLayout 启动时读 <code>/proc/self/exe</code> 取自身安装路径失败。同一份 GDS、同一份 <code>sky130A_mr.drc</code>，用「先建 <code>/proc/&lt;pid&gt;/exe</code> 软链到真二进制、再 exec 同一 pid」的写法跑，结果是 0 items。所以 config 里关掉 <code>RUN_KLAYOUT</code> / <code>RUN_KLAYOUT_DRC</code>，KLayout DRC 改由脚本单独补跑，其余步骤照跑不误。</p>
+    </div>
+    <img src="images/axil_spi_layout.png" alt="AXI4-Lite + SPI 小车 220 × 220 µm 的金属层渲染" style="width:100%;border-radius:10px;border:1px solid var(--line);margin-top:22px" loading="lazy">
+    <p class="sub" style="color:var(--muted);font-size:13px;margin-top:8px">上图是这份 GDS 自己的渲染：<code>axil_spi_top.gds</code> <b>2,521,640 B</b>，220 × 220 µm die，展平后 242,571 个多边形，只画 li1 与 m1–m5。<a href="evidence/axil_spi_flow.txt">evidence/axil_spi_flow.txt</a> 里有这次 run 的完整记录（RTL 三文件、config 关键项、两次失败的排障过程、全部数字与边界）。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
     <h2>边界：这一页不写的东西</h2>
     <div class="note">
       <p><b>不是量产芯片。</b>作品集与方法论验证，商用价值为零 —— SHA-256 加速器本身没有稀缺性。</p>
