@@ -468,7 +468,7 @@ round3 : 布线 0（L509）                                  天线 0 net / 0 pi
       <li>这份 metrics.csv 不是我伪造的——这一点只能靠「文件在仓库里、指纹可核对、内容自洽」来逼近，不能靠数学证明。真要做到不可否认，得由第三方重跑一次 flow。</li>
       <li>Magic 的 signoff DRC 跑过一遍、结果 0 条违例（<b>不含天线与密度</b>）；KLayout 侧的 218 类规则同样 0 条（tapeout16 与 ctsfix3 两版各跑一次，都是 0 条）；密度 deck 六层空孔率全部在阈值之上、0 条（修天线那版与 ctsfix3 版各一次）。这几项都是事后补跑，各自都带了一个故意违规的正对照，证明引擎不是在空转。</li>
       <li><b>LVS 的「通过」是有口径的通过</b>：netgen 在 <code>VNB≡VGND</code>、<code>VPB≡VPWR</code> 的前提下、把叶子单元展平之后，顶层 166,353 器件与 84,178 条网两侧完全相等（<code>Circuits match uniquely</code>）。它证明的是<b>顶层晶体管级连接等价</b>，不证明「每个标准单元内部逐管等价」；另一条本该给出同样结论的路线（把 5,496 个 tap 补回网表再跑）也实跑过了，走不通——PDK 里那个单元只有两个脚、body 为空。</li>
-      <li><b>天线这一项<b>已修好，但只到「布线级」</b>：原始 run 的 ODB 上报 <b>67 个 net / 87 个 pin</b>（本 run <code>DiodeCells = 0</code>，一个二极管都没插）。后来补上 <code>-allow_congestion</code> 重跑，插 <b>430 个二极管</b>，复测 <b>0 / 0</b>，并流出新 GDS、重跑两套 DRC 与密度（都是 0 条）。新版的 STA / 功耗 / XOR / LVS 后来都在同一份 ODB 上重跑过（STA 三 corner 全正、DRV 未清；功耗三 corner 7.58 / 9.57 / 11.1 mW；XOR 21 层 0 差异；LVS 34,289 实例两侧相等），所以本页上面的时序与功耗数字属于<b>未修版</b>，新版数字在第一、四、五节。</li>
+      <li><b>天线这一项已修好，但只到「布线级」</b>：原始 run 的 ODB 上报 <b>67 个 net / 87 个 pin</b>（本 run <code>DiodeCells = 0</code>，一个二极管都没插）。后来补上 <code>-allow_congestion</code> 重跑，插 <b>430 个二极管</b>，复测 <b>0 / 0</b>，并流出新 GDS、重跑两套 DRC 与密度（都是 0 条）。新版的 STA / 功耗 / XOR / LVS 后来都在同一份 ODB 上重跑过（STA 三 corner 全正、DRV 未清；功耗三 corner 7.58 / 9.57 / 11.1 mW；XOR 21 层 0 差异；LVS 34,289 实例两侧相等），所以本页上面的时序与功耗数字属于<b>未修版</b>，新版数字在第一、四、五节。</li>
       <li>功耗数字是 OpenLane 内部功耗估算（向量无关的活动率假设），不是硅上实测。</li>
       <li>时序基于 sky130 的 signoff 库与寄生提取，不等于流片后的硅结果。</li>
     </ul>
