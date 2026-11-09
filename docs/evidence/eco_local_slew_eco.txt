@@ -104,3 +104,53 @@ tapeout 版（antclean_fill）在 Slowest 角上有 275 个 max_slew 违例
   基线寄生   /tmp/antfill_sig/antclean_fill.max.spef
   日志       /home/user/eco_local.log, eco_it2.log, eco_sta_local.log,
              eco_sta_it2_post.log, eco_round1.log
+--------------------------------------------------------------------------
+八、ECO 版库（eco_it2）上的六项物理复核：已复现的项目
+--------------------------------------------------------------------------
+复核对象是第 2 轮局部 ECO 的库 /tmp/eco/eco_it2.odb（Slowest 角 slew 60，
+cap 126.3 pF，setup +1.31，hold +1.33）。标定口径与 tapeout 版逐项对齐。
+
+1) 功耗（tt 1.80 V 25 摄氏度，寄生 it2nom.spef）
+   活动率 0.10 -> 9.57e-03 W   (Internal 7.18e-03 / Switching 2.39e-03 /
+                                Leakage 9.08e-08；Seq 52.5% / Comb 4.0% / Clock 43.6%)
+   活动率 0.01 -> 9.16e-03 W
+   活动率 0.50 -> 1.07e-02 W
+   与 tapeout 版 9.57 / 9.16 / 10.7 mW 逐值一致。
+
+2) iRdrop（PDNSim，VPWR 1.80 V / VGND 0 V）
+   VPWR 最差 1.09e-03 V、平均 1.13e-04 V；VGND 最差 1.08e-03 V、平均 1.11e-04 V；
+   两网 PSM-0040 全连通。与 tapeout 版 1.09 mV / 1.08 mV 逐值一致。
+
+3) 寄生（nom 角）it2nom.spef 18,554,283 B，131,428 wires / 15,620 nets /
+   78,745 rsegs / 168,895 ccs。
+
+4) GDS 与 filler
+   filler 回填后 eco_it2_fill.def 含 35,334 个 fill 单元（tapeout 版 25,656）。
+   从 DEF 出 GDS 试了两版，结论不同，记录如下：
+   - eco_it2.gds 42,779,502 B（先 gds read 再 lef read）：版图侧提取出
+     16,217 个器件 / 17,044 个网，与网表侧 15,983 / 15,828 对不上，
+     且 VPWR 引脚只连到 30,722 处（另有 2,382 处悬空）——单元视图在这一版里
+     是不完整的，不能用于 LVS。
+   - eco_it2b.gds 45,931,716 B（先 lef read + def read，再 gds read 单元库）：
+     版图侧 15,983 个器件，与网表侧 15,983 完全相同；VPWR 与 VGND 各连
+     33,083 处，两侧衬底已经接上。这一版才是可用于比对的那一版。
+
+5) LVS（netgen + sky130A_setup.tcl，两侧同为 94 端口 / 16,552 实例 / 144 个子单元）
+   器件数已逐值相等（15,983 | 15,983），单元引脚集等价，但网数
+   15,931 | 15,828 仍差 103，报告判为 “Top level cell failed pin matching”，
+   尚未达到 uniquely match。残余差异集中在 131 条只有 1 个连接的版图网
+   （形如 _16239_/A，即引脚上没有接上几何），以及顶层 VGND/VPWR 两个
+   电源引脚在两侧拓扑完全对称时无法定名。
+   同一套脚本对 tapeout 版 GDS 是能跑到 Circuits match uniquely 的，
+   所以这不是脚本退化，而是这份 GDS 的引脚接入没有被提取器认到。
+
+6) 仍未跑：天线、密度、signoff DRC、XOR。
+
+工具侧的限制也一并记下：chroot 内 klayout 0.29.1 只能打印版本，
+任何 -r 脚本执行都在 tlFileUtils.cc:979 处崩，所以官方那条
+DEF+LEF -> KLayout stream_out -> GDS -> XOR 的路径当前不可用；
+magic 出 GDS 这条路能出图，但上面第 4 条已经说明它对单元视图的取舍
+会直接改变 LVS 结果，必须用 eco_it2b.gds 这一版。
+
+因此对外页面与 PDF 的数字仍然没有替换：六项复核还没跑完，
+不能拿半套结果去改“数字自证”的账。
