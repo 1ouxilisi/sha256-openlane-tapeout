@@ -1,0 +1,102 @@
+ECO 版天线复核（sha256_axil，sky130A）
+=====================================
+
+结论先行：天线这一格不再是「未复核」。ECO 版（eco_it2c.gds / eco_it2_fill.odb）
+实测 1 条网违例 + 1 个脚违例，未清零。严的那一侧（OpenROAD）读数记 1/1，
+magic 侧读数记 0。两者口径不同，见第 4 节。
+
+
+1. 为什么换入口重来
+--------------------
+tapeout 版天线是 0/0，审计版要的是「同一条库重跑」，所以 ECO 版必须自己出一个数。
+之前五次都走 magic 的 DEF 版天线脚本（scripts/magic/def/antenna_check.tcl，即
+read_def + MAGIC_DEF_LABELS），五次全部停在 magic 打印 Processing sha256_axil 之后，
+无 EXIT、无 error、无 feedback、extraction/ 为空；同机 LVS 同一步 13–22 分钟能过。
+判定为该脚本组合受工具路径所阻，不是设计有问题。
+
+这一轮换两条独立入口，都不碰 DEF 版脚本：
+  A. magic 从 GDS 进：gds read → load → extract → antennacheck（含 debug 复跑）
+  B. OpenROAD 从 routed ODB 进：check_antennas -verbose
+
+
+2. 做法 A：magic GDS 入口
+-------------------------
+输入  /tmp/eco/eco_it2c.gds（41,419,812 B，官方 mag_gds.tcl 产，DRC 6 条 li.6）
+脚本  /tmp/ant/ant.tcl、/tmp/ant/ant2.tcl（后者 antennacheck debug + feedback save）
+环境  PDK_ROOT=/pdk，-rcfile sky130A.magicrc，stdlib mag 库 addpath
+进程  单次约 46 分钟（gds read 7 分钟 + extract 约 30 分钟 + 检查 9 分钟），
+      cgroup memory.peak 4,103,974,208 B / 上限 8,589,934,592 B，无 OOM、无静默退出
+
+结果
+  提取   sha256_axil.ext 19,810,202 B，Extracting ... 全部单元 + 顶层完成，
+         "Total of 2 warnings."
+  检查   "Running antenna checks. … 48600 gates analyzed. antennacheck finished."
+         => 48,600 个 gate 被逐个比过（对应 22,048 个实例 / 15,983 个器件）
+  违例   0 条。ant.log 与 debug 复跑（ant2.log）都是 0 行违例输出；
+         feedback save 出的 sha256_ant.feedback 只有 228 B，grep -ci antenna = 0
+证据  /tmp/ant/ant.log（986 行）、/tmp/ant/ant2.log（489 行）、
+      /tmp/ant/sha256_ant.feedback、/tmp/ant/sha256_axil.ext
+参照  /tmp/ant_spi/：同一套脚本在 axil_spi_top.gds（2,521,640 B）上跑通，
+      feedback 1,100 B、同样 0 条 —— 说明「0 条」不是脚本没跑起来的假阴性
+      （同一份环境里 feedback 确实能写出条目：那些 "device missing 1 terminal" 就在里面）
+
+
+3. 做法 B：OpenROAD check_antennas（交叉）
+-------------------------------------------
+输入  /tmp/eco/eco_it2_fill.odb（35,090,799 B，带 filler 的最终版）
+命令  read_db; check_antennas -verbose
+结果  [INFO ANT-0002] Found 1 net violations.
+      [INFO ANT-0001] Found 1 pin violations.
+
+明细
+  Net: net52
+    Pin: output52/A (sky130_fd_sc_hd__buf_2)
+      Layer met4  侧面比 14.82   / 门槛 2848.40   未违例
+      Layer met3  侧面比 1680.81 / 门槛 400.00    VIOLATED
+                  面积比 311.19  / 门槛 0.00
+      Layer met2  侧面比 99.28   / 门槛 400.00   未违例
+      Layer met1  侧面比 29.58   / 门槛 400.00   未违例
+      Via  M3M4_PR / M2M3_PR / M1M2_PR / L1M1_PR 全部在门槛内
+    Pin: _11070_/B (sky130_fd_sc_hd__and2_2)   —— net52 的第二个负载脚，同一条网
+证据  /tmp/ant/or_ant.log 5,432 B，md5 76f4ec50cba2701e508429aefbaaca8f
+      脚本 /tmp/ant/or_ant.tcl，wrapper /tmp/ant/run_or_ant.sh
+
+
+4. 两个引擎为什么读数不一样
+---------------------------
+magic antennacheck 按面积比（gate area / metal area）逐层推进；OpenROAD 的
+check_antennas 同时算「侧面比」（side area），sky130A 的 PDK 规则里
+met1–met3 的侧面积门槛就是 400。net52 在 met3 上面积比 311.19 远低于门槛，
+侧面比 1680.81 却超了 4.2 倍 —— 所以 magic 报 0、OpenROAD 报 1，不是谁算错，
+是比的对象不同。
+口径：两条读数都写进证据，对外记严的一侧（1 条），不记 0 条。
+
+
+5. 交叉信息：net52 同时也是 DRV 残余的最差网之一
+-----------------------------------------------
+残余 60 个 max_slew 脚压在 12 条网上，net52 就在那张名单里（最差 1.14 ns 那几个脚
+是 output52/A、_17814_/C1、_17813_/Y、_11070_/B、_09300_/Y 这一串）。
+也就是说同一条网同时踩了「slew 超限」和「天线超限」两件事 —— 它是一条长/高扇出的
+输出网，两个问题指向同一个根因（扇出负载 + 布线长度），下一轮要动它就得一起动：
+要么在 RTL 做扇出复制，要么在同一处补天线二极管并重布这一段。
+
+
+6. 口径（这一段怎么记账）
+-------------------------
+1) 天线 = 1 条（net52 / output52/A / met3 侧面比 1680.81 对 400），未清零。
+2) 不记 0/0。magic 的 0 是「面积比口径下的 0」，不能当成整条网干净。
+3) tapeout 版主表的天线仍是 0/0，不动 —— 那是另一版库、另一条流程的读数。
+4) 旧记「未复核」作废，原因写在上面第 1 节：DEF 版脚本卡住的是工具路径，不是设计。
+
+
+7. 复现
+-------
+# A. magic（GDS 入口）
+sudo chroot /home/user/openlane-rootfs env PDK_ROOT=/pdk \
+  <magic> -dnull -noconsole -rcfile /pdk/sky130A/libs.tech/magic/sky130A.magicrc \
+  /tmp/ant/ant2.tcl          # 打印 ... gates analyzed / antennacheck finished
+                             # 再看 /tmp/ant/sha256_ant.feedback 里有没有 antenna 条目
+
+# B. OpenROAD（routed ODB 入口）
+sudo chroot /home/user/openlane-rootfs env PDK_ROOT=/pdk \
+  <openroad> -no_init /tmp/ant/or_ant.tcl     # read_db; check_antennas -verbose

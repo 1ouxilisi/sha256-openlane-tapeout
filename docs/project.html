@@ -341,9 +341,9 @@ footer p{margin:6px 0}
       <tr><td>DRC</td><td><b>6 条 li.6，不是 0 条</b>（tapeout 版 0）：六处 0.17 × 0.17 µm 的 li1 小方块，magic 与 KLayout 给的是同一 6 处</td><td>同上 第二节 5)</td></tr>
       <tr><td>XOR</td><td><b>未定</b>：43 层 <code>TOTAL_DIFF = 94,607</code>，非零 8 层，但这些层号在 <code>sky130A.map</code> 里没有条目 —— 层号没对上 PDK 层名，差异数字不成立</td><td><a href="evidence/eco_recheck.txt">eco_recheck.txt</a> 与 <a href="verify.html">校验页</a></td></tr>
       <tr><td>LVS</td><td><b>未通过</b>：<code>devices 15,983 | 15,983</code>（相等），<code>nets 15,931 | 15,828</code>（差 103），顶层 <code>failed pin matching</code>；根因已定位到「版图侧网表从 GDS 提取、拿不到网名」</td><td>同上 第三节</td></tr>
-      <tr><td>天线</td><td><b>未复核</b>：五次尝试都卡在 magic 提取阶段（同机 LVS 同一步 13–22 分钟能过），判为该脚本组合的工具路径受阻，不记 0 条</td><td>同上 第三节 末</td></tr>
+      <tr><td>天线</td><td><b>1 条，未清零</b>：OpenROAD 在 routed DB 上报 <code>Found 1 net violations / 1 pin violations</code> —— <code>net52</code> 上的 <code>output52/A</code>（buf_2），met3 侧面比 <b>1680.81</b> 对门槛 400 超 4.2 倍，第二个脚 <code>_11070_/B</code>；magic 走 GDS 入口（<code>antennacheck</code> 含 debug）48,600 个 gate 跑完报 0 条 —— 两个引擎比的对象不同，按严的记</td><td><a href="evidence/eco_antenna.txt">evidence/eco_antenna.txt</a></td></tr>
     </table>
-    <p class="sub" style="margin-top:16px">口径三句，缺一句这一节就不成立：<b>第一，这是「时序压到 60 脚、DRV 未清」，不是 signoff 通过</b>；<b>第二，LVS 没过，所以这一版不能替换主表</b>；<b>第三，XOR 那一格按三态写「未定」，不用「基本一致」代替</b>。</p>
+    <p class="sub" style="margin-top:16px">口径四句，缺一句这一节就不成立：<b>第一，这是「时序压到 60 脚、DRV 未清」，不是 signoff 通过</b>；<b>第二，LVS 没过，所以这一版不能替换主表</b>；<b>第三，XOR 那一格按三态写「未定」，不用「基本一致」代替</b>；<b>第四，天线那一格已经有数了，是 1 条不是 0 条</b> —— magic 报 0 是面积比口径的 0，OpenROAD 的侧面比超了 4.2 倍，取严的记。</p>
     <div class="card" style="margin-top:18px">
       <h3>LVS 那 103 条网差，根因不是接错，是名字对不上</h3>
       <p style="margin-top:10px"><b>器件级本来就是等价的。</b>两侧 <code>devices 15,983 | 15,983</code>，146 个单元类逐个 match uniquely，<code>Device classes are equivalent</code>。失配只在顶层。</p>
