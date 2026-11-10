@@ -56,15 +56,26 @@ sized(0.170) 得到 keep-out，再一条边一条边试（10 dbu 一步），
    —— 补 li1 面积没有改任何连接。
    （两份文件的 md5 不同，差异只在 .subckt 端口排列顺序，magic 每轮提取的端口顺序不保证稳定，
    与修补无关；用 netgen 对打才是有效判据。）
+5) magic 侧全片 DRC：0 条。配方照 OpenLane 自带 scripts/magic/drc.tcl 那一套：
+   drc euclidean on → drc style drc(full) → drc check → set r [drc listall why]。
+   先做正对照：同一条配方跑 eco_it2c.gds，得到 MAGIC_DRC_COUNT: 12、
+   MAGIC_DRC_TYPES: 2（`drc listall why` 把每个违规区域吐两遍），去重后正是那 6 个
+   已知坐标，一个不差 —— 说明这套配方在这台机器上是真在算，不是静默返回 0。
+   再跑 eco_it2e.gds：MAGIC_DRC_COUNT: 0、MAGIC_DRC_TYPES: 0，
+   report 文件 /tmp/n52/drc_it2e.magic.rpt 是 0 字节。
+   所以「DRC 0」是双引擎 0（KLayout 0 条 + magic 0 条），不是单侧结论。
 
 四、这一轮没有重跑的
 --------------------
-- magic 的 DRC：本轮没有再跑一遍全片 magic DRC（跑一次要几十分钟量级，
-  而同一批几何上一轮 magic 已给出同样 6 处）。所以「DRC 0」目前在 KLayout 这一侧成立，
-  magic 侧待补。
 - 天线、slew、LVS 三项不受这次修补影响：它们判的是 ODB 里的布局布线，
   这次只动了 GDS 上的 li1 面积，ODB 一个字节没变。天线仍是 1 条（net52），
   Slowest max_slew 仍是 60 条，LVS 仍未通过。
+- 顺手记下 magic DRC 在批处理里的两个坑（本轮前三次就是被这两条坑掉的）：
+  (a) 不设 box 的话 `drc check` 只重查 box 覆盖的面积，box 默认在原点是个零面积，
+      结果是 `Squares processed: 0/0`、统计全 0，看着像「查完了 0 条」，其实什么都没查；
+      必须先 `box 0 0 640um 640um` 把 die 铺满。
+  (b) 不写 `drc style drc(full)` 时用的是默认风格，`drc listall why` 返回空表，
+      同样得到假的 0。两条都补上之后才有真实计数。
 
 五、复现命令
 ------------
@@ -91,3 +102,9 @@ magic -dnull -noconsole -rcfile $PDK/sky130A/libs.tech/magic/sky130A.magicrc /tm
 netgen -batch lvs "/tmp/n52/layout_it2e.spice sha256_axil" \
                   "/tmp/lvs_it2c/layout.ext.spice sha256_axil" \
                   $PDK/libs.tech/netgen/sky130A_setup.tcl /tmp/n52/lvs_e_vs_c.out
+
+# 7) magic 全片 DRC（含正对照：把下面的 it2e 换成 it2c 应报出 6 处 li.6）
+#    脚本 /tmp/n52/drc_mag_e6.tcl（it2e）/ drc_mag_c6.tcl（it2c 对照）
+sudo chroot /home/user/openlane-rootfs <bash 全路径> /tmp/n52/run_drc_mag6.sh
+#    -> stdout: MAGIC_DRC_COUNT: 0 / MAGIC_DRC_TYPES: 0
+#    -> report: /tmp/n52/drc_it2e.magic.rpt（0 字节）
