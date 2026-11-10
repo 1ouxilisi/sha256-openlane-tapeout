@@ -217,3 +217,83 @@ gds_ctrl.py（对照批跑）。
   # 对照批跑（30 条两脚网，按各自路由包围盒开窗）
   sudo chroot /home/user/openlane-rootfs <bash> /tmp/n52/ctrl_pins.tcl   # 先取脚坐标
   /opt/python3.12/bin/python3 /home/user/openlane-rootfs/tmp/n52/gds_ctrl.py
+
+九、换判据之后：这一版确实有真开路，位置在脚的接合处
+
+第五节路 B 的第二种判据：不再用「引脚包围盒中心」，直接用 **LEF 里的引脚形状**。
+
+做法：
+  1. 从 sky130_fd_sc_hd.lef 解析 437 个单元的每个 PIN 的 LAYER + RECT（li1 / met1 等），
+     坐标换算到 DEF 的 dbu（1 µm = 1000）。
+  2. 从 eco_it2_fill.def 的 COMPONENTS 段取实例的位置与朝向（N/S/E/W/FN/FS/FW/FE 八种
+     都按包围盒左下角对齐做变换；W/E/FW/FE 用旋转后的真实尺寸换算，早先那版把 W/E 写错
+     过，已修正）。
+  3. 本网金属：DEF 的 ROUTED 段按层宽铺矩形（li1 170 / met1 140 / met2 140 / met3 300
+     dbu 半宽 + 60 dbu 余量），过孔按名称（L1M1 / M1M2 / M2M3 / M3M4 / M4M5）在上下两层
+     各打一个 200 dbu 方块，再按层合并。
+  4. 判据：这个引脚的任一引脚矩形，与本网**同层**金属有交集 → 接上；否则算开路。
+
+先做对照（这一步决定判据能不能用）：
+  随机 40 条普通网（2 至 4 个脚，不在 68 条名单里）共 98 个脚 → **开路 0 个**。
+  判据通过，可以作判。
+
+再跑 68 条分裂网（DEF 头声明的完整脚表共 272 个脚；此前 lvs_map 那份 171 个只是可映射的子集）：
+    接上           95 脚
+    OPEN（有偏差）  64 脚
+    NOPIN（该单元在 LEF 里查不到同名脚，无法判定）113 脚
+    **至少一脚开路的网：43 条（68 条里）**
+
+抽样原文，`_03524_`（DEF 第 5,485,392 字节起的 NETS 段）：
+
+    - _03524_ ( _16242_ B1 ) ( _16239_ Y ) + USE SIGNAL
+      + ROUTED met1 ( 351670 376210 ) ( 351800 * )
+      NEW met1 ( 351670 375870 ) ( * 376210 )
+      NEW met1 ( 348910 375870 ) ( 351670 * )
+      NEW met2 ( 348910 375870 ) ( * 377570 )
+      NEW met1 ( 320390 377230 ) ( 330970 * )
+      NEW met1 ( 330970 377230 ) ( * 377570 )
+      NEW met1 ( 330970 377570 ) ( 348910 * )
+      NEW li1 ( 351800 376210 ) L1M1_PR_MR
+      NEW met1 ( 348910 375870 ) M1M2_PR
+      NEW met1 ( 348910 377570 ) M1M2_PR
+      NEW li1 ( 320390 377230 ) L1M1_PR_MR ;
+
+  `_16242_` 在 DEF 里是 PLACED ( 351670 … )，它的脚 B1 正好被 (351800,376210) 那个
+  L1M1 压住 —— 这一端是接上的。
+  `_16239_` 是 `sky130_fd_sc_hd__nand2_1`，PLACED ( 322000 375360 ) N，它的脚 Y 的
+  li1 形状（LEF 原文三段）变换后是
+      x 322.600–323.295 / y 375.615–377.825
+  而这一网给它的 L1M1 落在 (320390, 377230) —— 在 x 上离脚的左边界还差 2.210 µm，
+  根本没压到脚。**一端接上、一端悬空，这就是开路**，不是「走线断了」也不是「提取没合并」。
+
+交叉印证（这条很关键）：`eco_it3` 那一轮 DRT 报的正是
+  `_03524_ 1 pin not visited`
+与本几何结果「恰好 1 个脚开路」逐字对上。DRT 自己一直在说同一件事，只是当时被当成
+「工具报错」放过了。
+
+所以口径改写成：
+  这一版（ECO it2 系列）确实存在真开路，数量是 **43 条网 / 64 个脚**（几何判据，含对照），
+  位置在**脚与走线的接合处（pin access）**，不在走线中段。
+  仍在 68 条这个名字名单里的是「被拆开的网名」，两者不是一回事：68 是名字数，43 是几何
+  上能证明缺接合的网数，另 25 条要么 113 个 NOPIN 挡着没法判，要么几何上接上了却仍被
+  提取拆开（那 25 条留给下一步）。
+  仍不写「LVS 有解」，因为修的是版图不是判据。
+
+下一步（工具已经确认存在，不是设想）：
+  OpenROAD 的命令表里确实有 `pin_access`（`lsort [info commands]` 实测列出
+  `pin_access / place_pin / place_pins / define_pin_shape_pattern` 等；没有
+  `checkConnectivity`）。路径是：在 eco_it2_fill.odb 上先跑 `pin_access` 重新生成每个
+  脚的接入点，再对 43 条网做局部重布，然后重跑 DRT 的连接性；若 43 条网的
+  `N pin not visited` 归零，就重提 DEF→GDS→magic→netgen，看 103 条差是否跟着掉。
+  这条路径不碰 RTL、不碰时序，和 DRV 残余 12 条网（含 net52）是同一批收尾。
+
+复现：
+
+  # 引脚形状 × DEF 走线的几何判据（含 40 条随机网对照）
+  python3 /home/user/openlane-rootfs/tmp/n52/pinchk3.py
+  # 期望：SPLIT: pins 272 open 64 nets_with_open 43 / CONTROL: pins 98 open 0 nets_with_open 0
+  # 单条网原文
+  python3 - <<'PY'
+  s=open('/home/user/openlane-rootfs/tmp/eco/eco_it2_fill.def').read()
+  i=s.find('\n    - _03524_'); j=s.find('\n    - ', i+5); print(s[i:j])
+  PY
