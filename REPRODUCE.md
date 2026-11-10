@@ -56,6 +56,18 @@ netgen -batch lvs "<版图侧.spice> sha256_axil" "<网表侧.spice> sha256_axil
 
 通过的样子是末行 **`Final result: Circuits match uniquely.`**、`Net:` 计数 0（原文在 `docs/evidence/cts9_lvs.txt`）。
 
+### 一条命令（ECO 版，含两版实跑结论）
+
+ECO 版不再手拼四段，用 [`lvs-repro/repro3.sh`](lvs-repro/) 一条命令从 GDS 跑到 netgen 结论：
+
+```
+bash lvs-repro/repro3.sh /tmp/eco/eco_it2f.gds f4 94 /tmp/lvs_it2c/net.spice   # 88 秒 → PASS
+bash lvs-repro/repro3.sh /tmp/eco/eco_it2g.gds g5 93 /tmp/lvs_it2c/net.spice   # 87 秒 → 不通过
+```
+
+退出码 `0` PASS｜`2` 不一致｜`3` 提取链自己失败（`summary.txt` 写 `FAIL@PHASEx`）。阶段 0 会从 PDK 自建 148 个标准单元 `.ext` 缓存，不需要外部二进制。三条别改的地方（`.ext` 要拷进工作目录、`ext2spice` 另起会话且不带 ext 名、netgen 路径写 chroot 视角）与实跑指纹都在 [`docs/evidence/onecmd_repro.txt`](docs/evidence/onecmd_repro.txt)。
+
+
 两侧输入不是原样可比的，中间必须做四件事——每一条都是踩出来的真缺陷，不是工具玄学：
 
 1. **Magic 写出的网表按固定列宽折行，下一条以 `+` 起头。** 先 unwrap 再统计，否则实例数/引脚数都会数错（顶层实例 34,182 两侧一致，但引脚 187,216 对 189,886）。

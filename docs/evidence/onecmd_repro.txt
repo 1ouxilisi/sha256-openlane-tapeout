@@ -1,0 +1,148 @@
+LVS 一条命令复现 —— 从 GDS 到 netgen 结论，88 秒，零人工
+生成时间：2026-11-10 21:58 ~ 22:10（UTC+8）
+运行环境：云主机 vm / chroot /home/user/openlane-rootfs（magic-vlsi、netgen 均为 nix 包）
+本文只写这一次真跑的产物；没有跑的、没定位到的不写结论。
+
+================================================================================
+一、结论（两版各一条命令，各自给结论）
+================================================================================
+
+1) eco_it2f.gds（无二极管版，41,618,404 B / md5 fc87bbc0…）
+   命令：bash repro3.sh /tmp/eco/eco_it2f.gds f4 94 /tmp/lvs_it2c/net.spice
+   时间：21:58:00 起，21:59:28 出结论 —— 全程 88 秒，中间没有人碰过。
+   分段时间：A 提取 78 s（21:58:01→21:59:19）；B ext2spice 3 s；C 端口整理 <1 s；D netgen 6 s。
+   产物：
+     sha256_axil.ext            19,823,266 B（每次现抽，不复用旧件）
+     layout_f4.spice             1,686,735 B  md5 09183c364b9f5e749c05cfb23a8e3333
+     lay_f4.spice                1,684,381 B  TOP_PORTS 94 / TOP_INST 16552
+     lvs_f4.out                    288,455 B
+   末行：Final result: Circuits match uniquely.
+   这一条的 spice md5 与上一轮两份独立抽取（layout_it2f.spice / layout_it2f_re.spice）
+   完全相同 —— 也就是说，「一条命令」跑出来的东西，和当时人工分两段跑出来的东西
+   是同一串字节，不是「看着差不多」。
+
+2) eco_it2g.gds（带 347 颗 diode 版，41,685,148 B）
+   命令：bash repro3.sh /tmp/eco/eco_it2g.gds g5 93 /tmp/lvs_it2c/net.spice
+   时间：22:08:44 起，22:10:11 出结论 —— 全程 87 秒。
+   产物：
+     sha256_axil.ext            19,825,091 B
+     layout_g5.spice             1,686,616 B  md5 0751c0c82e7e39007c97a33a84d9cbc2
+     lay_g5.spice                1,684,268 B  TOP_PORTS 93 / TOP_INST 16572
+     lvs_g5.out                    402,582 B
+   末行：Final result: Top level cell failed pin matching.
+   同一份 lvs_g5.out 里的器件/网计数：15,981 vs 15,983 器件、15,799 vs 15,828 网。
+
+   ⇒ 带二极管那版的 LVS 状态不再是「无结论」，是「不通过」，而且是可复现的不通过：
+     换个 clean 目录再跑一次，spice 还是这串字节（md5 与更早的 layout_it2g.spice 相同）。
+
+   为什么不过 —— 顶层少了 VGND 这一脚（只看文件头就够，不用推断）：
+     f4（通过版）：.subckt sha256_axil VGND VPWR clk reset_n …
+     g5（二极管版）：.subckt sha256_axil VPWR clk reset_n …
+   同口径计数：VGND 在 lay_f4.spice 里出现 17,395 次，在 lay_g5.spice 里只有 842 次
+   （842 次全部来自子单元引脚，顶层那一脚没有）。prep_lay 口径 94 vs 93，差的正是这一脚。
+
+================================================================================
+二、这条命令到底做了哪四段
+================================================================================
+
+PHASE A  magic -dnull：gds read → load sha256_axil → select top cell →
+         extract do local / no capacitance / no coupling / no resistance / no adjust /
+         extract unique → extract。跑完打 PHASE_A extract_done。
+PHASE B  新开一个 magic 会话（不是同一个进程里接续）：load → ext2spice lvs →
+         ext2spice -o <路径>，**不写 ext 名**。上一轮的病根就在这：
+         ext2spice -o <输出> <ext 名> 里的 <ext 名> 不存在时，magic 不报错、不落盘，
+         回落读当前目录里旧的 sha256_axil.ext。本轮的 B 段没有第二参数，所以没有回落口子。
+PHASE C  宿主机 /opt/python3.12 /home/user/lvspkg/prep_lay.py --expect-ports <N>
+         端口数不符即 fail（这一步会挡住「端表悄悄少脚」）。
+PHASE D  netgen -batch lvs "<版图 spice> sha256_axil" "<基准网表> sha256_axil" <setup> <out>
+         取 out 末条 Final result 判 PASS / NOT-PASS。
+
+每段各带超时（A 1800 s、B 900 s、D 1800 s），超时或没打出完成标记就退出并写
+summary.txt；不会「挂着等人看」。
+
+================================================================================
+三、卡点与定位：空工作目录里 extract 会静默停住
+================================================================================
+
+现象（三次，工作目录都是新建的空目录：w_f2v / w_f2v2 / w_t1）：
+  日志停在 Processing sha256_axil 之后就没有下文（12,503 / 12,095 / 12,027 B 三份）；
+  进程状态 S/R 交替，CPU 时间停在 6–11 s 不再涨；
+  VmRSS 恒 420,864 kB；没有子进程；打开的文件只剩 0/1/2（stdin/stdout/stderr）；
+  /proc/<pid>/io 的 rchar 停在 44,246,538 不再增长；vmstat 的 r 列恒 0（不是抢不到 CPU）。
+  只能 kill -9。
+
+对照 A（同一段脚本，工作目录里已经有 148 个标准单元 .ext）：2 分钟跑通，
+  现抽出新的 sha256_axil.ext 19,823,266 B，layout_t6.spice 1,686,735 B / md5 09183c36…。
+对照 B（空工作目录 + addpath 指向同一份 148 个 .ext）：仍然停住。
+  ⇒ 要求是「这些 .ext 就在当前目录」，不是「addpath 里能找到」。
+  （顺带一条命令行事实：magic 的 addpath 只吃一个参数，写两个会报
+    Usage: addpath appended_search_path 并让整个 tcl 解析中止。）
+
+所以本轮对外的说法是：magic 抽顶层时，各子单元的 .ext 必须落在 cwd；
+缺了它不报错、不写文件、不退出，只是停住。至于 magic 内部为什么走这条路，
+本轮没有定位到（见第六节「仍未闭合」）。
+
+================================================================================
+四、那 148 个 .ext 从哪来 —— 从 PDK 自己长出来，不需要外部二进制
+================================================================================
+
+在干净目录里对 PDK 的 sky130_fd_sc_hd.gds 逐单元重抽：
+  gds read /pdk/sky130A/libs.ref/sky130_fd_sc_hd/gds/sky130_fd_sc_hd.gds
+  然后对每个 master：load → select top cell → extract do local … → extract
+  148 个单元，一个 magic 会话，日志末尾打 CACHE_DONE；
+  产出 148 个 .ext，合计 572,151 B（目录 824 KB）。
+单单元对照：空目录里 load sky130_fd_sc_hd__inv_1 后 extract → T8_DONE，写出 inv_1.ext。
+  说明「单单元抽取」本身不挑目录；挑目录的是顶层那一抽。
+
+⇒ 缓存不是必须从别处拷来的黑盒：它可以从 PDK 重新生成，脚本就在仓库里。
+   本轮用的就是这份自己长出来的缓存，没有再依赖 /tmp/n52 的历史残留。
+
+================================================================================
+五、和上一轮记录的关系（三个数各自对上，没有互相顶替）
+================================================================================
+
+- 通过版 spice：本轮 f4 1,686,735 B / md5 09183c364b9f5e749c05cfb23a8e3333
+  = 上一轮 layout_it2f.spice、layout_it2f_re.spice 同一串 md5。
+- 旧缓存反例仍成立：layout_it2z / layout_it2h / layout_it2c2 三份各 1,667,321 B /
+  md5 c03acf6a…，是同源三读，不是三次独立抽取。
+- 二极管版 spice：本轮 g5 1,686,616 B / md5 0751c0c82e7e39007c97a33a84d9cbc2
+  = 上一轮 n52 里那份 layout_it2g.spice 同一串 md5。
+  也就是说，这次不是「换了个口径得出新结论」，是把上一轮没有结论的那版，
+  用同一条命令跑了一遍，结论是不通过，原因写在文件头里（顶层缺 VGND）。
+
+================================================================================
+六、仍未闭合
+================================================================================
+
+1. magic 顶层 extract 在缺 .ext 时为什么静默停住，本轮没有定位到内部原因
+   （只做到「现象可复现 + 补上 .ext 就恢复」这一步，没有拿到 syscall/调用栈级证据）。
+2. 缓存是不是必须「148 个全量」没验证：本轮只验证「这 148 个在位就够」，
+   没有逐个剔除试验最小集合。
+3. 端口计数有两套口径：spice 侧 .subckt 引脚数（f4 有 VGND、g5 没有），
+   与 prep_lay 的 TOP_PORTS（94 / 93）。本文两处都写清是哪一套，不混用。
+4. eco_it2e.gds、以及 eco2 谱系的其它 DEF 没有用这条命令跑过，本轮不外推。
+5. 天线仍是 16 条 / 20 脚，主表 tapeout 数字不动；本文只改 LVS 这一格的结论。
+
+================================================================================
+七、复现方法（原文照抄即可）
+================================================================================
+
+仓库内脚本：lvs-repro/repro3.sh、lvs-repro/ext.tcl、lvs-repro/sp.tcl、lvs-repro/build_cache.tcl
+环境变量与 nix 路径写死在脚本头部（本机 chroot 的固定路径，换机器要改那几行）。
+
+  bash lvs-repro/repro3.sh /tmp/eco/eco_it2f.gds f4 94 /tmp/lvs_it2c/net.spice   # → PASS
+  bash lvs-repro/repro3.sh /tmp/eco/eco_it2g.gds g5 93 /tmp/lvs_it2c/net.spice   # → NOT-PASS
+
+退出码：0 PASS / 2 结果不一致 / 3 提取链自己在某一段就失败了（summary.txt 会写 FAIL@哪段）。
+
+================================================================================
+八、本轮产物指纹
+================================================================================
+
+  run_f4/layout_f4.spice   1,686,735 B  md5 09183c364b9f5e749c05cfb23a8e3333
+  run_f4/lay_f4.spice      1,684,381 B
+  run_f4/lvs_f4.out          288,455 B  Final result: Circuits match uniquely.
+  run_g5/layout_g5.spice   1,686,616 B  md5 0751c0c82e7e39007c97a33a84d9cbc2
+  run_g5/lay_g5.spice      1,684,268 B
+  run_g5/lvs_g5.out          402,582 B  Final result: Top level cell failed pin matching.
+  cache_stdcel/                 148 个 .ext、572,151 B（可从 PDK 重建）
