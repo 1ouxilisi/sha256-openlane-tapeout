@@ -338,7 +338,7 @@ footer p{margin:6px 0}
       <tr><td>功耗</td><td>Slowest <b>9.57e-03 W</b>（Sequential 52.5% / Combinational 4.0% / Clock 43.6%）；Typical 1.07e-02 W；Fastest 9.16e-03 W</td><td>同上 第二节</td></tr>
       <tr><td>压降（PDNSim）</td><td>VPWR worst <b>1.09 mV</b>（avg 0.113 mV）；VGND worst <b>1.08 mV</b>（avg 0.111 mV）</td><td>同上 第二节</td></tr>
       <tr><td>filler 与密度</td><td>fill_ <b>35,334</b>（tapeout 版 25,656），利用率 46%；密度 li1 0.7425 / m1 0.7231 / m2 0.9032 / m3 0.9228 / m4 0.9481 / m5 0.9723，六层均不低于 tapeout</td><td>同上 第二节</td></tr>
-      <tr><td>DRC</td><td><b>6 条 li.6，不是 0 条</b>（tapeout 版 0）：六处 0.17 × 0.17 µm 的 li1 小方块，magic 与 KLayout 给的是同一 6 处</td><td>同上 第二节 5)</td></tr>
+      <tr><td>DRC</td><td><b>0 条</b>（tapeout 版也是 0）：起点是 6 条 li.6 —— 六处 0.17 × 0.17 µm 的 li1 小方块，面积 0.0289 µm²，不到门槛 0.0561 µm² 的一半。修法是把每块并成 0.33 × 0.17 = 0.0561 µm²，补丁方向按「离其它 li1 ≥ 0.17 µm」逐边试扩；XOR 7 处全落在 li1、净加 0.163 µm²，密度六值与版图网表逐项不变</td><td><a href="evidence/eco_drc_zero.txt">eco_drc_zero.txt</a></td></tr>
       <tr><td>XOR</td><td><b>未定</b>：43 层 <code>TOTAL_DIFF = 94,607</code>，非零 8 层，但这些层号在 <code>sky130A.map</code> 里没有条目 —— 层号没对上 PDK 层名，差异数字不成立</td><td><a href="evidence/eco_recheck.txt">eco_recheck.txt</a> 与 <a href="verify.html">校验页</a></td></tr>
       <tr><td>LVS</td><td><b>未通过</b>：<code>devices 15,983 | 15,983</code>（相等），<code>nets 15,931 | 15,828</code>（差 103），顶层 <code>failed pin matching</code>；根因已定位到「版图侧网表从 GDS 提取、拿不到网名」</td><td>同上 第三节</td></tr>
       <tr><td>天线</td><td><b>1 条，未清零</b>：OpenROAD 在 routed DB 上报 <code>Found 1 net violations / 1 pin violations</code> —— <code>net52</code> 上的 <code>output52/A</code>（buf_2），met3 侧面比 <b>1680.81</b> 对门槛 400 超 4.2 倍，第二个脚 <code>_11070_/B</code>；magic 走 GDS 入口（<code>antennacheck</code> 含 debug）48,600 个 gate 跑完报 0 条 —— 两个引擎比的对象不同，按严的记</td><td><a href="evidence/eco_antenna.txt">evidence/eco_antenna.txt</a></td></tr>
@@ -365,7 +365,7 @@ footer p{margin:6px 0}
       <p><b>22.75 ns 是"v6 那套 RTL"的边界，不是工艺边界。</b>v7 换掉消息调度后，18 ns 三 corner 仍全正余量（最紧 +0.56 ns）。把架构上限说成工艺上限，是这个项目前六代差点犯的错。</p>
       <p><b>v7 没有变省电。</b>频率 +33%、功耗 +37%，单位频率功耗基本持平；每块能耗反而更差。它不是能效优化的一代。</p>
       <p><b>吞吐仍然很低。</b>约 15 MB/s，比带 SHA-NI 的 CPU 慢两个数量级；多块流式省的是软件搬运，不是算力。padding 仍由软件完成。</p>
-      <p><b>DFT 扫链仍未插入；ECO 已做一轮但没清干净。</b>ECO 版把 Slowest 的 max_slew 从 275 压到 60 条，LVS 未通过、DRC 还有 6 条 li.6、天线未复核（详见上一节）。所以「可测、可修」这两环都还没闭合。</p>
+      <p><b>DFT 扫链仍未插入；ECO 已做一轮但没清干净。</b>ECO 版把 Slowest 的 max_slew 从 275 压到 60 条；DRC 已从 6 条 li.6 修到 0 条（只补 li1 面积，网表与密度都没动）；LVS 仍未通过、天线是 1 条不是 0 条（详见上一节）。所以「可测、可修」这两环都还没闭合。</p>
       <p><b>七代 flow_status 均为 failed</b>，唯一原因是 STEP 37 在 chroot 内调用 KLayout 崩溃（<code>tlFileUtils.cc:979</code>，工具自身 bug）；STEP 36 已正常产出 GDS，全部指标有效。</p>
     </div>
   </div>

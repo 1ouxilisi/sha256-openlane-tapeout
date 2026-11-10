@@ -1,0 +1,93 @@
+ECO 版 DRC：6 条 li.6 是怎么变成 0 条的
+==========================================
+
+一、起点：6 条 li.6，不是 0 条
+--------------------------------
+输入 eco_it2c.gds（41,419,812 B，官方 mag_gds.tcl 出的最新一版）。
+KLayout 全规则（sky130A_mr.drc 2023.6.14_01.08，feol+beol+seal 全开，4 线程）
+报 6 条，全部同一类：
+
+  li.6 : min. li area : 0.0561um²        （deck 第 408 行原文）
+
+六处的坐标（µm，左下列）：
+
+  (161.605, 248.965)   (319.845, 376.465)   (320.305, 377.145)
+  (340.085, 510.085)   (415.525, 430.185)   (415.525, 430.865)
+
+每一处都是一个 0.170 × 0.170 µm 的 li1 小方块：面积 0.0289 µm²，
+只有门槛 0.0561 µm² 的一半。magic 的 DRC 当时报的也是这同一批（6 处），
+说明不是某一个引擎的判据差异，是几何本身不达标。
+
+二、为什么是「补一块」而不是「删掉」
+------------------------------------
+这 6 块 li1 在版图里是孤立的 li1 岛：它们不与扩散、多晶、licon 相接，
+只是 li1 上还压着 mcon，往下走 met1。删掉会切断它所在的那一段 mcon→met1 联系，
+属于改连接；而 li.6 只是一条「面积下限」规则，正确的修法是把面积补到门槛以上。
+
+修法：在原方块**旁边**沿一个方向加一块 0.160 × 0.170 µm 的 li1，
+与原方块并成 0.330 × 0.170 = 0.0561 µm²，正好等于门槛。
+
+关键在方向。第一版按对称放大到 0.240 × 0.240 试过（eco_it2d.gds），
+结果有一块向右侧压到了相邻 li1 的边（XOR 里能直接看到两块并成一个多边形）——
+两个本来分开的 li1 被并到一起，属于潜在短接，这一版作废，不采用。
+
+第二版改成「逐边试扩、带躲避区」：先把该方块 4 µm 窗口内的其它 li1 全部
+sized(0.170) 得到 keep-out，再一条边一条边试（10 dbu 一步），
+只有加完仍与 keep-out 无交叠才落。六块最终都长到 0.330 × 0.170，
+落点全部落在空白区。
+
+三、结果
+--------
+输出 eco_it2e.gds：41,249,070 B，sha256 28fed3442d7b1e48c801ed1f12db9dc967e9b15fcb0582a616679db9fab45a81
+
+1) KLayout DRC：0 条（同一套 deck，同一组开关，Total elapsed 92.830 s，
+   report 里 218 个规则类全部登记、0 个 item）。
+2) XOR（eco_it2c 对 eco_it2e，xor.drc，tilesize 500）：7 处差异，全部在 67/20（li1），
+   没有一层别的地方动过。7 处就是 6 块补丁（其中一块左右各补了一小段，算 2 处），
+   净加 li1 面积 6 × 0.160 × 0.170 = 0.163 µm²。没有相并、没有新增多边形到别层。
+3) 密度（met_min_ca_density.lydrc）：li1 0.7425 / m1 0.7231 / m2 0.9032 /
+   m3 0.9228 / m4 0.9481 / m5 0.9723 —— 与修补前逐值相同（0.163 µm² 摊到 640×640 的 die 上
+   落在第六位有效数字以外）。
+4) 网表没变（这是最重要的一条）：magic 从 eco_it2e.gds 重新走
+   gds read → extract（local / 无 C / 无 coupling / 无 R / unique）→ ext2spice lvs，
+   得到的 layout 网表 1,686,833 B、20,155 行、18,534 个 X 器件、144 个 subckt，
+   与 eco_it2c 那份逐一相同。再用 netgen 把两份版图网表直接对打：
+   `Cell pin lists are equivalent.` / `Final result: Circuits match uniquely.`
+   —— 补 li1 面积没有改任何连接。
+   （两份文件的 md5 不同，差异只在 .subckt 端口排列顺序，magic 每轮提取的端口顺序不保证稳定，
+   与修补无关；用 netgen 对打才是有效判据。）
+
+四、这一轮没有重跑的
+--------------------
+- magic 的 DRC：本轮没有再跑一遍全片 magic DRC（跑一次要几十分钟量级，
+  而同一批几何上一轮 magic 已给出同样 6 处）。所以「DRC 0」目前在 KLayout 这一侧成立，
+  magic 侧待补。
+- 天线、slew、LVS 三项不受这次修补影响：它们判的是 ODB 里的布局布线，
+  这次只动了 GDS 上的 li1 面积，ODB 一个字节没变。天线仍是 1 条（net52），
+  Slowest max_slew 仍是 60 条，LVS 仍未通过。
+
+五、复现命令
+------------
+# 1) 找规则原文
+grep -n "li.6" /pdk/sky130A/libs.tech/klayout/drc/sky130A_mr.drc
+#    -> 408: linotace.with_area(nil, 0.0561).output("li.6", ...)
+#    li1 的 GDS 层号是 67/20（同 deck 第 104 行 li_wildcard = "67/20"）
+
+# 2) 修补（python3 + klayout.db，逐边试扩 + 0.170 keep-out）
+python3 /tmp/kl/fix_li2.py            # 输入 /tmp/eco/eco_it2c.gds -> 输出 /tmp/eco/eco_it2e.gds
+
+# 3) DRC
+sudo chroot /home/user/openlane-rootfs env PATH=<coreutils-9.5/bin>:/bin:/usr/bin \
+  bash /tmp/kl/drc_it2e.sh            # report -> /tmp/kl/drc_it2e.xml
+
+# 4) XOR
+sudo chroot ... bash /tmp/kl/xor_it2ce.sh   # 7 处，全在 67/20
+
+# 5) 密度
+sudo chroot ... bash /tmp/kl/dens_it2e.sh
+
+# 6) 网表对打
+magic -dnull -noconsole -rcfile $PDK/sky130A/libs.tech/magic/sky130A.magicrc /tmp/n52/ext_it2e.tcl
+netgen -batch lvs "/tmp/n52/layout_it2e.spice sha256_axil" \
+                  "/tmp/lvs_it2c/layout.ext.spice sha256_axil" \
+                  $PDK/libs.tech/netgen/sky130A_setup.tcl /tmp/n52/lvs_e_vs_c.out
