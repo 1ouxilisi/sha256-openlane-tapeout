@@ -1,0 +1,143 @@
+LVS 抽取复现性复核（2026-11-10）
+
+一句话：同一份 GDS 两次独立抽取，网表逐字节相同，netgen 两次都给出 Circuits match uniquely。
+因此"换会话重抽就对不上"这条说法撤回；真正的问题在调用方式，不在版图、不在引擎。
+
+====================================================================
+一、两条独立 run 的指纹
+====================================================================
+
+输入版图
+  eco_it2f.gds   41,618,404 B   md5 fc87bbc040e9dd9f47c43987ba2ab597
+
+run A（17:07，第一次）
+  layout_it2f.spice    1,686,735 B   md5 09183c364b9f5e749c05cfb23a8e3333
+  端口 98，含 VGND；X_09671_ 四脚 = VPWR VGND VPWR VGND
+  prep_lay.py --expect-ports 94 -> TOP_PORTS 94 / TOP_INST 16552（lay_f.spice 1,684,381 B）
+  netgen -> lvs_f2.out 288,455 B：15983 | 15983 devices、15828 | 15828 nets、
+            Cell pin lists are equivalent、Final result: Circuits match uniquely.
+
+run B（19:27，清空 sha256_axil.mag 与 sha256_axil.ext 后重跑，两段会话）
+  layout_it2f_re.spice 1,686,735 B   md5 09183c364b9f5e749c05cfb23a8e3333  （与 run A 逐字节相同）
+  端口 98，含 VGND；X_09671_ 四脚 = VPWR VGND VPWR VGND
+  prep_lay.py --expect-ports 94 -> TOP_PORTS 94 / TOP_INST 16552（lay_f_re.spice）
+  netgen -> lvs_f_re.out 288,455 B：Final result: Circuits match uniquely.
+
+两次 md5 相同，说明抽取这一步对同一输入是确定性的。
+
+====================================================================
+二、版图侧已无差别（复核结论，不是推断）
+====================================================================
+
+1. 二进制
+   eco_it2f.gds 与 eco_it2z.gds 均为 41,618,404 B。
+   cmp -l 差异 450 字节，全部落在记录头：偏移 30 / 94 / 2,274 / 4,936 / 6,220 ...
+   按 GDS 记录流解析，命中的记录类型是 0x102（BGNLIB，len 28）与一串 0x502（BGNSTR，len 28）。
+   即差异只有 version 字节与两组 timestamp，没有几何差异。
+
+2. 标签
+   顶层 datatype == 5 的 text：两侧各 112 个。
+   (layer,string) 分组后坐标逐个比对，total diff labels 0。
+   分布 (72,5)=8 / (71,5)=8 / (70,5)=79 / (69,5)=17，VGND x8 + VPWR x8 两侧一致。
+
+3. 形状
+   43 层共 562,105 个形状，两侧一致。
+
+结论：同一份 DEF 出来的两份 GDS，几何与标签完全相同。
+
+====================================================================
+三、早前"时并时不并"的读数是怎么来的
+====================================================================
+
+病根在 ext2spice 的第二参数，不在版图。
+
+magic 的写法是 ext2spice -o <输出文件> <ext 名>。当 <ext 名> 指向一个不存在的目录时，
+magic 不打 error、不写文件，直接回落到当前目录里已有的 sha256_axil.ext
+—— 也就是上一次抽取留下的缓存。
+
+本轮实测：
+  ext_it2f_re.tcl 里写的是 ext2spice -o /tmp/n52/layout_it2f_re.spice sha256_axil_re.ext
+  跑完打出 SPICE_DONE，日志里 Total of 2 warnings，但目标文件不存在。
+把第二参数去掉、只写 ext2spice -o /tmp/n52/layout_it2f_re.spice，另起一个会话跑，
+1,686,735 B 正常落盘，md5 与第一次完全相同。
+
+由此可以解释 18:32 / 18:39 / 18:45 那三个"97 端口、无 VGND"的文件：
+  layout_it2z.spice = layout_it2h.spice = layout_it2c2.spice
+  各 1,667,321 B，md5 全为 c03acf6a791bf1052b35f3f889a5014a
+三份文件彼此逐字节相同，正是因为它们同源 —— 同一份缓存被三次读出，而不是三次独立抽取。
+
+所以：早前记的"同一份 DEF / GDS 换会话重抽 → VNB 井网并进 VPWR、15,981 vs 15,983"
+这条结论，撤回。它测到的是缓存，不是版图。
+
+====================================================================
+四、仍然未闭合的
+====================================================================
+
+1. 带 347 颗 diode 的 eco_it2g.gds（eco4 版）还没有在
+   "清空 .mag/.ext + 两段独立会话 + ext2spice 不带 ext 参数"这个口径下重跑。
+   此前对它得到的 97 端口结论同样落在第三节的坑里，不能当判据。
+2. 因此对外口径只到这里：
+   LVS 通过对应的是"引脚开路修好版"（eco_it2f，不含天线二极管）；
+   带 diode 的最终候选版尚未出结论，天线仍按 16 条 / 20 脚记账。
+3. 页面主表数字不因这次复现而不变：LVS 这一格从"未通过（卡在提取链复现性）"
+   改为"该版通过且可复现"，旧的"未通过"记录保留在更正链里，不覆盖。
+
+====================================================================
+五、一条命令复现
+====================================================================
+
+目录 /tmp/repro/，三个文件：
+
+--- ext.tcl（会话 A：只做 gds read + extract）
+drc off
+tech load /pdk/sky130A/libs.tech/magic/sky130A.tech
+addpath /tmp/repro
+cd /tmp/repro
+gds read $env(REPRO_GDS)
+load sha256_axil
+select top cell
+extract do local
+extract no capacitance
+extract no coupling
+extract no resistance
+extract no adjust
+extract unique
+extract
+puts "STEP1_EXTRACT_OK"
+quit -noprompt
+
+--- sp.tcl（会话 B：只做 ext2spice，注意不带 ext 参数）
+drc off
+tech load /pdk/sky130A/libs.tech/magic/sky130A.tech
+addpath /tmp/repro
+cd /tmp/repro
+load sha256_axil
+select top cell
+ext2spice lvs
+ext2spice -o $env(REPRO_SPICE)
+puts "STEP2_SPICE_OK"
+quit -noprompt
+
+--- run.sh 关键段（完整脚本见 vm /tmp/repro/run.sh）
+rm -f sha256_axil.mag ; rm -rf sha256_axil.ext        # 清缓存，这一步不能省
+magic ... ext.tcl
+magic ... sp.tcl                                       # 必须是另一个会话
+test -s $REPRO_SPICE
+python3 /home/user/lvspkg/prep_lay.py -i ... --expect-ports 94
+netgen -batch lvs "<lay.spice sha256_axil>" "<net.spice sha256_axil>" sky130A_setup.tcl lvs.out
+
+====================================================================
+六、证据文件清单（vm）
+====================================================================
+
+/home/user/openlane-rootfs/tmp/eco/eco_it2f.gds                  41,618,404 B  fc87bbc040e9dd9f47c43987ba2ab597
+/home/user/openlane-rootfs/tmp/n52/layout_it2f.spice              1,686,735 B  09183c364b9f5e749c05cfb23a8e3333
+/home/user/openlane-rootfs/tmp/n52/layout_it2f_re.spice           1,686,735 B  09183c364b9f5e749c05cfb23a8e3333
+/home/user/openlane-rootfs/tmp/n52/lay_f.spice                    1,684,381 B  94 端口 / 16,552 实例
+/home/user/openlane-rootfs/tmp/n52/lay_f_re.spice                 同参数
+/home/user/openlane-rootfs/tmp/n52/lvs_f2.out                       288,455 B  Circuits match uniquely
+/home/user/openlane-rootfs/tmp/n52/lvs_f_re.out                     288,455 B  Circuits match uniquely
+/home/user/openlane-rootfs/tmp/n52/ext_it2f_re.tcl                 反例：带 sha256_axil_re.ext 参数，不落盘
+/home/user/openlane-rootfs/tmp/n52/sp_re.tcl                       正解：不带 ext 参数，落盘
+/home/user/openlane-rootfs/tmp/repro/{ext.tcl,sp.tcl,run.sh}        复现脚本
+/home/user/openlane-rootfs/tmp/lvs_it2c/net.spice                 2,872,118 B  网表侧基准
