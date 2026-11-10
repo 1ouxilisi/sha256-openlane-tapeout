@@ -64,6 +64,8 @@
 | `sta3c_old.log` | 167,264 B | 旧版同脚本三 corner 原始报告，**第 1096 行 `0.5619 slack (MET)`**——两行落在同一行号，因为脚本形状完全一样，只换了网表与 SPEF | 原始输出 |
 | `sta_est_compare.txt` | 3,585 B | **估算口径 STA 对照（已被 `sta_signoff_3corner.txt` 取代，保留作过程记录）**：同一口径（`tt_025C_1v80` 单角 + `estimate_parasitics -global_routing`，无 RCX/SPEF）对 `25-fill.odb` 与 `fixed16.odb` 各跑一次：worst setup +9.8329 → +9.9243 ns、hold +0.6247 → +0.6274 ns。**这组数过于乐观，不能当 signoff** | 生成结果（作废） |
 | `lvs_pass.txt` | 8,292 B | **LVS 结案**：两侧网名集合做差，真正多出的只有 `VNB`/`VPB` 两个网（井/衬底由 5,496 个 tap 接电源，Magic 提取时体端并入电源，而网表里 tap 引脚为空被整批丢掉）；`47 = 43 + 4`，两处都补后展平顶层 **166,353 器件 / 84,178 网**两侧相等，`Circuits match uniquely`；第 7 节记两次对照实跑：tap 单元在 PDK 里只有 `VGND VPWR` 两脚、body 为空，补回 5,496 个 tap 仍 47 行，强加 VNB/VPB 脚仍 47 行——另一条路线做不到，口径由定义决定 | 生成结果 |
+| `eco_antenna.txt` | 5,696 B | **天线复核的两条入口与两套口径**：magic 从 GDS 进（`antennacheck`，48,600 gates，0 条；同时段 debug 复跑 489 行同样 0；正对照 `axil_spi_top.gds` 写出 1,100 B feedback 证明不是假阴性）；OpenROAD 从 routed ODB 进（`check_antennas -verbose`：`net52` / `output52/A` 的 met3 侧面比 1680.81 超门槛 400，面积比 311.19 反而未违例）→ 对外取严记 **1 条**，不记 0/0；并记 `net52` 与 DRV 残余 12 条网的交叉（同一根 1.14 ns 的最差脚） | 本轮新增 |
+| `eco_drc_zero.txt` | 5,146 B | **ECO 版 DRC 从 6 条 li.6 修到 0 条**：起点是六处 0.170 × 0.170 µm 的 li1 岛（0.0289 µm²，不到 `li.6` 门槛 0.0561 µm² 的一半）；修法是朝空白区逐边试扩（每步 10 dbu、躲避区取其它 li1 sized 0.170），六块各长成 0.330 × 0.170 = 0.0561 µm²；第一版对称放大到 0.240 × 0.240 时有一块与相邻 li1 相并，作废留证。KLayout 全规则 **0 条**（92.830 s）；XOR 对 `eco_it2c` **7 处且全在 67/20（li1）**、净加 0.163 µm²；密度六值逐值不变；magic 重提版图网表 1,686,833 B / 20,155 行 / 18,534 器件 / 144 subckt 与修补前逐一相同，netgen 版图对版图 `Circuits match uniquely` → 没有改任何连接。**magic 侧 DRC 本轮未重跑**，天线 / slew / LVS 三项不受影响（ODB 未动） | 本轮新增 |
 
 三份 STA 原始日志（`logs/signoff/29-rcx_mcsta.min.log`、`31-rcx_mcsta.max.log`、`33-rcx_mcsta.nom.log`）各约 33 MB，一次性的，没有入库。
 
