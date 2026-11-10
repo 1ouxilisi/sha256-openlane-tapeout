@@ -186,6 +186,12 @@ openlane-chips/
 │       ├── prep_lay.py              #   版图侧：拼续行、去转义、删重复端口
 │       ├── nl2spice.py              #   网表侧：nl.v + PDK 单元库 → SPICE
 │       └── EXPECTED.txt             #   实跑数字（两侧 34,182 实例 / 94 端口）
+├── lvs-repro/                       # ECO 版一条命令：GDS → 抽取 → ext2spice → 端口 → netgen（88 秒）
+│   ├── repro3.sh                    #   入口，退出码 0 PASS / 2 不一致 / 3 提取链失败
+│   ├── ext.tcl / sp.tcl             #   两段 Magic（抽取与 ext2spice 必须分会话）
+│   ├── build_cache.tcl / cache.sh   #   阶段 0：从 PDK 自建 148 个标准单元 .ext 缓存
+│   ├── masters.txt                  #   被抽过的 148 个单元名
+│   └── README.md                    #   用法、四条实跑记录、三条别改的地方
 ├── docs/
 │   └── images/                      # 版图渲染图
 └── 交付物（通过 Release 附件提供）
