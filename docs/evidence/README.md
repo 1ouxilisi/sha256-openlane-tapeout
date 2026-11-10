@@ -201,3 +201,27 @@ df77e80c1df3b97419d0f4687e44b006d95e30d7c8f64eb533922fa685923afe  power_irdrop_a
 **两次失败的根因（都不是设计问题）**：① `verilator_lint_check` 假失败——linter 日志本身无 ERROR，是流程里 `exec bash -c "grep -i 'Error-NEEDTIMINGOPT' …"` 在 chroot 默认 PATH 下找不到 grep，连带 `generate_reports.py` 抛 `IndexError`；把 coreutils / gnugrep 写进 PATH 即过。② KLayout DRC 内部报 `tlFileUtils.cc:979 false was not true`——chroot 里 `/proc` 是空目录，KLayout 启动读 `/proc/self/exe` 取自身安装路径失败；同一份 GDS 用「先建 `/proc/<pid>/exe` 软链到真二进制、再 exec 同一 pid」的写法跑，结果是 0 items。因此流程内关掉 `RUN_KLAYOUT_DRC`，改由 `/tmp/kl/drc_axspi.sh` 单独补跑，其余步骤照跑。
 
 **不可横向对比**：这颗是 0.0484 mm²、4,672 单元、微瓦功耗的「跑通验证」小车，与 SHA-256 那颗 640 µm die、22,000 单元、mW 功耗、pF 级寄生不是同一量级；24.88% 利用率是 `FP_CORE_UTIL 40` 下面积优先策略的结果，不代表流程能力差异。
+
+## ECO 版引脚开路修好之后：复核记录（2026-11-10）
+
+这一节承接上文「ECO 版」：那一版记的「真开路 43 条网 / 64 个脚」在本轮被查明成因并修好，
+但 LVS 这一格仍然不写通过。新增证据 `eco_opens_fix.txt`（各节数字与产物路径逐条对应）。
+
+| 项 | 本轮结果 | 证据 |
+| --- | --- | --- |
+| 开路成因 | 15,622 条网里 `NOGUIDE=0`、`NOWIRE=36`：36 条信号网有 guide 字段但是空表、零走线，驱动全是布线后才插入的 `max_capN` buffer 输出网（`net3774 … net3803`） | `eco_opens_fix.txt` 一 |
+| 修法 | 对 wire 为 NULL 的信号网清空 guide → 补 `global_route` → `detailed_route -droute_end_iter 6`（1794 → 1779 → 516 → 122 → 96 → 0） | 同上 二 |
+| 几何判据 | 68 条网 272 个脚：`OPEN 0`、`nets_with_open 0`；对照 98 脚 0（修前同一脚本报 64 / 43） | 同上 二 |
+| 时序 | `slew 60 → 21`、`cap 0`、**`max_fanout 61 条`（首次按实计入）**；setup `+1.43`、hold `+1.29` | 同上 三 |
+| 寄生 | `spef/eco2nom.spef` 19,498,387 B / 15,620 nets | 同上 三 |
+| DRC | KLayout 0 items；magic 全片 `0 / 0` | 同上 四 |
+| 天线 | **16 net / 20 pin**（修前 1/1，全部 `Required ratio 400 (Side area)`）：36 条网真正接上金属后暴露 | 同上 五 |
+| LVS | **未通过，卡点换到提取链**：同一份 DEF 的两个抽取会话，一次 `15,983 | 15,983`、`15,828 | 15,828`、`Circuits match uniquely`，另一次把 `VNB` 井网并进 `VPWR`，变 `15,981 | 15,983`、`15,799 | 15,828` | 同上 四 |
+
+**口径**：①这是「时序压到 21 脚、DRV 未清」，不是 signoff 通过，`max_fanout 61` 是本轮唯一变差的数字；
+②LVS 没过，但这一轮没过的是「同一份 GDS 必须抽出同一套网表」这件事，不是版图里还有开路；
+③天线按严的记 16 条，diode 修法在 ODB 层能到 0/0（`eco_it2_eco4.def` / `eco_it2g.gds`），但那一版同样过不了抽取复检；
+④XOR 一格仍写「未定」。
+
+**未闭合**：LVS 提取链复现性（同一 GDS 两次抽取电源井网一次分开一次合并）；天线 16 条；`max_fanout` 61 条的约束来源未查；
+带 diode 的 `eco4` 版 STA 未跑（SPEF `eco4nom.spef` 19,538,041 B 已就绪）。

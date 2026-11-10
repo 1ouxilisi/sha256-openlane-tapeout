@@ -1,0 +1,136 @@
+eco_opens_fix.txt — ECO 版引脚开路修好之后的复核记录（2026-11-10）
+==================================================================
+
+本文件只写本轮实际跑出来的东西：一条一条对应到产物文件、命令与数字。
+口径：不写「signoff 通过」。下面每一项都标明它证到哪一步、没证到哪一步。
+
+
+一、病根：36 条信号网从来没有布过线
+------------------------------------
+判据脚本在 routed ODB 上逐网查（/tmp/n52/gg.tcl，会话日志 /tmp/n52/gg.log）：
+
+    读取网总数 15,622
+    NOGUIDE = 0        （没有一条网缺 guide 列表这个字段）
+    NOWIRE  = 36       （36 条网的 wire 指针是 NULL）
+
+逐网核对（openlist.py）：68 条「名字分裂」的网里有 32 条零走线，名字集中在
+net3774 … net3803，驱动端全是 max_cap2 … max_cap16 这类 clkbuf 形态的 buffer 输出网。
+这些 buffer 是 repair_design 第二轮（margin 50）插进去的：它们插入发生在布线之后，
+因此从未进过 GRT / DRT。
+
+所以上一轮记录的「真开路 43 条网 / 64 个脚」是这条病的下游现象：脚上一头接上、
+一头悬空，不是 DRT 接不住脚形，而是这条网根本没有金属可接。
+
+
+二、修法：清 guide → 补一次全局布线 → 详细布线
+---------------------------------------------
+脚本 /tmp/n52/route_eco.tcl（驱动 /tmp/n52/run_eco2.sh，日志 /tmp/n52/eco2.log）：
+
+    1. 对每条 wire 为 NULL 的信号网先 dbGuide_destroy 清空 guide（日志 MARK:cleared guides on 36 nets）
+    2. global_route                       这一次真正给这 36 条网布了线
+    3. detailed_route -droute_end_iter 6  违例 1794 → 1779 → 516 → 122 → 96 → 0
+
+产物：
+    /tmp/eco/eco_it2_eco2.odb   34,858,030 B
+    /tmp/eco/eco_it2_eco2.def   17,631,844 B
+
+几何判据复检（/tmp/n52/pinchk7.py + def_geo_e2.py，用 /opt/python3.12/bin/python3 跑）：
+
+    SPLIT   pins 272 open 0 nets_with_open 0
+    CONTROL pins  98 open 0 nets_with_open 0
+
+对照口径与上一轮一致（同一套 LEF 引脚矩形 × 同层 DEF 金属求交，八向变换）。
+上一轮同一脚本在同一批 68 条网上报 OPEN 64 / 网 43；这一轮是 0 / 0。
+
+
+三、时序：slew 60 → 21，max_fanout 61 条第一次按实计入
+------------------------------------------------------
+寄生重抽（/tmp/eco/rcx_nom_eco2.tcl，tt nom，rules.openrcx.sky130A.nom.calibre，
+lef 仍用 ctsfix3/tmp/merged.nom.lef）：
+
+    /tmp/eco/spef/eco2nom.spef   19,498,387 B
+    15,620 nets（RCX-0443）
+
+签核（/tmp/eco/sta_eco2.tcl，ss_100C_1v60 + 上面这份 SPEF）：
+
+    CNT slew=21 cap=0 fanout=61
+    worst slack 1.43 (max) / 1.29 (min)
+
+与修前同一口径（slew=60 / cap=0 / +1.31 / +1.33）相比：
+
+    max_slew      60 → 21        真实改善，仍未清零
+    max_cap        0 → 0
+    max_fanout     未计入 → 61   本轮唯一变差的一格，照实写
+    setup slack  +1.31 → +1.43
+    hold  slack  +1.33 → +1.29
+
+fanout 这一项之前没有记，是因为旧脚本只打 slew/cap 两个计数；本轮把
+sta::max_fanout_violation_count 一并打出来才看见。它来自哪条约束、要不要治，
+本轮没有查，不在这里给结论。
+
+
+四、LVS：这一轮没有通过，卡点已从「版图」换到「提取链」
+------------------------------------------------------
+1) 修完这一版在版图层是干净的：
+   KLayout 全规则 0 items（/tmp/kl/drc_it2f.xml 22,957 B，91.6 s）
+   magic 全片 0 / 0（/tmp/n52/drc_mag_f6.log：MAGIC_DRC_COUNT 0，TYPES 0，rpt 0 字节）
+   DRT 0 violations（/tmp/n52/eco2.log 末段）
+
+2) 但把 GDS 重新抽成网表这一步不稳定。同一份 DEF 的两个抽取会话给出不同结果：
+
+   会话 A（origin，产物 /tmp/n52/layout_it2f.spice 1,686,735 B）
+       顶层端口 98 个，含 VGND；单元电源脚 VNB→VGND、VPB→VPWR
+       过 prep_lay.py 后 TOP_PORTS 94 / TOP_INST 16,552
+       netgen（/tmp/n52/run_cmp_f2.sh → lvs_f2.out）：
+           Number of devices: 15983 | 15983
+           Number of nets:    15828 | 15828
+           Cell pin lists are equivalent.
+           Device classes sha256_axil and sha256_axil are equivalent.
+           Final result: Circuits match uniquely.
+
+   会话 B（同一天重跑，GDS 与 A 逐层形状数完全一致：43 层共 562,105 个形状）
+       顶层端口 97 个，VGND 不见了；实例四脚全部落在 VPWR
+       prep_lay 报 port count 93 != expected 94
+       netgen：devices 15,981 | 15,983，nets 15,799 | 15,828，failed pin matching
+
+同一份几何、同一个脚本，两个会话的电源井网一次分开、一次并成一条。
+这正是两条 GDS（eco_it2f.gds 与重新生成的 eco_it2z.gds）逐层形状数完全相同
+却抽出两套网表的原因：差别不在版图，在抽取会话。
+
+结论按严的记：LVS 这一格**不写通过**。会话 A 的输出留着当证据链，但在把
+「同一份 GDS 必须抽出同一套网表」这件事做稳之前，它不能升格成 signoff 结论。
+
+
+五、天线：修开路把 1 条扩散成 16 条
+----------------------------------
+OpenROAD 在修完的 routed DB 上跑 check_antennas -verbose
+（/tmp/ant/or_ant_f.tcl → /tmp/ant/or_ant_f.log）：
+
+    Found 16 net violations.
+    Found 20 pin violations.
+    全部为 Required ratio 400.00 (Side area) VIOLATED
+    网名举例：net14 / net68 / net2482 / net2564 / net2686 …
+
+对照修前同一配方：1 net / 1 pin（net52 / output52/A）。
+原因是那 36 条网第一次真正接上金属，侧面面积比随之暴露。
+
+diode 修法（/tmp/ant/rep2.tcl，先 remove_fillers 再 repair_antennas diode_2）：
+    Inserted 20 diodes；随后 DRT 1551 → 318 → 288 → 52 → 1（rep3 再跑一轮到 0）
+    check_antennas 在 filler 回填前后都是 0 net / 0 pin
+产物 /tmp/eco/eco_it2_eco4.def 17,658,966 B / .odb 35,784,992 B
+GDS /tmp/eco/eco_it2g.gds 41,685,148 B，KLayout 0 items、magic 0 / 0
+但这一版同样过不了第四节的提取复检，因此对外不按 0 条记。
+
+
+六、复现清单（都在 /home/user/openlane-rootfs 下）
+-------------------------------------------------
+    /tmp/n52/gg.tcl, openlist.py           查「有 guide 无 wire」
+    /tmp/n52/route_eco.tcl, run_eco2.sh   清 guide + 重布
+    /tmp/n52/pinchk7.py, def_geo_e2.py    几何判据（OPEN 0 / 0）
+    /tmp/eco/rcx_nom_eco2.tcl, run_rcx2.sh 重抽 SPEF
+    /tmp/eco/sta_eco2.tcl, run_sta2.sh     重签核
+    /tmp/kl/drc_it2f.sh                     KLayout DRC
+    /tmp/n52/drc_mag_f6.tcl                 magic 全片 DRC
+    /tmp/ant/or_ant_f.tcl                   OpenROAD 天线
+    /tmp/ant/rep2.tcl, rep3.tcl             插 diode 与回填 filler
+    /tmp/n52/layout_it2f.spice, lay_f.spice, run_cmp_f2.sh, lvs_f2.out   LVS 会话 A
