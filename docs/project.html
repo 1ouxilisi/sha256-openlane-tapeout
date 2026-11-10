@@ -327,6 +327,36 @@ footer p{margin:6px 0}
 
 <section>
   <div class="wrap">
+<section>
+  <div class="wrap">
+    <h2>ECO 一轮：275 条 DRV 压到 60，但 LVS 没通过</h2>
+    <p class="sub">这一节不是在讲第 8 代设计。它是在 <b>tapeout 版同一个 ODB 上做的局部 ECO</b>：只剥掉违例网、局部重布、局部修复，然后把这六项物理复核在同一条库上重跑一遍。<b>页面主表里的数字一个都没换</b> —— 因为这一版 LVS 没过，它顶不上去。</p>
+    <p class="sub">为什么要做：tapeout 版 Slowest corner 有 <b>275 条 max_slew 违例</b>（时序余量 +0.45 ns 是正的，DRV 不是）。先证伪了「整片剥线重布」这条路 —— 剥掉 15,583 条信号网重布之后总电容 126.5 → 151.0 pF（+19%），slew 反而涨到 1,147 条、setup 转负 −0.0149 ns；改成只动违例网才走通。两轮之后停在 <b>60 条 / 12 条网</b>，最差 1.14 ns。</p>
+    <table>
+      <tr><th>项</th><th>ECO 版结果</th><th>证据</th></tr>
+      <tr><td>时序与 DRV</td><td>Slowest max_slew <b>275 → 60</b>（压掉 78%，未清零）；cap 0；setup <b>+1.31 ns</b> / hold <b>+1.33 ns</b>；cells 22,048；DRT 0 违例（76,308 ms）</td><td><a href="evidence/eco_recheck.txt">evidence/eco_recheck.txt</a></td></tr>
+      <tr><td>功耗</td><td>Slowest <b>9.57e-03 W</b>（Sequential 52.5% / Combinational 4.0% / Clock 43.6%）；Typical 1.07e-02 W；Fastest 9.16e-03 W</td><td>同上 第二节</td></tr>
+      <tr><td>压降（PDNSim）</td><td>VPWR worst <b>1.09 mV</b>（avg 0.113 mV）；VGND worst <b>1.08 mV</b>（avg 0.111 mV）</td><td>同上 第二节</td></tr>
+      <tr><td>filler 与密度</td><td>fill_ <b>35,334</b>（tapeout 版 25,656），利用率 46%；密度 li1 0.7425 / m1 0.7231 / m2 0.9032 / m3 0.9228 / m4 0.9481 / m5 0.9723，六层均不低于 tapeout</td><td>同上 第二节</td></tr>
+      <tr><td>DRC</td><td><b>6 条 li.6，不是 0 条</b>（tapeout 版 0）：六处 0.17 × 0.17 µm 的 li1 小方块，magic 与 KLayout 给的是同一 6 处</td><td>同上 第二节 5)</td></tr>
+      <tr><td>XOR</td><td><b>未定</b>：43 层 <code>TOTAL_DIFF = 94,607</code>，非零 8 层，但这些层号在 <code>sky130A.map</code> 里没有条目 —— 层号没对上 PDK 层名，差异数字不成立</td><td><a href="evidence/eco_recheck.txt">eco_recheck.txt</a> 与 <a href="verify.html">校验页</a></td></tr>
+      <tr><td>LVS</td><td><b>未通过</b>：<code>devices 15,983 | 15,983</code>（相等），<code>nets 15,931 | 15,828</code>（差 103），顶层 <code>failed pin matching</code>；根因已定位到「版图侧网表从 GDS 提取、拿不到网名」</td><td>同上 第三节</td></tr>
+      <tr><td>天线</td><td><b>未复核</b>：五次尝试都卡在 magic 提取阶段（同机 LVS 同一步 13–22 分钟能过），判为该脚本组合的工具路径受阻，不记 0 条</td><td>同上 第三节 末</td></tr>
+    </table>
+    <p class="sub" style="margin-top:16px">口径三句，缺一句这一节就不成立：<b>第一，这是「时序压到 60 脚、DRV 未清」，不是 signoff 通过</b>；<b>第二，LVS 没过，所以这一版不能替换主表</b>；<b>第三，XOR 那一格按三态写「未定」，不用「基本一致」代替</b>。</p>
+    <div class="card" style="margin-top:18px">
+      <h3>LVS 那 103 条网差，根因不是接错，是名字对不上</h3>
+      <p style="margin-top:10px"><b>器件级本来就是等价的。</b>两侧 <code>devices 15,983 | 15,983</code>，146 个单元类逐个 match uniquely，<code>Device classes are equivalent</code>。失配只在顶层。</p>
+      <p style="margin-top:10px"><b>那对 VGND / VPWR 不是短路。</b>DEF 里两条电源网各 1,034 个形状（met1–met5），逐层矩形两两比对，重叠 <b>0 处</b>；两侧单元电源脚方向也一致（<code>VPB → VPWR</code>、<code>VNB → VGND</code>，抽查 7,787 个实例）。把网表侧顶层声明改成 <code>VPWR VGND</code> 重跑，输出 md5 与原来<b>完全相同</b> —— 说明 netgen 按连通性判定，声明顺序不参与。</p>
+      <p style="margin-top:10px"><b>根因：GDS 不带网名。</b>版图侧走 GDS 提取，magic 只能按「实例/引脚」造名字（<code>_10608_/X</code> 这种）；网表侧是真实网名（<code>_06035_</code>）。顶层有 <b>119 个结构完全同构的网</b> —— 一个 clkbuf 驱动一个 a22o 的 A2，每个都是 1 驱动 1 负载，结构上不可区分，netgen 建不起名字映射，只能全记 badnet。另有 6 对实例是同一现象的另一面。</p>
+      <p style="margin-top:10px"><b>下一轮入口已经找到，但这一轮跑不完。</b>官方能过的配方是 DEF + <code>-labels</code> 出网表（<code>axspi1</code> 那条 <code>lvs … .lef.lvs</code> 就是这么走的）。照这个配方重跑，三次都在这台 8 GB 内存的机器上、在 <code>extract</code> 阶段被静默终止（无 error、无 OOM 记录、<code>extraction/</code> 始终为空）。所以 LVS 记「未通过」，根因链留在证据里当下一轮的起点。</p>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <h3>顺带更正一条旧归因</h3>
+      <p style="margin-top:10px">之前写在仓库里的说法是「magic 从 DEF 出 GDS 必须先 <code>lef read → def read → gds read</code>，反过来会掉 721 条 implant DRC」。<b>这条归因作废</b>：721 条来自手写脚本，不是出图顺序。正解是 OpenLane 官方的 <code>mag_gds.tcl</code>（<code>read_pdk_gds → gds noduplicates true → load → read_tech_lef → read_def → cif *hier write disable</code>），用它出的是这一版最新的 <code>eco_it2c.gds</code>，DRC 6 条 li.6。旧记录保留，不覆盖。</p>
+    </div>
+  </div>
+</section>
     <h2>边界：这一页不写的东西</h2>
     <div class="note">
       <p><b>不是量产芯片。</b>作品集与方法论验证，商用价值为零 —— SHA-256 加速器本身没有稀缺性。</p>
@@ -335,7 +365,7 @@ footer p{margin:6px 0}
       <p><b>22.75 ns 是"v6 那套 RTL"的边界，不是工艺边界。</b>v7 换掉消息调度后，18 ns 三 corner 仍全正余量（最紧 +0.56 ns）。把架构上限说成工艺上限，是这个项目前六代差点犯的错。</p>
       <p><b>v7 没有变省电。</b>频率 +33%、功耗 +37%，单位频率功耗基本持平；每块能耗反而更差。它不是能效优化的一代。</p>
       <p><b>吞吐仍然很低。</b>约 15 MB/s，比带 SHA-NI 的 CPU 慢两个数量级；多块流式省的是软件搬运，不是算力。padding 仍由软件完成。</p>
-      <p><b>未做 DFT 扫链插入，未做 ECO。</b>距离"可测、可修"的量产流程还差两环。</p>
+      <p><b>DFT 扫链仍未插入；ECO 已做一轮但没清干净。</b>ECO 版把 Slowest 的 max_slew 从 275 压到 60 条，LVS 未通过、DRC 还有 6 条 li.6、天线未复核（详见上一节）。所以「可测、可修」这两环都还没闭合。</p>
       <p><b>七代 flow_status 均为 failed</b>，唯一原因是 STEP 37 在 chroot 内调用 KLayout 崩溃（<code>tlFileUtils.cc:979</code>，工具自身 bug）；STEP 36 已正常产出 GDS，全部指标有效。</p>
     </div>
   </div>

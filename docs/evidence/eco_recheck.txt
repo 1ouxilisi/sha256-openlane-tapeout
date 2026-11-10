@@ -1,0 +1,238 @@
+SHA-256 加速器 · ECO 版复核记录（v7 / tapeout 版之后的局部 ECO 一轮）
+===========================================================================
+
+这一份是「第 ① 项升级」的实跑记录：用局部 ECO 去清 Slowest corner 的
+275 条 max_slew 违例，然后把六项物理复核在同一条 ODB 上重跑一遍。
+结论先写在最前面：
+
+  时序压住了 78%，没清零；功耗、压降、filler、密度四项拿到了；
+  DRC 不是 0 条（6 条 li.6）；XOR 落在「未定」；天线没拿到；LVS 没通过。
+
+按本项目口径，这一版不允许写「signoff 通过」，也不允许替换页面上的
+tapeout 版数字。下面每个数字都能追到一次真实 run 的产物。
+
+
+一、先证伪「整片剥线重布」，再改走局部 ECO
+---------------------------------------------------------------------------
+
+思路 A（已证伪）：把 15,583 条 SIGNAL/CLOCK 网的 dbWire 全部 destroy 掉，
+重新 global_route → estimate_parasitics → repair_design → DPL → GRT → DRT。
+结果：
+
+  总电容   126.5 pF -> 151.0 pF（+19%）
+  Slowest  max_slew  275 -> 1,147 条
+  Slowest  setup     +0.4543 ns -> -0.0149 ns
+
+也就是说，「整片重布」本身就把设计做坏了：不是 ECO 没做对，是这条路走不通。
+（必修前提：已布线的 ODB 直接 global_route 会得到 Routed nets: 0，
+  必须先 dbWire_destroy 剥线；getSWires 对信号网恒为 0，走 getWire。）
+
+四组交叉对照用来排除「抽取流程有错」：
+
+  A  新库 + 旧 SPEF   156 违例 / 0 setup 违例
+  B  旧库 + 新 SPEF   1,296 / 21
+  C  新 DEF + 新 SPEF 1,147 / 5
+  D  旧 DEF + 自抽 spef/oldmax.spef  275 / 0 / +0.45
+     —— 与基线逐值重合，这条是判据：抽取流程本身没问题。
+
+思路 B（采用）：只剥违例网，局部重布 + 局部修复。
+脚本 /home/user/eco_iter.py。
+
+  第 1 轮 margin 20   275 脚 -> 47 条网
+      repair_design Found 82，插 1 buffer，resize 27，cells 22,016
+      DRT 115,652 ms，0 违例
+      结果 102 条 slew / 0 cap / setup +1.37 / hold +1.33
+
+  第 2 轮 margin 50   102 脚 -> 19 条网
+      repair_design Found 148，插 32 buffers，resize 9，cells 22,048
+      DRT 76,308 ms（迭代 90 -> 1 -> 0）
+      结果 60 条 slew / 0 cap / setup +1.31 / hold +1.33   <- 当前最好
+
+  第 3 轮 margin 60   repair_design 失控：Found 608，插 283 buffers，
+      cells 22,331，affected_nets 706，DRT 报
+      checkConnectivity break, net _02597_ 。弃。
+
+  第 3 轮变体 it3b / it3c / it3d（整片 set_max_transition 20.0 /
+      SDC 用 get_nets 或 -pin / estimate_parasitics -placement + slew_margin 40）
+      全部在 DRT 报 _03524_ 1 pin not visited（#guides = 8）。弃。
+
+残余 60 脚压在 12 条网：
+  _04662_ _04968_ _05187_ _05920_ _05923_ _06713_ _06733_ _06790_
+  _07142_ _07322_ _08540_ net52
+最差 1.14 ns（output52/A、_17814_/C1、_17813_/Y、_11070_/B、_09300_/Y），
+> 1.0 ns 共 5 个，0.8–0.9 ns 共 23 个。
+
+判断：这不是「再调一个 margin」能解决的，是 pin access / 高扇出结构问题。
+要清零得回 RTL 做扇出复制（fanout replication），或者接受
+「约束比 PDK 更严」这个口径——但后者的代价是页面不能写「DRV 已清」。
+
+
+二、ECO 版六项复核（同一版 ODB 上重跑）
+---------------------------------------------------------------------------
+
+产物路径都在 /home/user/openlane-rootfs/tmp/eco/ 下。
+（注意：/tmp/eco 之类路径在 vm 宿主机上不存在，真实位置在
+  /home/user/openlane-rootfs/tmp/eco；chroot 里的 /tmp/eco 才指得到。）
+
+1) RCX 寄生（nom）
+   tmp/eco/rcx_nom_it2.tcl -> spef/it2nom.spef  18,554,283 B
+   RCX-0045 Extract 15620 nets, 78745 rsegs, 168895 ccs
+
+2) 功耗（tmp/eco/power_it2.tcl，tt 1.80 V 25 °C）
+   Slowest 9.57e-03 W   （Sequential 52.5% / Combinational 4.0% / Clock 43.6%）
+   Fastest 9.16e-03 W
+   Typical 1.07e-02 W
+   与 tapeout 版逐值一致 —— ECO 插了 32 个 buffer，但时钟树占比没变。
+
+3) 压降（tmp/eco/irdrop_it2.tcl，PDNSim）
+   VPWR  worst 1.09e-03 V   avg 1.13e-04 V
+   VGND  worst 1.08e-03 V   avg 1.11e-04 V
+
+4) filler 与密度
+   tmp/eco/fill_it2.tcl -> eco_it2_fill.def  17,620,157 B
+   fill_ 计数 35,334（tapeout 版 25,656），利用率 46%
+   密度（eco_it2b.gds，klayout 读）：
+     li1 0.7425 / m1 0.7231 / m2 0.9032 / m3 0.9228 / m4 0.9481 / m5 0.9723
+   六值均不低于 tapeout 版。
+
+5) DRC（两套工具、四个 GDS）
+     eco_it2b.gds      721 条（手写 magic 出图，出图方法本身不对）
+     eco_it2b_kl.gds     6 条
+     eco_it2c.gds        6 条  <- 官方 mag_gds.tcl 出图，最新最优一版
+     tapeout 版          0 条
+   不是 0，是 6 条 li.6：六处 0.17 × 0.17 µm 的 li1 小方块，坐标已记录。
+   magic 与 klayout 两套工具给的是同一 6 处 —— 属 DEF 几何临界，不是工具误报。
+
+   顺带纠正一条旧归因：以前认为「magic 从 DEF 出 GDS 必须先 lef read -> def read
+   -> gds read，反过来会掉 721 条 implant DRC」，这个归因已作废。
+   721 条来自手写脚本。正解是 OpenLane 官方 mag_gds.tcl
+   （read_pdk_gds -> gds noduplicates true -> load -> read_tech_lef -> read_def
+   -> cif *hier write disable -> gds nodatestamp yes），产出 eco_it2c.gds
+   41,419,812 B，DRC 6 条。
+
+6) XOR（klayout，ECO GDS vs 手写 magic GDS）
+   43 层，TOTAL_DIFF = 94,607
+   非零 8 层：
+     236/0 = 16,727     67/16 = 2,576     78/44 = 231     81/14 = 1
+     81/4  = 4          93/44 = 5,884     94/20 = 7,489   95/20 = 61,695
+   这张层号表在 sky130A.map 里没有条目（map 内唯一 23x 是
+   DIEAREA ALL 235 4），所以按「先映射层号再谈等价」的判据，
+   这一格只能记「未定」，不能记差异、也不能记等价。
+
+
+三、LVS：查到了根因，但没通过
+---------------------------------------------------------------------------
+
+三版 GDS 的 LVS 全部卡在同一个位置，数字一字不差：
+
+  devices  15,983 | 15,983      两侧相等
+  nets     15,931 | 15,828      差 103
+  结尾    Top level cell failed pin matching
+
+单元格层面：146 个单元类逐个 match uniquely；Device classes are equivalent。
+也就是说，器件级本来就是等价的，失配只在顶层。
+
+顶层尾表只有两行 Mismatch：
+
+  VGND | VPWR
+  VPWR | VGND
+
+其余 96 个端口逐个对上（clk / reset_n / 全部 s_axil_*，同名对同名）。
+
+已做的定性实验（tmp/lvs_it2d/）：
+
+  a) 原样            -> Top level cell failed pin matching
+  b) net 侧顶层声明改成 VPWR VGND 再跑 -> 输出 md5 与 a 完全相同
+     （8126a698800fd7971dd196974eedf4ea）
+     说明 netgen 按连通性判定「版图 VGND 网 = 网表 VPWR 网」，声明顺序不参与。
+  c) 两侧都删 fill/decap/tap（版图删 454、网表删 21,286 个实例）
+     -> 仍是 failed pin matching
+  d) 两侧都去掉顶层 VGND/VPWR 端口
+     -> Final result: Netlists do not match.（不再是 pin matching）
+        说明电源对是唯一堵点，去掉后暴露出来的是真实网差。
+
+几何与方向都查过，没有接错：
+
+  DEF SPECIALNETS 2（eco_it2_fill.def 第 58046 行）：
+    - VGND ( PIN VGND ) ( * VNB ) ( * VGND ) + USE GROUND
+    - VPWR ( PIN VPWR ) ( * VPB ) ( * VPWR ) + USE POWER
+  逐解析两条电源网：各 1,034 个形状，met1–met5 五层，
+  逐层矩形两两重叠 = 0 处 —— 几何上没有短接。
+
+  两侧单元实例的电源脚方向一致（VPB->VPWR、VNB->VGND），
+  抽查：dlygate4sd3_1 3,357 次、dfrtp_1 1,576、a22o_1 862、
+        nand2_1 731、mux2_1 661、clkbuf_1 600，网表侧同类计数同向。
+
+所以这是「名字对不上」，不是「版图接错」。根因：
+
+  版图侧网表是从 GDS 提取的，GDS 不带网名，magic 在没有 -labels 的路径下
+  只能按「实例/引脚」自己造名字：_10608_/X、_10608_/A 这种。
+  网表侧是真实网名：_06029_、_06035_。
+  顶层存在 119 个结构完全同构的网（一个 clkbuf 驱动一个 a22o 的 A2，
+  每个都是 1 驱动 1 负载，结构不可区分），netgen 无法建立名字映射，
+  只能全部记 badnet。另有 6 对实例同现象：
+    版图侧 2 × o21bai_4（_10707_、_10543_）
+    网表侧 4 × a22o_1（_10579_、_10580_、_10163_、_10744_）
+
+  JSON 证据 lvs_np2.json：顶层 badnets 119 条、badelements 36 条，
+  nets 计数 [15931, 15828]。
+
+官方能过的配方（对照参照系）：
+
+  designs/axil_spi/runs/axspi1/tmp/signoff/39-setup_file.lef.lvs
+    lvs {results/signoff/axil_spi_top.spice axil_spi_top}
+        {tmp/signoff/36-axil_spi_top.pnl.v axil_spi_top}
+        /pdk/sky130A/libs.tech/netgen/sky130A_setup.tcl
+        logs/signoff/39-axil_spi_top.lef.lvs.log -json
+
+  官方走的是 write_powered_verilog 出 .nl.v / .p.def / .pnl.v 三件套，
+  版图侧走 lef read + def read（extract_type=lef），不是 GDS。
+  39-lvs.lef.log 里满屏 Cell ... disconnected node: VGND，
+  但最终 pass —— 差别正落在「电源脚与网名来源」这一层。
+
+尝试按官方配方重出网表（DEF + -labels）：
+
+  tmp/lvs_def{2}/ 下 ext_def.tcl / ext_def3.tcl / run_ext.sh / run_ext2.sh / run_ext3.sh
+  三次全部在 magic 的 extract 阶段静默退出：
+    - 卡点固定在同一行：打印 Processing sha256_axil 之后
+    - 无 error、无 EXIT=、无 SPICE_DONE，extraction/ 目录始终为空
+    - 第一次 57,382 个 subcell 实例，后两次降到 22,048（去 fill）仍同样退出
+    - cgroup memory.max = 8,589,934,592（8 GB），memory.peak 4.1 GB
+    - dmesg 无 OOM 记录
+  结论：在这台 8 GB 的机器上，DEF+labels 这一条提取路径跑不完。
+  LVS 因此记「未通过」，并保留上面这条根因链作为下一轮入口。
+
+天线呢？
+
+  五次尝试都卡在 magic 打印 Processing sha256_axil 之后不动
+  （wchan = request_wait_answer、CPU ~2%、RSS 185–318 MB、20–40 分钟不出 .ext），
+  而同机 LVS 的同一步 13–22 分钟能过，判为该脚本组合的工具路径受阻。
+  ECO 版天线记「未复核」，不记 0 条。
+
+
+四、这一版的口径（页面怎么用这些数字）
+---------------------------------------------------------------------------
+
+1. 页面主表仍然是 tapeout 版口径，一个数字都没换 —— ECO 版没通过 LVS，
+   不能顶上去。
+2. 不写「signoff 通过」。ECO 版能说的是「时序压到 60 脚、功耗/压降/密度/filler
+   已复核、DRC 6 条 li.6 未清、LVS 未通过、天线未复核」。
+3. XOR 那一格按三态写「未定」，不用「基本一致」这类词代替。
+4. 更正写在页面上、旧记录不覆盖：本文第三节推翻的旧归因（magic 出图顺序）
+   同时写在页面「边界」段里。
+5. 这一版不可与 v7 tapeout 版横向比 —— 它是在同一个 ODB 上做局部 Eco 的
+   中间态，不是新一代设计。
+
+文件清单（都在 vm 上）
+---------------------------------------------------------------------------
+  tmp/eco/eco_it2.odb              24,076,709 B
+  tmp/eco/eco_it2.def              14,376,667 B   COMPONENTS 22048 / PINS 98 / SPECIALNETS 2
+  tmp/eco/eco_it2_fill.def         17,620,157 B   fill_ 35,334
+  tmp/eco/eco_it2c.gds             41,419,812 B   官方 mag_gds 出图，DRC 6 条 li.6
+  tmp/eco/spef/it2nom.spef         18,554,283 B
+  tmp/eco/spef/it2max.spef         19,640,240 B
+  tmp/lvs_it2c/lvs.out              653,907 B     8,362 行
+  tmp/lvs_it2d/lvs_np2.json         264,144 B     badnets 119 / badelements 36
+  tmp/kl/drc_it2c.sh                              官方 GDS 的 DRC 复跑
+
+本文只写这一轮真实发生过的事；没有跑到的项写「未复核」，没通过的写「未通过」。
