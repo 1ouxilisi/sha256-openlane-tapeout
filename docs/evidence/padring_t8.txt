@@ -1,0 +1,97 @@
+T8 的 pad / IO ring：seal ring 做了，pad 阵列没做
+===================================================
+生成时间 2026-11-11
+
+一、结论
+--------------------------------
+1. seal ring（密封环）已经生成、已经和 core 合并、合并后的版图 DRC 0 条。
+   产物：/tmp/gds2/t8_sealed.gds  41,526,270 B  md5 2a824717b56c25c968f2dab5cb31f2d9
+   bbox (-152400,-152400;816400,816400) dbu（即外沿 968.8 × 968.8 µm），内框 652 µm，
+   顶层 t8_sealed 里含 sha256_axil 和 advSeal_6um_gen 两个单元。
+2. pad ring 本体没有做。T8 的 DEF 里 sky130_fd_io、*__pad*、PAD 关键字命中数都是 0；
+   94 个信号端口仍然是内部 pin，没有焊盘承接。
+3. 因此"能不能挂到芯片平台下单"的答案是：现在还不能。缺的是 pad frame 与 pad 到 core 的布线，
+   不是缺 seal ring。
+
+二、T8 现在的物理事实（挂单判断的依据）
+--------------------------------
+DIEAREA ( 0 0 ) ( 640000 640000 )，dbu 0.001，即 640 × 640 µm，面积 0.41 mm²。
+实例 master 族只有 sky130_fd_sc_hd（57,395 行），没有 sky130_fd_io。
+PINS 段 98 个：94 个信号 + VGND / VPWR / VSUBS / VNB。
+没有焊盘意味着：封装厂无法打线或压焊，测试探针座接不上，MPW 的 pad frame 也对不上。
+
+三、seal ring 怎么做的
+--------------------------------
+PDK 自带生成器：
+  /pdk/sky130A/libs.tech/magic/seal_ring_generator/sky130_gen_sealring.py
+用法  <width> <height> <target_dir> [-force] [-outer] [-keep]，参数是内框尺寸（µm）。
+本轮传 652 652，产出 advSeal_6um_gen.gds（33,690 B）+ .mag。
+注意：传 652 得到的实际外沿不是 652，是 968.8 µm（环本身有宽度 6 µm 与两侧留白），内框才是 652。
+README 要求 core 左下角落进内框 (6,6) 起的位置，本轮 core 放在 (12,12) µm。
+
+合并用 KLayout python（/opt/python3.12/bin/python3，带 klayout.db）：
+  CellMapping().for_single_cell_full(sc, seal.top_cell()) + core.copy_tree_shapes(seal, cm)
+  copy_tree_shapes 的第二个参数必须是 CellMapping，直接传 Cell 或 int 会 TypeError。
+脚本 /home/user/t8_seal_merge.py。
+
+合并后 DRC：tmp/kl/drc_t8seal.sh，topcell=t8_sealed，items = 0，143 个 category 全零
+（同 deck 的 core 版也是 0，正对照 9408 条见 drc_t8_pass.txt）。
+
+四、pad 要多大：按 IO 单元的 LEF 尺寸算
+--------------------------------
+PDK 的 IO 库在 /pdk/sky130A/libs.ref/sky130_fd_io/lef/，sky130_fd_io.lef 有 32 个 MACRO，
+另有 sky130_ef_io.lef。常用单元实测尺寸（µm）：
+
+  sky130_fd_io__top_gpiov2          80 × 200   （39 pin，最常用的数字 IO）
+  sky130_fd_io__top_gpio_ovtv2     140 × 200
+  sky130_fd_io__top_analog_pad      75 × 198
+  sky130_fd_io__top_power_hvc_wpad  75 × 200
+  sky130_fd_io__top_ground_hvc_wpad 75 × 200
+  sky130_fd_io__top_lvclamp         47.895 × 198
+  sky130_fd_io__top_vrefcapv2       17.280 × 200
+  sky130_fd_io__top_pwrdetv2        56 × 200
+  sky130_fd_io__corner_bus_overlay 200 × 203.665（角单元）
+  sky130_fd_io__top_sio_macro      480 × 253.715
+
+98 个端口排四边的粗算（按 gpiov2 的 80 µm pitch）：
+  94 个信号：24 + 24 + 23 + 23
+  4 个电源/衬底（VPWR / VGND / VSUBS / VNB）：各边分 1 个电源与 1 个地，用 power/ground pad
+  合计每边约 25 / 25 / 24 / 24 个 pad
+  边长 = 25 × 80 + 两侧角单元 200 × 2 ≈ 2,000 + 400 = 2,400 µm
+  die = 2.4 × 2.4 mm = 5.76 mm²
+
+core 是 640 × 640 µm = 0.41 mm²。加 pad ring 后面积约 14 倍。
+这个数只说明"不是小改"：pad 环本身就是一圈 200 µm 高、2.2 mm 长的结构，
+外加 ESD clamp、电源 pad 分配、pad 到 core 的二级布线。
+
+五、代价与下一步（不是已经做完的事）
+--------------------------------
+要做完 pad ring，至少这几步，缺一不可：
+1. 生成 padframe：98 个 pad 单元按四边排布，四角放 corner_bus_overlay，电源 pad 与 clamp 配对。
+2. pad 到 core 的连线与二级保护：94 个信号从 pad 进 core，需要走线、加 clamp、查 ESD 规则。
+3. 电源环：pad 上的 VPWR/VGND 要连到 core 的电源网络，IR drop 要重算。
+4. 重跑 DRC + LVS（真 top 是带 pad 的，端口从 98 个内部 pin 变成 pad 引脚）。
+5. 重跑 STA（pad 增加了输入电容与走线延迟，慢角本来就 -6.057 ns，只会更差）。
+这不是加一层 GDS 的事，等同重跑一版 P&R。
+
+六、两条挂单路线的现实差距
+--------------------------------
+路线 A：TinyTapeout 这类模板化平台
+  对方给 pad frame 与 tile 尺寸，自己只交 core GDS + 端口约束 + DRC clean + STA + 面积。
+  T8 的 core 是 0.41 mm²，体量合适；DRC 已经 0 条。
+  但硬门槛是信号端口数：94 个信号 vs 这类平台每 tile 通常只有 8 个左右的数字 IO，
+  要用串行化/复用把 94 路压到 8 路以内，等于改接口、重做 RTL 与约束。
+  这条路线不需要自己做 pad ring，但需要改设计。
+
+路线 B：自建 MPW + 自己找封装
+  pad ring 必须自己做，就是上面第五节那五步；面积从 0.41 mm² 涨到 5.76 mm²，
+  流片面积成本按 die 面积计，14 倍。
+  这条路线不需要改接口，但需要重跑一版 P&R，且慢角时序本来就没过。
+
+两条路线的共同前提：慢角时序要先收（-6.057 ns），DRV 要先清（63 条 fanout + 慢角 14,560 条 slew）。
+
+七、一句话
+--------------------------------
+seal ring 补上了，DRC 干净；pad ring 一点没做，而它才是"能不能挂单"的门槛。
+按 LEF 尺寸算，98 个 pad 会把 die 从 0.41 mm² 推到 5.76 mm²，
+这是重跑一版 P&R 的量级，不是加个环。

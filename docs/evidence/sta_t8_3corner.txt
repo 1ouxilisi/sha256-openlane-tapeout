@@ -1,0 +1,121 @@
+T8 三 corner STA：真 RCX 寄生下，慢角不过
+=============================================
+生成时间 2026-11-11  现场 /home/user/openlane-rootfs/tmp/eco/ 与 /home/user/
+
+一、结论（先写这个，因为它是坏消息）
+--------------------------------
+用 OpenRCX 从 T8 自己的 ODB 抽出真实 SPEF，三个 corner 各跑一遍：
+
+  corner                          setup 最差 slack        hold 最差 slack
+  slow  ss_100C_1v60 + max.spef   -6.057 ns（clk 组）     -0.141 ns
+  typ   tt_025C_1v80 + nom.spef   +8.271 ns               +0.683 ns
+  fast  ff_n40C_1v95 + min.spef   +9.893 ns               +0.436 ns
+  10 ns 口径 slow 角              -14.057 ns              （见下）
+
+慢角不通过。18 ns（55.56 MHz）在典型角有 8.27 ns 余量、在最快角有 9.89 ns 余量，
+但在最慢角是 -6.057 ns。所以不能写"时序通过"，只能写"典型角过、慢角不过"。
+
+DRV 也没清：
+  corner     max slew   max cap   max fanout
+  slow       14,560     589       63
+  typ        419        0         63
+  fast       2,413      2         63
+  63 条 max fanout 是三个角都有的固定项，最差四个单元 _09419_/X、_09436_/X、_09445_/X、_14724_/X
+  实测 fanout 15，上限 10，slack -5。
+
+功耗（slow 角）：总 1.04e-02 W，其中 Sequential 3.97e-03（38.2%）、Clock 5.93e-03（56.9%）、
+Combinational 5.09e-04（4.9%）、leakage 1.11e-04。
+功耗（typ 角）：总 1.08e-02 W，Sequential 5.06e-03（47.0%）、Clock 5.32e-03（49.4%）。
+clock 占四到五成，是这版的主要功耗来源，与 clock 树在慢角单级 1.159 ns 的观察一致。
+
+二、必须先公开的一条更正
+--------------------------------
+本轮中途先用 estimate_parasitics -global_routing 估算寄生跑过一遍，得到：
+  100 MHz：setup 20 条全 MET，数据路径最差 +7.119 ns；hold 全 MET，最差 +0.409 ns；DRV 只有 63 条 fanout。
+  55.6 MHz：setup 最差 +9.987 ns，hold +0.409 ns，全 MET。
+当时据此写过"时序通过、DRV 未清"。
+
+同一版图换成真 SPEF 之后，慢角变成 -6.057 ns。原因不是版图变了，是寄生模型换了：
+`estimate_parasitics -global_routing` 用 set_wire_rc 给的固定单位电阻电容估算，
+对这种 met1 起步、线长分布很偏的布线严重低估 RC。所以上一组的数字作废，
+不再作为任何对外口径的依据。旧记录不删，就是这一段。
+
+三、输入（可追溯）
+--------------------------------
+版图数据：/tmp/eco/eco_it2_t8.odb  35,780,577 B  md5 7b724dbf94efdb64dd4c468fb231021d
+对应 DEF：/tmp/gds2/eco_it2_t8.def  17,651,703 B  md5 21e2681dd9a8e92677d83a221133ca26
+
+SPEF（OpenRCX，从上面这个 ODB 现抽，不是从别的版本借的）：
+  /tmp/eco/t8_nom.spef  19,428,734 B
+  /tmp/eco/t8_max.spef  19,473,693 B
+  /tmp/eco/t8_min.spef  19,280,997 B
+三者都是 15,620 条 net 提取完成。抽的时候用 PDK 自带的 OpenRCX 规则：
+  /pdk/sky130A/libs.tech/openlane/rules.openrcx.sky130A.{nom,max,min}.magic
+
+liberty：
+  slow  sky130_fd_sc_hd__ss_100C_1v60.lib
+  typ   sky130_fd_sc_hd__tt_025C_1v80.lib
+  fast  sky130_fd_sc_hd__ff_n40C_1v95.lib
+
+SDC：
+  /tmp/eco/sdc_t8_55mhz.sdc（18.0000 ns）
+  /tmp/eco/sdc_t8_100mhz.sdc（10.0000 ns）
+两份都从 flow 原始约束 designs/sha256/runs/tapeout10/results/final/sdc/sha256_top.sdc 派生，
+只做了两件事：顶层名 sha256_top → sha256_axil；18 ns 那份把 create_clock -period 10.0000 改成 18。
+原文件里的 set_max_transition 0.7500、set_max_fanout 10.0000、derate 0.95 / 1.05 全部保留。
+（ECO 局部放宽用的 tmp/eco/sdc_scoped.sdc 不是签核口径，没有用它。）
+
+四、跑法与产物
+--------------------------------
+抽 SPEF：tmp/eco/rcx.tcl + tmp/eco/rcx_run.sh（两个参数：规则文件、输出 spef）
+  sudo -n /usr/sbin/chroot /home/user/openlane-rootfs /tmp/eco/rcx_run.sh \
+       /pdk/sky130A/libs.tech/openlane/rules.openrcx.sky130A.max.magic /tmp/eco/t8_max.spef
+
+跑 STA：tmp/eco/sta_t8_rcx.tcl + tmp/eco/sta_rcx_run.sh（四个参数：liberty、sdc、spef、tag）
+  sudo -n /usr/sbin/chroot /home/user/openlane-rootfs /tmp/eco/sta_rcx_run.sh \
+       /pdk/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__ss_100C_1v60.lib \
+       /tmp/eco/sdc_t8_55mhz.sdc /tmp/eco/t8_max.spef slow18
+
+日志：
+  /home/user/sta_t8_slow18.log  1,186,268 B
+  /home/user/sta_t8_typ18.log     125,300 B
+  /home/user/sta_t8_fast18.log    410,966 B
+  /home/user/sta_t8_slow10.log  1,186,272 B
+输出按 SECTION_* 分段（SETUP_PATHS / SETUP_WNS_TNS / HOLD_PATHS / HOLD_WNS_TNS / DRV /
+CLOCK_SKEW / POWER）。OpenROAD 里没有 redirect 命令，report_checks 也不返回值，
+所以全部靠 stdout 分段标记收集，这一点写在脚本注释里。
+
+五、慢角到底慢在哪
+--------------------------------
+slow 角 -6.057 ns 的路径属于 clk 组（寄存器到寄存器），端点 _19632_；同组另两条 -5.898 / -5.656，
+端点 _20217_、_19632_。异步组（reset_n 打 recovery）在慢角反而 +10.414 ns，是通过的。
+
+所以问题不在复位分发，在数据路径 + clock 树。slow 角 clock 树单级：
+  clkbuf_0_clk/X 1.159 ns、clkbuf_3_6_0_clk/X 0.780 ns、clkbuf_5_24__f_clk/X 0.542 ns
+typ 角同一位置：0.400 ns、0.307 ns、0.225 ns
+慢角与典型角差 2.9 倍（lib 从 tt/25C/1.80V 换到 ss/100C/1.60V，再叠加 max RC 与 derate）。
+clock 树是 TREES 结构、6 级左右，单级慢这么多，整条 clock 就吃掉好几 ns，数据路径被压扁。
+
+六、与旧版签核数字的关系（不作横向比较）
+--------------------------------
+2026-11-08 那版（fixed16，天线修好、重布线、430 个二极管）的三 corner 结果是
+setup 最差角 +0.4058 ns、hold 最差角 +0.4096 ns、TNS 0，18 ns 成立。
+本轮没有用同一口径复跑那一版：
+  - 那版用的是 OpenLane mca 的多 corner SPEF（process_corner_max/min/nom），
+  - 那版的 SDC 与本轮派生的两份是否逐字一致，本轮没有逐行核对，
+  - 版图本身也不同（T8 是 filler 回填后的新 ECO）。
+所以"T8 比 fixed16 差 6.5 ns"这个判断，本轮给不出证据，不写。
+能写的是：T8 自己、真 RC、三 corner、慢角 -6.057。
+
+七、仍未闭合
+--------------------------------
+1. SPEF 只有一个提取器（OpenRCX + magic 规则），没有和 calibre 规则的结果互校。
+2. 63 条 max fanout 未修，最差 fanout 15 对上限 10。
+3. 慢角 14,560 条 max slew、589 条 max cap 未修，这不是靠调 SDC 能解决的，得回去改布线/加缓冲。
+4. 三 corner 各只跑一次，没做参数扰动复跑。
+5. 10 ns（100 MHz）口径只跑了慢角，结论 -14.057 ns，100 MHz 在这版上不成立。
+
+八、复算入口
+--------------------------------
+抽 SPEF 三个角、再按上面 sta_rcx_run.sh 的四个参数跑，就能逐位复现本文件的数字。
+脚本同一份在仓库 signoff-repro/ 里。

@@ -1,0 +1,72 @@
+T8 全片 DRC：两条独立引擎各跑一遍，都是 0 条
+=================================================
+生成时间 2026-11-11  现场 /home/user/openlane-rootfs/tmp/
+
+一、结论
+--------------------------------
+1. magic 全片 DRC（drc style drc(full)，euclidean on）：
+   TOTAL_VIOLATIONS = 0，PER_RULE 为空，FIRST_40_ENTRIES 为空。
+   日志里 DIE box: 0 0 128000 128000，即 640 × 640 µm 整片铺满检查，不是只查了一角。
+2. KLayout 官方 deck sky130A_mr.drc（release 2023.6.14_01.08，feol + beol + seal 全开，4 线程）：
+   items = 0，143 个 category 全零。
+3. 加了 seal ring 的 t8_sealed.gds，同一份 deck 再跑：items = 0，143 个 category 全零。
+4. 正对照：同一份 deck 在 2026-11-08 跑过另一版版图，报告 tmp/kl/drc_antclean.lyrdb 里有 9408 items。
+   也就是说，"0 条"不是 deck 没生效的假阴性 —— 同 deck 能抓出 9408 条。
+
+二、为什么必须跑两条路径
+--------------------------------
+magic 用 PDK 里 sky130A.tech 的规则集，KLayout 用官方 sky130A_mr.drc（DRC 与 ANT 两套 rule set 分开）。
+两套规则来源不同、写法不同，单跑一套得到 0 条时，无法排除"规则没加载 / 检查区域没覆盖"。
+两条路径独立给出 0 条，才构成交叉验证；再加一条同 deck 正对照，"0"才有意义。
+
+三、配方（可复算）
+--------------------------------
+magic 侧脚本 tmp/gds2/drc_generic.tcl，收环境变量 DRC_DEF / DRC_OUT，流程是：
+  read_pdk_gds → gds noduplicates → read_tech_lef → read_pdk_lef → read_def
+  → load sha256_axil → box 0um 0um 640um 640um
+  → drc euclidean on → drc style drc(full) → drc check → drc listall why
+启动器 tmp/gds2/run_drc.sh（两个参数：def 路径、报告路径），在 chroot 内执行：
+  sudo -n /usr/sbin/chroot /home/user/openlane-rootfs /tmp/gds2/run_drc.sh <def> <out>
+
+KLayout 侧脚本 tmp/kl/drc_t8kl.sh（core）与 tmp/kl/drc_t8seal.sh（带 seal），照历史 tmp/kl/drc_it2g.sh 的写法：
+  -rd topcell=sha256_axil -rd input=<gds> -rd report=<xml>，必须 -zz 并把 /proc/$$/exe 做符号链接，
+  否则 klayout 的 argv[0] 解析失败，跑不起来。
+
+四、输入与产物
+--------------------------------
+输入 DEF：/tmp/gds2/eco_it2_t8.def  17,651,703 B  md5 21e2681dd9a8e92677d83a221133ca26
+输入 GDS：/tmp/gds2/eco_it2t8.gds   41,663,836 B  md5 4faa051fdb4f97a1d7f767f3c94b645c
+带 seal：  /tmp/gds2/t8_sealed.gds  41,526,270 B  md5 2a824717b56c25c968f2dab5cb31f2d9
+           bbox (-152400,-152400;816400,816400) dbu，即外沿 968.8 × 968.8 µm，内框 652 µm
+
+magic 报告： tmp/gds2/drc_t8_report.txt（副本 drc_t8_magic_report.txt），156 B
+             正文 TOTAL_VIOLATIONS: 0 / PER_RULE: / FIRST_40_ENTRIES:
+magic 日志： /home/user/drc_t8.log   21,520 B（含 DIE box 与 No errors found）
+KLayout xml：tmp/kl/drc_t8.xml       22,957 B，items = 0，category = 143
+             tmp/kl/drc_t8seal.xml  22,953 B，items = 0，category = 143
+KLayout 日志：/home/user/drc_t8kl.log    53,916 B
+              /home/user/drc_t8seal.log  53,925 B
+正对照：     tmp/kl/drc_antclean.lyrdb   items = 9408（同 deck，2026-11-08 的历史运行）
+             tmp/kl/drc_it2g.xml        items = 0（另一版 ECO 版图，同 deck）
+
+五、已知边界（不写成 signoff 通过的理由）
+--------------------------------
+1. DRC 只说明几何合法（间距、宽度、密度、天线图形规则），不说明电学与时序。
+   本版 T8 的时序结论另见 sta_t8_3corner.txt，那个不过。
+2. t8_sealed.gds 的 0 条覆盖范围是 core + seal ring；pad ring 没有加入，因为 pad ring 还没做，
+   见 padring_t8.txt。
+3. 正对照 9408 条来自另一版版图（antclean），证明的是"这套 deck 会报错、计数机制有效"，
+   不证明两份版图被完全相同的规则子集覆盖。
+4. 这两次 DRC 各只跑过一次，没有做参数扰动复跑（例如换 thread 数、换 -rd 参数重跑比对）。
+
+六、复算入口
+--------------------------------
+  sudo -n /usr/sbin/chroot /home/user/openlane-rootfs /tmp/gds2/run_drc.sh /tmp/gds2/eco_it2_t8.def /tmp/gds2/drc_t8_report.txt
+  sudo -n /usr/sbin/chroot /home/user/openlane-rootfs /tmp/kl/drc_t8kl.sh
+  sudo -n /usr/sbin/chroot /home/user/openlane-rootfs /tmp/kl/drc_t8seal.sh
+脚本已在仓库 signoff-repro/ 目录留了同一份（路径按仓库内用法改成相对传递）。
+
+七、一句话
+--------------------------------
+T8（裸 core）与 T8+seal ring 的 DRC 都是 0 条，两个引擎独立、有正对照。
+但这是"版图几何干净"，不是"这版能用"——时序在真 RC 下不过，pad 还没有。
