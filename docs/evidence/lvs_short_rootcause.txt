@@ -1,0 +1,106 @@
+==========================================================================
+VGND/VPWR 电源短接根因定位（带坐标）
+日期：2026-11-11
+口径：本文件只记录可从真实 DEF/GDS/日志复算的数字；不写 signoff 通过。
+旧结论（短接在 DEF→GDS 写出段、未定位）保留在 lvs_sameversion_ref.txt
+与 project.html 旧段落中，不覆盖。
+==========================================================================
+
+一、结论（一句话）
+--------------------------------------------------------------------------
+短接不是电源网本身画错，而是一条信号网 net46 在 ECO 天线修复后的详细
+布线中，被路由器以 feedthrough 模式拉出一条 105.06 um 长的竖直 li1 线，
+该线连续穿过 38 条横向 li1 电源轨带；这些轨带经 mcon 分别接在交替的
+VGND/VPWR met1 轨道上，于是两条电源网被焊成一条。
+二极管不是短接原因：无二极管版 nod.gds 里同一条线仍在。
+
+二、物理短接的精确坐标（dbu，1 dbu = 0.001 um）
+--------------------------------------------------------------------------
+1. DEF 中的原始布线（g 线 eco_it2_eco4.def，第 280034 行）：
+       NEW li1 ( 242190 14110 ) ( * 119170 )
+   即中心线 x=242190，y 从 14110 到 119170 的竖直 li1 段，
+   长度 119170-14110 = 105060 dbu = 105.06 um。
+   li1 默认布线宽度 170 dbu，端部半圆各加 85 dbu。
+
+2. 该段在 GDS 顶层落成矩形（magic 写出，顶层 shape，不属于任何实例）：
+       (242105,14025;242275,119255)
+   宽 170、高 105230；x 中心 242190，y 两端 14025/119255。
+
+3. 它是全片最长的 li1 段：第二名长 11560 dbu，相差约 9.1 倍。
+   eco3/eco4 两版各有 134 条长 li1 线段，仅此一条超过 100000 dbu。
+
+4. 被穿过的横向 li1 电源轨带共 38 条（y 中心 16320 起，步距 2720，
+   首条 16320、末条 116960），对应 VGND/VPWR 交替的 met1 FOLLOWPIN
+   轨道（VGND y=16320、VPWR y=19040 为最前两条）。
+
+5. 自建 klayout 全片连通引擎（li1 67/20 + mcon 67/44 + met1~met5，
+   网格索引 + Polygon.touches 精确校验 + 并查集）实测：
+   - 对照 f4（eco_it2f.gds）：VGND、VPWR 落在两个不同组件，
+     两网之间无路径（组件 669588 vs 669587）。
+   - g6（eco_it2g.gds）：两网同属一个组件（669827）。
+     BFS 最短路径 3 节点：
+       mcon 切口 (319845,16235;320015,16405)（VGND 轨 y=16320）
+       -> 合并后的 li1 多边形（gid 9，bbox (5520,14025;634340,119255)，
+          18590 顶点）
+       -> mcon 切口 (319845,18955;320015,19125)（VPWR 轨 y=19040）。
+   f4 对应位置是两个分离的 li1 多边形（gid 2：y 14945-17695；
+   gid 3：y 17325-20755），不存在该竖直线。
+
+三、根因链（ECO 四步，全部可复跑）
+--------------------------------------------------------------------------
+ECO2  n52/route_eco.tcl：清 guide -> global_route -> detailed_route
+      产出 eco_it2_eco2.def/odb；此时 net46 无长 li1 段（实测 0 处）。
+ECO3  ant/rep2.tcl：
+      read_db eco2 -> remove_fillers -> repair_antennas（插 diode_2）
+      -> detailed_route -droute_end_iter 4
+      产出 eco_it2_eco3.def/odb；长 li1 段在这一步首次出现。
+      同次布线日志 ant/rep2.log 第 214 行：
+        [WARNING DRT-0225] net46 1 pin not visited, fall back to
+        feedthrough mode.
+      同次共 11 条 DRT-0225 feedthrough 警告；只有 net46 的 feedthrough
+      落在 li1 并拉出超长竖直线，其余 10 条未产生跨电源轨的几何。
+ECO4  ant/rep3.tcl：detailed_route -> filler_placement
+      产出 eco_it2_eco4.def/odb；长 li1 段原样保留（第 280034 行）。
+写出  gds2/mkgds3.tcl：magic 读同一 DEF 流片成 eco_it2g.gds，
+      长 li1 段成为顶层矩形 (242105,14025;242275,119255)。
+
+四、对照实验（排除其他解释）
+--------------------------------------------------------------------------
+1. 各版 GDS 顶层搜索该矩形：
+   eco_it2/b/c/d/e/f = 0；eco_it2g = 1；eco_it2h = 1；nod = 1。
+   出现点与 ECO3 一致。
+2. 无二极管版 nod.gds（gds2/nod.gds，由 eco_it2_eco4_nod.def 生成）
+   顶层仍有同一矩形（path 长度 0，即顶层 shape）。
+   => 短接与二极管无关，与 g7 结论一致。
+3. 上层金属单独连通（met1~met5 + 对应 via，不含 li1/mcon）：
+   f4 两网分属组件 91971/90702，g6 分属 93082/93073，均不短接。
+   => 短接只在把 li1/mcon 纳入后才复现，物理位置即上述 li1 竖直线。
+4. 标签层此前已逐点比对相同（各 112 个、VGND 8/VPWR 8），
+   排除贴错标签；met1 全宽轨两版均 228 条，排除缺轨。
+
+五、复算入口
+--------------------------------------------------------------------------
+工作目录（宿主）：/home/user/openlane-rootfs
+chroot 内同目录：/tmp、/pdk
+DEF：  tmp/eco/eco_it2_eco4.def（g 线）、tmp/eco/eco_it2_eco3.def
+GDS：  tmp/eco/eco_it2g.gds、tmp/eco/eco_it2f.gds、tmp/gds2/nod.gds
+日志：tmp/ant/rep2.log（DRT-0225）、tmp/gds2/gds3.log
+连通脚本（宿主 python /opt/python3.12/bin/python3，含 klayout.db）：
+  conn2.py    全栈几何收集（li1/mcon/met1~met5）
+  short2.py   电源网分类 + BFS 最短路径
+  neck.py     合并 li1 多边形的竖直 neck 定位
+  trace_li.py 按 mcon 切口反查合并 li1 多边形
+复算命令示例：
+  grep -n 'NEW li1 ( 242190 14110 )' tmp/eco/eco_it2_eco4.def
+  python3 short2.py tmp/eco/eco_it2f.gds tmp/eco/eco_it2.def
+  python3 short2.py tmp/eco/eco_it2g.gds tmp/eco/eco_it2_eco4.def
+  grep -c DRT-0225 tmp/ant/rep2.log
+
+六、仍未闭合（如实记录，不扩大结论）
+--------------------------------------------------------------------------
+1. g6 压平后 14 颗 diode 差（347->209 vs 347->223、器件 15981 vs
+   15995）尚未逐颗对位；本文件不解释这 14 颗。
+2. 本文件定位到布线器 feedthrough 输出，未修改任何 DEF/GDS；
+   是否重做该网布线、如何在不触发 DRT-0225 的前提下重布 net46，
+   属下一步动作，本文件不预设结论。
+==========================================================================
