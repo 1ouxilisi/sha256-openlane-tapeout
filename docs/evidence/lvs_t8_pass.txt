@@ -1,0 +1,198 @@
+LVS 第四次补正：-bottom_routing_layer met1 + filler 回填，得到第一版 LVS 全通过的 ECO 版图
+生成时间：2026-11-11 15:17（UTC+8）  版本标签：T8
+
+====================================================================
+一、一句话结论
+====================================================================
+
+上一轮（第三次补正）判死的「接二极管脚 vs 跨行 li1 feedthrough」结构性二选一，这一轮被绕开了：
+把详细布线的起底层从 li1 换到 met1（detailed_route -bottom_routing_layer met1），39 颗开路的二极管脚
+改用 met1 接出，不再需要 li1 跨行走线；随后回填 35,327 颗 filler，magic 抽取不再塌缩，
+同版 LVS 跑出 Final result: Circuits match uniquely.
+
+这是本项目第一次让下面六件事同时成立：
+  跨行 li1 = 0、二极管开路 = 0、布线违规 = 0、filler 完整、端口 94、LVS 通过。
+
+仍然不写「signoff 通过」。理由是第六、七、八节列的四条：STA 未跑、DRC 未跑、
+met1 跨行还剩 1 条、整条链只跑过一次。页面口径按用户锁定的写法：时序未测、DRV 未清、
+LVS 通过（同版参考）。
+
+====================================================================
+二、为什么前四轮都卡在二选一
+====================================================================
+
+T2 的做法是「先详细布线、后插二极管」，结果是 39 颗管的 DIODE 脚没有任何金属（见 lvs_t3t4_route.txt）。
+T3/T5 让布线器去接这 39 颗脚，脚接上了，但 li1_guard 立刻报 23 条（T5 是 15 条）跨行 li1 —— 
+和上一版刚消掉的短接源是同一个东西。T4 想用 filler 把井补回来，filler 一插，li1 大面积并成
+node663（bbox 5520,490365;634340,500055），电源又并回去（VGND 843 / VPWR 67,436）。
+
+当时的结论是「布线器把接二极管脚和跨行 feedthrough 绑死」。这个结论对 T2 起点成立，
+但它默认了一个前提：bottom layer 只能是 li1。这一轮把这个前提拆掉。
+
+====================================================================
+三、T6 死路：-via_in_pin_* 在本设计上不可用（记为负结果）
+====================================================================
+
+先拿到完整参数表（用 help detailed_route，不是 -help）：
+  detailed_route [-output_maze] [-output_drc] [-output_cmap] [-output_guide_coverage]
+    [-drc_report_iter_step] [-db_process_node] [-disable_via_gen] [-droute_end_iter]
+    [-via_in_pin_bottom_layer] [-via_in_pin_top_layer] [-or_seed] [-or_k]
+    [-bottom_routing_layer] [-top_routing_layer] [-verbose]
+    [-distributed] [-remote_host] [-remote_port] [-shared_volume] [-cloud_size]
+    [-clean_patches] [-no_pin_access] [-min_access_points] [-save_guide_updates]
+    [-repair_pdn_vias] [-single_step_dr]
+  repair_antennas diode_cell [-iterations] [-ratio_margin]
+  pin_access [-db_process_node] [-bottom_routing_layer] [-top_routing_layer]
+    [-min_access_points] [-verbose] [...]
+
+T6（t6.tcl）= read t2.odb → detailed_route -droute_end_iter 8
+     -via_in_pin_bottom_layer met1 -via_in_pin_top_layer met2 -verbose 1
+结果：9 条 DRT-0073，退出码 2，日志 /home/user/openlane-rootfs/tmp/ant/t6.log
+7 个唯一 pin（9 条含重复）：
+  _12125_/X  _12342_/B  _13043_/B
+  _19111_/SET_B  _19114_/SET_B  _19136_/SET_B  _19141_/SET_B  _19375_/SET_B
+（上列共 8 行是因为 9 条里有 1 条重复报同一 pin）
+
+读法：这些是普通标准单元的输入/输出脚，不是二极管。要求 pin 上必须有 via 时，
+布线器直接说这些脚没有 access point。也就是说本设计的拥挤处，pin 上放不下 mcon。
+这条约束不能当解法用，已不再重试。
+
+====================================================================
+四、T7：三项同时归零（第一次）
+====================================================================
+
+T7（t7.tcl）= read t2.odb → detailed_route -droute_end_iter 8 -bottom_routing_layer met1 -verbose 1
+     → check_antennas → write_def / write_db
+日志 /home/user/openlane-rootfs/tmp/ant/t7.log
+
+布线收敛序列（DRT-0199 Number of violations）：
+  1705 → 356 → 315 → 97 → 19 → 11 → 11 → 0，DRT-0198 Complete detail routing
+check_antennas：Found 1 net violations / Found 1 pin violations
+产物：
+  tmp/eco/eco_it2_t7.def  14,408,869 B
+  tmp/eco/eco_it2_t7.odb  26,680,614 B
+判据（宿主 python3.12 跑）：
+  li1_guard.py  → cross-row li1 = 0，VERDICT PASS
+  def_open.py   → open diodes in DEF = 0
+
+这是四轮以来第一次跨行 li1 与开路同时为零。但 T7 没有 filler，magic 抽取出来的井节点是局部名，
+同版 LVS 会卡在「4,157 条 no matching net」那一类，所以 T7 本身不是可交付版图。
+
+====================================================================
+五、T8：回填 filler，LVS 全通过
+====================================================================
+
+T8（t8.tcl）= read t7.odb
+     → filler_placement [list sky130_fd_sc_hd__fill_8 sky130_fd_sc_hd__fill_4
+                                sky130_fd_sc_hd__fill_2 sky130_fd_sc_hd__fill_1]
+     → check_antennas -verbose
+     → write_def / write_db
+日志 /home/user/openlane-rootfs/tmp/ant/t8.log：DPL-0001 Placed 35327 filler instances.
+
+注意：filler_placement 只接受完整 master 名。第一次按 fill_8 这种短名写，报
+  DPL-0028 fill_2/fill_1 did not match any masters、DPL-0039 did not match any masters，
+  并提示 OpenROAD PR 3210 把 regex 改成了 glob。表里 35,327 这个数来自这一次成功的 run。
+
+产物：
+  tmp/eco/eco_it2_t8.def   17,651,703 B（diode_2 = 347 行、fill_1/2/4/8 = 35,327 行）
+  tmp/eco/eco_it2_t8.odb   35,780,577 B
+  tmp/gds2/eco_it2t8.gds   41,663,836 B
+
+LVS（一条命令 /home/user/repro3.sh，15:16:33 起，15:17:56 止，83 秒）：
+  repro3.sh /tmp/gds2/eco_it2t8.gds t8 94 /tmp/eco/net_t2.spice
+  PHASE A  sha256_axil.ext      19,826,672 B
+  PHASE B  layout_t8.spice      1,688,097 B  md5 876d57ae856de820a513e480f9e9fdb6
+  PHASE C  TOP_PORTS 94 / TOP_INST 16,572
+  PHASE D  结论 PASS   summary.txt: VERDICT: PASS  2026-11-11T15:17:56+08:00
+
+netgen 顶层原文（lvs_t8.out）：
+  Class sha256_axil (0):  Merged 577 parallel devices.
+  Class sha256_axil (1):  Merged 577 parallel devices.
+  Circuit 1: sha256_axil   |   Circuit 2: sha256_axil
+  Number of devices: 15995 | Number of devices: 15995
+  Number of nets:    15828 | Number of nets:    15828
+  Final result: Circuits match uniquely.
+
+三项相等不是「接近」：Merged 577 对 577、devices 15,995 对 15,995、nets 15,828 对 15,828。
+上一轮 T3 是 Merged 341 对 577、devices 16,231 对 15,995、nets 16,943 对 15,828。
+
+电源分开（lay_t8.spice 里 token 计数）：VGND 33,988 / VPWR 34,018。
+上一轮 T4 是 843 / 67,436（塌缩），T3 是 33,988 / 31,630（没 filler）。
+
+====================================================================
+六、T8 的四道判据，逐条可复算
+====================================================================
+
+1）跨行 li1：li1_guard.py tmp/eco/eco_it2_t8.def → cross-row li1 = 0，VERDICT PASS
+   判据是「NETS 里竖直 li1 段长 ≥ 2,720 dbu（一个标准单元行高）」。
+2）二极管开路：def_open.py → open diodes in DEF = 0
+3）跨行 met1（这一轮新加的第二道闸）：met1_guard.py → cross-row met1 = 1
+     net816  x=634570  y=403070..405790  len=2720
+   这条没消掉。它没有把电源短掉，证据是抽取网表里 VGND/VPWR 仍分开（33,988 / 34,018）、
+   且 LVS 唯一匹配；但按「met1 做底层会拉出长竖线压电源轨」的旧账（net46 那条
+   94 µm met1 竖线），这一条必须写在页面上，不能当 0 处理。
+4）端口与实例：TOP_PORTS 94 / TOP_INST 16,572，与参考网表同源（347 颗二极管那一版）。
+
+====================================================================
+七、一个必须说清的事实：T7 与 T3 的抽取网表逐字节相同
+====================================================================
+
+T7 的 layout_t7.spice 与 T3 的 layout_t3.spice 完全同一份：
+  1,711,285 B / md5 092442ffb5d911944c02be38898d83d2（T3 与 T7 两次独立 run 各一份）
+
+这意味着：把 li1 跨行改成 met1 起底，电气拓扑一点没变。反过来说，
+T3 那 23 条跨行 li1 在 DEF 里确实存在（li1_guard 抓到），但落到 GDS 抽取层面
+并没有造成电源短接 —— T3 的 VGND/VPWR 是 33,988 / 31,630，不是塌缩值。
+所以第三次补正里「跨行 li1 是短接源」这句话要收窄成：
+  它是短接的必要条件之一，不是充分条件；真正并网的那一版（eco4 / ga，VGND 66,531 / VPWR 0）
+  有它，加上 filler 一起才并。
+这条更正按用户规矩公开写在这里，旧记录 lvs_short_fix.txt / lvs_t3t4_route.txt 不删不改。
+
+====================================================================
+八、仍未闭合（不写 signoff 通过的全部理由）
+====================================================================
+
+1）STA 没跑。T8 的时序、DRV（max slew / max cap / max fanout）都没测。T8 相比 T2 多了
+   20 颗新二极管的负载与 met1 走线，时序不能沿用旧 ECO 的数字。
+2）DRC 没跑。magic 或 klayout 全片 DRC 都没有在 T8 上跑过。
+3）met1 跨行 1 条（net816，len=2720）。抽取层面没短接，但几何上是跨了两条相邻全宽 met1 轨
+   的高度，需要 DRC 或几何扫描确认它与 VGND/VPWR 轨没有 overlap。
+4）只跑了一次，没有做稳定性复现。detailed_route 没有固定 -or_seed，T8 的 DEF 是否可稳定
+   复现出同一份，还没验证。这一条直接关系到「别人能复现」，下一轮必须先做。
+5）参考网表用的是 net_t2.spice（347 颗二极管那一版）。T8 的实例集 = T2，filler 不参与 LVS 逻辑，
+   所以同版；但如果要按最严口径，应从 t8.odb 现出一份 net_t8.spice 再比一次。
+
+====================================================================
+九、复算入口（全部在 vm /home/user 下，chroot 路径是 /tmp/...）
+====================================================================
+
+T6（负结果）：
+  tmp/ant/t6.tcl  +  tmp/ant/run_t6.sh  →  /home/user/openlane-rootfs/tmp/ant/t6.log
+T7：
+  tmp/ant/t7.tcl  +  tmp/ant/run_t7.sh  →  /home/user/openlane-rootfs/tmp/ant/t7.log
+T8：
+  tmp/ant/t8.tcl  +  tmp/ant/run_t8.sh  →  /home/user/openlane-rootfs/tmp/ant/t8.log
+出 GDS：
+  tmp/gds2/mkgds_t7.tcl / mkgds_t8.tcl + run_t7g.sh / run_t8g.sh（照 mkgds_t2.tcl 改输入输出，
+  公共库 read.tcl，一次约 2.5 分钟）
+LVS：
+  /home/user/repro3.sh /tmp/gds2/eco_it2t8.gds t8 94 /tmp/eco/net_t2.spice
+  退出码 0 = PASS，日志 /home/user/repro3_t8.log，工作区
+  /home/user/openlane-rootfs/tmp/repro/run_t8/（含 summary.txt、lvs_t8.out、lay_t8.spice）
+四道判据（宿主 python，带 klayout 的是 /opt/python3.12/bin/python3）：
+  li1_guard.py <def>     跨行 li1，退出码 0/1
+  met1_guard.py <def>    跨行 met1，退出码 0/1（本轮新增，已入 lvs-repro/）
+  def_open.py <def>      DEF 层二极管开路
+  grep 计数              grep -cE 'sky130_fd_sc_hd__diode_2' <def> = 347
+                         grep -cE 'sky130_fd_sc_hd__fill_[1248]' <def> = 35,327
+
+====================================================================
+十、边界声明
+====================================================================
+
+本文件只陈述这三次 run（T6 / T7 / T8）的产物与判据，不修改任何 DEF / GDS 之外的东西。
+不写「signoff 通过」「流片就绪」「时序收敛」。T8 是实验版图，是否能作为发布版图，
+取决于第八节那五条（尤其 STA 与 DRC）是否补齐。
+
+旧文件保留不覆盖：lvs_short_rootcause.txt（单线定位版）、lvs_short_fix.txt（成因更正版）、
+lvs_t3t4_route.txt（三选二版）全部留在 docs/evidence/，本文只做追加与更正。
