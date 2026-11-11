@@ -6,6 +6,8 @@
 
 > **设计说明（RTL 架构）**：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) —— v1–v6 的三级流水与 W 窗口架构、v7 的移位寄存器消息调度与 AXI4-Lite 寄存器映射、频率的三种口径怎么读，以及明确列出的已知限制。
 
+> **卡在 LVS / DRC / STA 上？** 直接看 [排障索引](#排障索引)：九条症状、根因与修法，全部来自这个项目真实的失败记录。
+
 
 [![verify](https://github.com/1ouxilisi/sha256-openlane-tapeout/actions/workflows/verify.yml/badge.svg)](https://github.com/1ouxilisi/sha256-openlane-tapeout/actions/workflows/verify.yml)
 
@@ -203,6 +205,81 @@ openlane-chips/
 
 ---
 
+## 排障索引
+
+> 症状 → 根因 → 修法。这个项目真正花时间的不是把流程跑通，是跑挂之后定位到行。下面九条都来自一次真实的失败，每条都能在 `docs/evidence/` 里找到原始日志和对照实验。按症状查，不要按章节读。
+
+### 1. LVS 器件数相等，却整页 Net mismatch
+
+- **症状**：`Circuit 1 contains 15593 devices, Circuit 2 contains 15593 devices`，但 `15,645 vs 15,647 nets`，并列出 47 行 `(no matching pin)`。
+- **先看什么**：器件数与逐类单元实例数是否相等。相等就说明版图没有"画错"，问题在连接 / 端口这一侧，别去改版图。
+- **真根因**：网表转换侧对顶层端口的识别不对。这条线里同时存在 8 个零引用端口（`s_axil_araddr[0..1]`、`s_axil_awaddr[0..1]`、`s_axil_bresp[0..1]`、`s_axil_rresp[0..1]`）。另：早前用正则数出"84 个端口未被引用"是边界判断错误，真实是 8 个，已在证据里更正。
+- **修法**：两侧用同一套转换规则、端口名逐字核对；先证明器件级相等，再动连接级。
+- **证据**：`docs/evidence/lvs_rootcause.txt`
+
+### 2. 一堆 unmatched 实例，但两侧总数又对得上
+
+- **症状**：netgen 报大批实例 not matched，两侧 total devices 却相等。
+- **真根因**：fill / tap / decap 这类单元在版图里没有器件，抽出的 `subckt` 是空的，实例被 netgen 展平成 unmatched。
+- **修法**：两侧同口径剔除无器件单元（或在网表侧不展平），不要逐条硬配。
+- **证据**：`docs/evidence/lvs_repro.txt`、`lvs_new_pass.txt`
+
+### 3. 电源网扇出对不上（31,740 vs 15,870）
+
+- **症状**：报 13,961 个 `Net:` 片段，电源网络两侧扇出差一倍。
+- **真根因**：电源 / 衬底引脚必须按版图口径连——`VNB→VGND`、`VPB→VPWR`。按网表默认接法，体端网会分裂。
+- **修法**：在网表侧显式绑定体端 / 衬底的版图接法。
+- **证据**：`docs/evidence/lvs_new_pass.txt`
+
+### 4. 178 个悬空输出被归成一类，报 222 条 mismatch
+
+- **症状**：Net mismatch 数量远大于实际差异，且集中在 `clkload*`。
+- **真根因**：CTS 加的均衡负载输出悬空，版图侧命名 `clkload90/X`，网表侧被写成 `NC_Y` 这类常量名，于是 178 个悬空输出被归成一类。
+- **修法**：两侧统一用「实例 / 引脚」命名，悬空不要用常量名代替。
+- **证据**：`docs/evidence/lvs_new_pass.txt`
+
+### 5. VGND / VPWR 短接，但电源网本身没画错
+
+- **症状**：LVS 报电源短接；回头查电源轨，标签、轨数、宽度全对。
+- **真根因**：一条信号网 `net46` 在 ECO 详细布线里走了 feedthrough，拉出 **105.06 µm** 的竖直 li1 段，连续穿过 **38 条**横向 li1 电源轨带，两条电源网被焊成一条。二极管不是原因：无二极管版里同一条线仍在。
+- **怎么定位**：自建全片连通引擎（li1 + mcon + met1~met5，`Polygon.touches` + 并查集），BFS 最短路径 3 节点；短接矩形 `(242105,14025;242275,119255)`，是全片最长 li1 段，第二长只有 11,560 dbu（差 9.1 倍）。
+- **触发原文**：`[WARNING DRT-0225] net46 1 pin not visited, fall back to feedthrough mode.`（同次共 11 条，只有这条落在 li1 并跨轨）
+- **修法**：重布这一条网，并避开 feedthrough 模式；不要去改电源。
+- **证据**：`docs/evidence/lvs_short_rootcause.txt`
+
+### 6. repair_antennas 报 GRT-0226 / detailed_route 报 DRT-0218
+
+- **症状**：天线修不动，工具报 ripup 状态不一致、guide 与设计不连通。
+- **真根因**：手写脚本漏传 `-allow_congestion`。`config.tcl` 第 144 行 `GRT_ALLOW_CONGESTION=1`，但自己的 `global_route` 调用没带这个开关，拥塞没收敛就退出了。
+- **判别**：同一份 `gr.odb`，只把 `-allow_congestion` 补上，`repair_antennas` 立刻跑通（Found 1 → Inserted 1）。
+- **修法**：`global_route -congestion_iterations 200 -allow_congestion`。同时撤回"这份设计上工具走不通"的旧结论——是脚本错，不是工具不支持。
+- **证据**：`docs/evidence/antenna_repair_route_fixed.txt`、`antenna_repair_route_attempt.txt`
+
+### 7. 慢角 slack 估算是正的，真值却是负的
+
+- **症状**：`estimate_parasitics` 给 +9.83 ns，RCX 抽真 SPEF 后同一角落到 −6.06 ns。
+- **真根因**：`estimate_parasitics -global_routing` 是估算，不是签核。它会把坏的说成好的，慢角尤其严重。
+- **修法**：RCX 逐角抽 SPEF（max / nom / min），三 corner 成对读（Slowest←max、Typical←nom、Fastest←min）。
+- **证据**：`docs/evidence/sta_est_compare.txt`、`sta_t8_freq_boundary.txt`
+
+### 8. 扇出违例永远清不干净，分布还很有规律
+
+- **症状**：Slowest 角 219 条 fanout 违例，fanout 值集中在 11–20，另有 1 条正好 25、1 条 27。
+- **真根因**：配置自己跟自己对不上。`config.tcl` 第 10 行 `CLOCK_BUFFER_FANOUT=16`、第 29 行 `CTS_SINK_CLUSTERING_SIZE=25`，而第 207 行生成的 SDC 第 213 行卡 `max_fanout 10`。时钟树按 16–25 造，检查按 10 查，时钟叶子必然全违例。
+- **修法**：两个数降到 ≤10（例如 8 / 8），重跑 CTS → 布线 → RCX → STA。代价是面积与功耗上升。不要改 SDC 糊过去。
+- **证据**：`docs/evidence/drv_rootcause.txt`
+
+### 9. KLayout 在 chroot 里一启动就崩
+
+- **症状**：`Internal error: tlFileUtils.cc:979 false was not true`
+- **真根因**：KLayout 启动时读 `/proc/self/exe` 取自身安装路径，chroot 里 `/proc` 是空目录。
+- **修法**：流程内关掉 KLayout（`RUN_KLAYOUT=0` / `RUN_KLAYOUT_DRC=0`），DRC 与 stream_out 在宿主侧单独跑；或者 bind mount 一个可用的 `/proc`。
+- **证据**：`docs/evidence/axil_spi_flow.txt`
+
+---
+
+这九条的共性只有一句：**先证明"数字对不对得上"，再找"哪一步引入的"，最后用一次对照实验收口。** 大部分时间浪费在跳过第一步。
+
 ## 复现方式
 
 ### 环境要求
@@ -358,6 +435,15 @@ bash scripts/synth_check.sh       # 裸 yosys + sky130 liberty，输出 cells �
 | 全流程集成 | OpenLane 1.1.1 |
 
 ---
+
+## 需要帮助
+
+这个仓库里的九条排障记录，是能公开的部分。如果你正卡在具体的一步上：
+
+- **免费**：开一个 Issue，标题带 `[debug]`，贴三样东西——你跑的命令、报错原文（不要截图）、工具版本。信息够的话我会在 Issue 里回答。
+- **付费**：需要我直接上手排查（远程、按次）的，Issue 里标 `[paid]`，我会回复需要哪些材料和报价。
+- **能帮的范围**：OpenLane / OpenROAD 环境与流程、LVS 收敛、DRC 收敛、STA 口径与寄生、天线修复、GDS 写出与 XOR。
+- **帮不了的**：替你签核、替你背良率、替你承担流片结果。
 
 ## 许可与致谢
 
