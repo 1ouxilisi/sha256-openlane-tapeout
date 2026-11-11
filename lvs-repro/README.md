@@ -13,16 +13,46 @@ bash repro3.sh <GDS> <TAG> <PORTS> <基准网表>
 
 退出码：`0` PASS｜`2` 结果不一致（NOT-PASS）｜`3` 提取链自己在某一段就失败（`summary.txt` 写 `FAIL@PHASEx`）。
 
-## 四条实跑记录
+## 五条实跑记录
 
 | 命令 | 结论 |
 |---|---|
 | `bash repro3.sh /tmp/eco/eco_it2f.gds f4 94 /tmp/lvs_it2c/net.spice` | 88 秒 → `Final result: Circuits match uniquely.`，网表 1,686,735 B / md5 `09183c364b9f5e749c05cfb23a8e3333` |
 | `bash repro3.sh /tmp/eco/eco_it2g.gds g5 93 /tmp/lvs_it2c/net.spice` | 87 秒 → `Top level cell failed pin matching.`（15,981 vs 15,983 器件、15,799 vs 15,828 网） |
+| `bash repro3.sh /tmp/eco/eco_it2g.gds g6 93 /tmp/eco/net_eco4.spice` | 135 秒 → NOT-PASS，但 145 个单元类逐类相等、`Netlists match uniquely` 143 处；抽取件 1,686,616 B / md5 `0751c0c82e7e39007c97a33a84d9cbc2`，与 g5 逐字节相同 |
+| `bash repro3.sh /tmp/gds2/nod.gds g7 94 /tmp/eco/net_eco4.spice` | `FAIL@C`：`port count 93 != expected 94`（去掉 20 颗二极管，电源网照样并；证明并网与二极管无关） |
 | `bash repro3.sh /tmp/eco/eco_it2g.gds g4 97 …` | `FAIL@C`：`port count 93 != expected 97` |
 | `bash repro3.sh … f3 …`（第一版） | `FAIL@D`：netgen 拿到了宿主路径，`Error in SPICE file read` |
 
 证据正文见 [`../docs/evidence/onecmd_repro.txt`](../docs/evidence/onecmd_repro.txt)。
+
+## 参考网表必须与 GDS 同版（第四件不要改的事）
+
+默认参考 `/tmp/lvs_it2c/net.spice` 是 327 颗 diode 那一版出的。拿它判 347 颗那版，天生差 20 颗，会看到「2 个器件 / 29 条网」这类和版图无关的差额。参考要按 347 颗那版的 ODB 现出：
+
+```
+# 1) ODB → Verilog（chroot 内 OpenROAD）
+cat > /tmp/eco/wv.tcl <<'EOF'
+read_db /tmp/eco/eco_it2_eco4.odb
+set blk [ord::get_db_block]
+write_verilog /tmp/eco/eco4_nl.v
+EOF
+openroad -no_init -exit /tmp/eco/wv.tcl          # 输出 INSTS 57,395 / WV_OK
+
+# 2) Verilog → SPICE（用出参考的同一个转换器）
+python3 /home/user/lvspkg/nl2spice.py \
+  -n /tmp/eco/eco4_nl.v \
+  -p /pdk/sky130A/libs.ref/sky130_fd_sc_hd/spice/sky130_fd_sc_hd.spice \
+  -o /tmp/eco/net_eco4.spice                     # 37,400 实例 / 145 类 / 94 脚
+
+# 3) 端口逐 token 比对（集合与顺序都要一致）
+python3 portdiff.py /tmp/lvs_it2c/net.spice /tmp/eco/net_eco4.spice
+
+# 4) 用同版参考跑
+bash repro3.sh /tmp/eco/eco_it2g.gds g6 93 /tmp/eco/net_eco4.spice
+```
+
+`INSTS 57,395` 必须与 `eco_it2g.gds` 顶层实例数相等；不等说明 ODB 与 GDS 不是同一版，先对上这一条再谈 LVS。
 
 ## 文件
 
