@@ -1,0 +1,163 @@
+SHA-256 / sky130A · 同版参考网表（第 6、7 次 run）
+=========================================================================
+
+一句话：把参考网表换成和 347 颗 diode 那一版同源的之后，"20 颗器件差额"
+"29 条无匹配网"这两条都没了 —— 145 个单元类的实例数逐类相等。剩下的唯一
+实质失败，是整个电源/阱网络在抽取里并成一个节点；这个并网在"去掉 20 颗
+二极管"的变体上照样出现，所以它跟二极管无关。短接点还没在版图里定位到。
+
+
+一、为什么要重出参考
+-------------------------------------------------------------------------
+repro3.sh 的默认参考是 tmp/lvs_it2c/net.spice，头两行写着
+  * LVS netlist side: sha256_axil (from sha256_axil.nl.v)
+而那份 sha256_axil.nl.v 现在的位置是
+  tmp/antrun/results/routing/sha256_axil.nl.v（3,386,854 B，diode 327 颗）
+—— 参考是 327 颗那一版出的，拿它判 347 颗那一版，天生差 20 颗。这不是
+版图错，是两边不同源。
+
+全盘扫 *.v（>1 MB、diode 数 >300）只有两档：430 颗（tmp/signoff_new/
+fixed16.nl.v、tmp/lvsfix/fixed.nl.v、tmp/lvsfix/fixed2.nl.v）与 327 颗
+（tmp/eco/eco_it2.nl.v、eco_it2nl_nofill.v、eco_it2_final.v、tmp/antv7c/
+nl_antclean.v、nl_antclean_fill.v、tmp/antrun/results/routing/
+sha256_axil.nl.v）。347 颗那版的 Verilog 根本不存在 —— 那 20 颗是 ECO
+直接落进 ODB/DEF 的，没有走过 netlist 侧。
+
+
+二、同版参考怎么来的（四步，全部可复算）
+-------------------------------------------------------------------------
+1) 从 ODB 出 Verilog（chroot 内 OpenROAD b16bda7e8）：
+     tmp/eco/wv.tcl:
+       read_db /tmp/eco/eco_it2_eco4.odb
+       set blk [ord::get_db_block]
+       write_verilog /tmp/eco/eco4_nl.v
+     run: openroad -no_init -exit /tmp/eco/wv.tcl
+     输出 INSTS 57,395 / WV_OK —— 与 eco_it2g.gds 顶层实例数 57,395 完全对上。
+     tmp/eco/eco4_nl.v：diode_2 347 颗、fill 行 35,327。
+2) Verilog -> SPICE（用的是当初出 net.spice 的那个转换器）：
+     python3 lvspkg/nl2spice.py \
+       -n tmp/eco/eco4_nl.v \
+       -p pdk/sky130A/libs.ref/sky130_fd_sc_hd/spice/sky130_fd_sc_hd.spice \
+       -o tmp/eco/net_eco4.spice
+     输出 INSTANCES 37,400（丢掉 fill/tap 19,995）/ CELL_TYPES 145 / PORTS 94。
+     产物 tmp/eco/net_eco4.spice 2,873,227 B，diode_2 实例 347 行，头一行
+       * LVS netlist side: sha256_axil (from eco4_nl.v)
+3) 端口表逐 token 比对：新旧参考的 .subckt 端口都是 94 个，集合相同、顺序
+   相同（脚本 portdiff.py）。
+4) 同一套驱动跑两版 GDS：
+     repro3.sh /tmp/eco/eco_it2g.gds    g6 93 /tmp/eco/net_eco4.spice
+     repro3.sh /tmp/gds2/nod.gds        g7 94 /tmp/eco/net_eco4.spice
+
+
+三、第 6 次 run（g6）：同版参考 + 347 颗版
+-------------------------------------------------------------------------
+输入      eco_it2g.gds 41,685,148 B
+参考      net_eco4.spice 2,873,227 B
+抽取      layout_g6.spice 1,686,616 B
+          md5 0751c0c82e7e39007c97a33a84d9cbc2
+          —— 与 run_g5 的 layout_g5.spice 逐字节相同：同一个 GDS 再抽一次
+          结果稳定，这一条本身就是可复现性的证据。
+端口/实例  TOP_PORTS 93 / TOP_INST 16,572
+日志      lvs_g6.out 14,181,886 B（g5 只有 402,582 B，因为 g5 在引脚阶段
+          就停了，g6 一直比到单元类）
+结论      NOT-PASS（summary.txt 原文：Final result: Netlists do not match.）
+
+同版参考下真正相等的东西：
+  145 个单元类的实例数逐类相等（a22o_1 862、dfrtp_1 1,576、
+  dlygate4sd3_1 3,357、o211ai_4 1、decap_3 454→1 …… 两列一格不差）；
+  日志里 "Netlists match uniquely" 143 处；
+  顶层器件 15,981 vs 15,995（差 14）；顶层网 15,799 vs 15,828。
+  —— 上一轮说的 "29 条无匹配网 / 2 个无匹配实例" 在这份参考下不存在。
+
+还剩下的两类差：
+  (a) diode_2：版图 347→209，参考 347→223，压平平行器件之后差 14 颗。
+      netgen 先把 diode 压平（Flattening instances of …diode_2，3,793 行
+      那套），再按"对同一对网"合并；14 是合并分组后的余数，不是 14 颗
+      二极管在版图上缺失。
+  (b) 电源网：每个实例的属性行都是 VPWR = 64,174（版图）对 31,990（参考），
+      VGND 同理。64,174 ≈ 2×32,087 —— 版图侧一条网把 VGND 与 VPWR 两份
+      电源脚一起吃进去了。日志里 2,119 条 (no matching net)、110 条
+      (no matching instance)、32 条 (no matching pin)、26 条脚名错配，
+      全部是这一个原因的下游表现，不是 2,119 个独立错误。
+  末尾两行明确：Cell pin lists are equivalent. / Device classes
+  sha256_axil and sha256_axil are equivalent. —— 结构同构，卡在电源网。
+
+
+四、第 7 次 run（g7）：去掉 20 颗二极管的变体
+-------------------------------------------------------------------------
+输入      tmp/gds2/nod.gds（由 tmp/eco/eco_it2_eco4_nod.def 出）
+参考      同 g6
+抽取      layout_g7.spice 1,663,156 B
+          md5 1e67327909592658c83b84f572fb3725
+引脚 token  VGND 842 / VPWR 66,019
+结论      FAIL@C（phaseC.log 原文：port count 93 != expected 94）
+
+这条 run 只为一件事：并网是不是二极管带来的。答案是不是。这份 GDS 里
+一颗 ECO 二极管都没有，电源网照样只剩一份 —— VPWR 吃掉 66,019 个脚，
+VGND 只剩 842 个（这 842 个是子电路定义里的，不是顶层实例的）。
+
+作为对照，run_f4（327 颗版、旧参考、PASS）的同一口径是
+  VGND 33,104 / VPWR 33,104
+两版一比，g6/g7 的"一条网吃两份"没有歧义。
+
+g7 还顺带证明驱动的守卫生效：抽取出来的端口是 93 个、期望 94 个，
+PHASE C 直接停，不往下跑 netgen，不产出一个"看起来通过"的结论。
+
+
+五、并把这条并网归到哪一步
+-------------------------------------------------------------------------
+g7 说明并网不是二极管插进去造成的；那么它只能来自 ECO 那一版的
+DEF/ODB 本身，或者 DEF->GDS 这一段的写出。目前能说的事实：
+  - eco_it2_eco4.odb 的 write_verilog 里 VGND、VPWR 是两条独立网：
+    参考网表 31,990 + 31,990 脚，说明 ODB 侧没并；
+  - 版图侧抽出来是 64,174 + 0（顶层实例口径），说明 GDS 侧并了；
+    —— 也就是 ODB 正确、GDS 错，问题落在 DEF->GDS 这一段。
+  - met1 上 228 条全宽电源轨、met3 上 8 条全宽带，两版逐条相同
+    （it2f 228/8，it2g 228/8）—— 轨没有少，也没有多，所以不是"缺一条
+    轨导致浮空被并"，而是两条本该分开的网在某处连上了。
+  - 抽取的 .ext 里有 271,786 条 merge，链式长这样：
+      merge "…/VNB" "…/VGND"
+      merge "…/VGND" "…/VPWR"
+      merge "…/VPWR" "…/VPB"
+    也就是 VNB / VGND / VPWR / VPB 四个名字在顶层被串成一条。
+  - 标签侧两版一致：顶层 datatype 5 文本各 112 个，VGND 8 / VPWR 8，坐标
+    逐点相同；met3 上 VGND 标签落在 y≈489.57 那条全宽带、VPWR 落在
+    y≈486.27 那条，两条带子本身分开。所以不是"同名标签贴错地方"。
+
+没定位到的：这条连上来的路径具体在哪个坐标。要定位得在版图上做电源网
+的连通图（或分层窗口连图），这一步还没做；做了也得先用 run_f4 这份已知
+正常的版图当对照，判据不通过就不能拿它下结论。
+
+
+六、这一轮的更正口径（写进页面，旧记录不覆盖）
+-------------------------------------------------------------------------
+1) 上一轮把 "2 器件 / 29 条网" 记成"参考不同源的余数"，这一轮把它证死：
+   换同版参考后这两条全消失。旧记录保持原样，这里补"已证"。
+2) 上一轮写的 "整个 VGND 网并进了 VPWR"，这一轮补两条边界：
+   ① 并网发生在版图侧，ODB 侧没并（参考网表 31,990 + 31,990 脚可查）；
+   ② 并网与 20 颗 ECO 二极管无关（g7 无二极管同样并）。
+   仍未定位到短接坐标，不写"已找到根因"。
+3) 仍然不写 "signoff 通过"。现在能写的最强一句是：同版参考下 145 个
+   单元类逐类相等，剩电源网一条未清。
+
+
+七、复算入口
+-------------------------------------------------------------------------
+  GDS              /home/user/openlane-rootfs/tmp/eco/eco_it2g.gds
+  无二极管 GDS      /home/user/openlane-rootfs/tmp/gds2/nod.gds
+  ODB              /home/user/openlane-rootfs/tmp/eco/eco_it2_eco4.odb
+  Verilog（新出）    /home/user/openlane-rootfs/tmp/eco/eco4_nl.v
+  参考（新出）       /home/user/openlane-rootfs/tmp/eco/net_eco4.spice
+  参考（旧）         /home/user/openlane-rootfs/tmp/lvs_it2c/net.spice
+  转换器            /home/user/lvspkg/nl2spice.py
+  ODB->Verilog 脚本  /home/user/openlane-rootfs/tmp/eco/wv.tcl
+  驱动              /home/user/repro3.sh
+  run 产物           /home/user/openlane-rootfs/tmp/repro/run_g6/、
+                    /home/user/openlane-rootfs/tmp/repro/run_g7/
+  日志              /home/user/repro3_g6.log、/home/user/repro3_g7.log
+  端口比对           /home/user/Doubao/chats/38451515341233154/portdiff.py
+  全宽轨计数         /home/user/Doubao/chats/38451515341233154/rails.py
+  merge 计数         grep -c '^merge ' run_g6/sha256_axil.ext  → 271,786
+
+复算第 6 次 run 的最短路径（cache 已在，约 2 分 15 秒）：
+  /home/user/repro3.sh /tmp/eco/eco_it2g.gds g6 93 /tmp/eco/net_eco4.spice
