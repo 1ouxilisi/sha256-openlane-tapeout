@@ -1,0 +1,170 @@
+==========================================================================
+VGND/VPWR 电源短接：成因更正与修复实验
+日期：2026-11-11
+口径：只写能从真实 DEF/GDS/日志复算的数字；不写 signoff 通过。
+上一份 lvs_short_rootcause.txt 把短接归到 net46 那条 105.06 um 的 li1
+竖线。本文件用一次删除实验推翻了这个归因，并给出真正成因、触发条件与
+一条已验证的修复路径。旧文件保留不删，两份一起看才完整。
+==========================================================================
+
+一、结论（一句话）
+--------------------------------------------------------------------------
+那条 105.06 um 的 li1 竖线是症状，不是唯一成因。真正成因是 ECO 第三步
+（rep2：remove_fillers → repair_antennas → detailed_route）里，布线器对
+23 个网回落 feedthrough 模式，把 li1 当成跨行走线层；这 23 条跨行 li1
+竖线分别压到相邻两行的 tap li1 上，把 VGND 与 VPWR 两条 met1 电源轨连成
+一片。换成「先布完、再插二极管」的顺序，跨行 li1 归零，并网消失。
+
+二、删除实验：单线归因被推翻
+--------------------------------------------------------------------------
+做法：只在 eco_it2_eco4.def 里删掉一行，其余字节不动。
+  被删的一行：第 280034 行 NEW li1 ( 242190 14110 ) ( * 119170 )
+  文件大小：17,658,966 → 17,658,922 B（正好少 44 B）
+  重出 GDS：eco_it2ga.gds 41,685,212 B（magic 流程与 eco_it2g.gds 同一份
+  mkgds3.tcl，只换输入 DEF 与输出名）
+  LVS：repro3.sh /tmp/gds2/eco_it2ga.gds ga 94 /tmp/eco/net_eco4.spice
+      layout_ga.spice 1,686,668 B md5 7b58112e04de58e4c6ddecf591d82c2a
+
+结果：并网还在，只是存活网名翻了个身。
+  顶层器件脚数：VGND 66,531 / VPWR 0（原 eco_it2g 版是 VGND 0 / VPWR 66,541）
+  结论：删掉那条线不会让两条轨分开，只会让合并后的网换成另一个名字。
+
+同一份 GDS 上用自建连通引擎（conn2.py + short2.py，li1 67/20 + mcon 67/44
++ met1~met5，网格索引 + Polygon.touches + 并查集）重找桥：
+  耗时 67 s
+  VGND 组件 669,866 / VPWR 组件 669,866（同一个）
+  BFS 路径 3 节点：
+    mcon 切口 (319845,250155;320015,250325)  归 VGND
+    → 一个不归任何电源网的 li1 多边形
+    → mcon 切口 (319845,247435;320015,247605)  归 VPWR
+两行相邻，间距 2.72 um。也就是说：去掉 x=242190 那条长线之后，同样的短接
+在别的位置立刻还有一条——短接源不止一处。
+
+三、换判据：跨行 li1 就是短接源
+--------------------------------------------------------------------------
+判据：DEF 的 NETS 里，竖直 li1 线段的长度 >= 一个标准单元行高
+（sky130A 行高 2.72 um = 2,720 dbu），就算「跨行走线」。
+理由：li1 是单元内部互连层，一条竖线跨过两行，必然同时碰到这两行 tap/diode
+的 li1，而 tap li1 分别经 mcon 接在 VGND 与 VPWR 的 met1 轨上。
+
+各版实测（脚本 lvs-repro/li1_guard.py，同一判据）：
+  eco_it2.def        （f 线，LVS 通过那版）跨行 li1 0 条，最长竖线 1,700 dbu
+  eco_it2_eco2.def                          跨行 li1 0 条，最长 1,700 dbu
+  eco_it2_eco3.def                          跨行 li1 23 条，最长 105,060 dbu
+  eco_it2_eco4.def                          跨行 li1 23 条，最长 105,060 dbu
+  eco_it2_t2.def（修复版，见第五节）        跨行 li1 0 条
+
+这 23 条与日志一一对得上：ant/rep2b.log 里 DRT-0225
+"pin not visited, fall back to feedthrough mode" 正好 23 条，涉及的网是
+_02220_ _02247_ _02329_ _02497_ _02759_ _05213_ _05273_ _05296_ _05484_
+_05486_ _05487_ _05954_ _05998_ _06101_ _07901_ _09013_ _09169_ clknet_
+leaf_113_clk clknet_leaf_144_clk clknet_leaf_245_clk net2596 net345
+u_core.h_in[101]。也就是说：出现一次 feedthrough，就留下一条跨行 li1。
+
+四、触发条件：用三次对照隔离出来
+--------------------------------------------------------------------------
+对照 1（只删 filler，不插二极管）
+  read eco_it2_eco2.odb → remove_fillers → detailed_route -droute_end_iter 4
+  产物 t1_nofill_route.def
+  跨行 li1 0 条，DRT-0225 0 条
+
+对照 2（原 ECO3 顺序）
+  read eco2 → remove_fillers → repair_antennas sky130_fd_sc_hd__diode_2
+  → clear guides → global_route → detailed_route 4
+  产物 eco_it2_eco3b.def，日志 ant/rep2b.log
+  跨行 li1 23 条，DRT-0225 23 条
+  注：这里已经把 guide 全部清空（164,535 条）并重做 global_route，仍是 23 条
+      —— 所以「guide 是旧摆放派的」这个猜想不成立。
+
+对照 3（原 ECO3 原样，不清 guide）
+  产物 eco_it2_eco3.def，日志 ant/rep2.log
+  跨行 li1 23 条，DRT-0225 11 条（该次日志只记了 11 条网级告警）
+
+结论：触发条件是「先插二极管、再重布」，不是 guide 过期，也不是 filler 被删。
+二极管插在引脚旁，DRT 的 pin access 在这些点上失败，于是对整条网回落
+feedthrough，用 li1 直穿两行去接。
+
+五、修复实验：先布完，再插二极管
+--------------------------------------------------------------------------
+脚本 tmp/ant/t2.tcl（本机 vm 路径 /home/user/openlane-rootfs/tmp/ant/）：
+  read_db /tmp/eco/eco_it2_eco2.odb
+  remove_fillers
+  detailed_route -droute_end_iter 4 -verbose 1
+  repair_antennas sky130_fd_sc_hd__diode_2
+  check_antennas -verbose
+  write_def /tmp/eco/eco_it2_t2.def ; write_db /tmp/eco/eco_it2_t2.odb
+
+产物与实测：
+  eco_it2_t2.def            跨行 li1 0 条（li1_guard.py PASS）
+  二极管实例                347 颗（与 eco_it2_eco4.def 同数）
+  check_antennas            0 net violations / 0 pin violations
+  eco_it2t2.gds             38,178,974 B（38 MB，比 g 版少 3.5 MB：不含 filler 版图）
+  sha256_axil.ext           10,097,522 B
+  layout_t2.spice           1,712,183 B md5 7fec9f86612c6e9bf218216eea400a31
+  顶层 TOP_PORTS 94 / TOP_INST 16,572
+
+电源网是否分开——两条独立判据：
+  (1) 抽取件顶层脚数：VGND 33,134 / VPWR 30,737
+      （对照 eco_it2g 版：VGND 0 / VPWR 66,541，即全部并进一条）
+  (2) 自建连通引擎：VGND 组件 555,801、VPWR 组件 555,800，两网不同组件，
+      no path between power nets，耗时 12 s
+  → 并网消失。
+
+但 LVS 仍不通过，且两次都是：
+  a) 对 eco4 同版参考 net_eco4.spice：Final result: Netlists do not match
+     器件数 16,209（版图）对 15,995（参考）
+  b) 对 T2 自己的 ODB 现出的参考 net_t2.spice（1,590,445 B，nl2spice.py 从
+     t2_nl.v 转，PDK spice 为 /pdk/.../sky130_fd_sc_hd.spice）：
+     Final result: Netlists do not match，器件数同样是 16,209 对 15,995
+  → 这 214 颗差额是「先布后插二极管」这条线新带出来的，不是电源网问题；
+    没逐颗对位，记「未闭合」，不记「已通过」。
+
+六、两条走不通的路（省下一轮重试）
+--------------------------------------------------------------------------
+1) detailed_route -bottom_routing_layer met1（eco_it2_eco3d.def）
+   跨行 li1 0 条，但 net46 改成了 94 um 的 met1 竖线
+   NEW met1 ( 241730 12750 ) ( * 106930 )
+   met1 竖线压 met1 电源轨是同一类短接，只是换了层。这条路不解决短接。
+2) detailed_route -bottom_routing_layer met2（rep2e）
+   本 build 直接越界退出：
+   Error: rep2e.tcl, 16 vector::_M_range_check: __n (which is 2147483647)
+   >= this->size() (which is 13)
+   该参数在本 OpenROAD（b16bda7e8）上不可用。
+
+七、仍未闭合
+--------------------------------------------------------------------------
+- T2 只做到「并网消失」，没做到 LVS 通过：器件数 16,209 对 15,995 差 214，
+  顶层 pin 匹配也没对上（netgen 报 VPWR/VGND/clk 在 circuit 2 无匹配脚）。
+- T2 没有 filler_placement，密度没补；它不是发布版图，也没有进任何页面
+  当作「通过」的依据。
+- 修复后的版图未跑 STA、未跑 DRC、未做天线复检以外的检查。
+- 为什么 23 个网在插完二极管后 pin access 会失败，日志只给了网名，没给
+  具体是哪个 pin、被什么挡住；这一层还没查到。
+
+八、复算入口（全部在 vm 上，chroot 内 /tmp 对应宿主
+   /home/user/openlane-rootfs/tmp）
+--------------------------------------------------------------------------
+跨行 li1 判定（任意 DEF）：
+  /opt/python3.12/bin/python3 lvs-repro/li1_guard.py <def> [行高dbu]
+  退出码 0 通过 / 1 发现跨行 li1 / 2 用法错误
+
+三次对照：
+  tmp/ant/t1.tcl   → t1_nofill_route.def（对照 1）
+  tmp/ant/rep2b.tcl→ eco_it2_eco3b.def（对照 2）
+  tmp/ant/rep2.tcl → eco_it2_eco3.def（对照 3，原 ECO3）
+
+修复实验：
+  tmp/ant/t2.tcl   → eco_it2_t2.def / eco_it2_t2.odb
+  tmp/gds2/mkgds_t2.tcl → eco_it2t2.gds
+  /home/user/repro3.sh /tmp/gds2/eco_it2t2.gds t2 94 /tmp/eco/net_eco4.spice
+  /home/user/repro3.sh /tmp/gds2/eco_it2t2.gds t2s 94 /tmp/eco/net_t2.spice
+
+删除实验：
+  eco_it2_eco4a.def（只少一行）→ tmp/gds2/mkgds_a.tcl → eco_it2ga.gds
+  /home/user/repro3.sh /tmp/gds2/eco_it2ga.gds ga 93 /tmp/eco/net_eco4.spice
+  注：带 filler 的 g 线版图顶层只抽到 93 脚，所以那次用 93；T2 无 filler，
+      抽到 94 脚，用 94。
+
+连通判据：
+  /opt/python3.12/bin/python3 short2.py <gds> <def>
+==========================================================================
