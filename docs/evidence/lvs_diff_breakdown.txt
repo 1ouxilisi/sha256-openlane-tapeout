@@ -1,0 +1,85 @@
+LVS 差额拆解：2 个器件 / 29 条网 / 顶层 VGND 并进 VPWR
+========================================================
+记录时间：2026-11-11
+对象：eco_it2f.gds（上一轮 ECO 版，327 颗 diode）与 eco_it2g.gds（本轮 ECO 版，347 颗 diode）
+判据来源全部是一次真实 run 的产物：run_f4（PASS）与 run_g5（NOT-PASS），驱动为 lvs-repro/repro3.sh。
+
+一、先更正一个说法：it2f 不是「无二极管版」
+--------------------------------------------------------
+用 klayout.db 直接读 GDS 顶层实例，不经过网表：
+
+  eco_it2f.gds  顶层实例 57,382 个，其中 sky130_fd_sc_hd__diode_2  327 颗
+                fill_8 15,122 / fill_4 5,710 / fill_2 6,971 / fill_1 7,531 / tapvpwrvgnd_1 5,496
+  eco_it2g.gds  顶层实例 57,395 个，其中 sky130_fd_sc_hd__diode_2  347 颗
+                fill_8 15,117 / fill_4 5,711 / fill_2 6,970 / fill_1 7,529 / tapvpwrvgnd_1 5,496
+
+按二极管的放置坐标比对（GDS 里实例名已被清掉，只能用坐标指纹）：
+  it2g 相对 it2f：新增 22 个位置、消失 2 个位置，327 - 2 + 22 = 347。
+  → it2g = it2f + 20 颗 diode，两版都带二极管。
+  → 「无二极管版」是错的，正确称法是「上一轮 ECO 版（327 颗）」对「本轮 ECO 版（347 颗，+20）」。
+
+二、2 个器件是什么
+--------------------------------------------------------
+run_g5/lvs_g5.out 里 "(no matching instance)" 一共 2 条（第 5,200 / 5,204 行），两条都是：
+  (no matching instance)  |Instance: sky130_fd_sc_hd__diode_2:ANTENNA
+顶层实例表一侧 347 颗 diode、另一侧 327 颗；netgen 先 "Flattening instances of
+sky130_fd_sc_hd__diode_2 in cell sha256_axil (0)/(1) makes a better match"（第 3,793/3,794 行）
+再按拓扑配对，剩 2 颗配不上。这 2 条不是「版图上凭空少 2 个器件」，是 20 颗差额在压平配对后的余数。
+
+三、29 条网是什么
+--------------------------------------------------------
+"(no matching net)" 恰好 29 条（第 4,666 – 5,144 行），全部是参考网表一侧有、版图逃生网表一侧没有对应：
+  - 第 4,857 行 Net: VGND            ← 与顶层缺 VGND 有关，fanout 覆盖 17k 量级
+  - 其余 28 条是信号网：net347、clknet_leaf_30_clk、clknet_leaf_154_clk、net2433、_07042_、
+    u_core.h_in[5]、u_core.C[3]、u_core.h_in[153]、u_core.h_in[218]、_05692_、_05484_ …
+  → 「29」里只有 1 条与 VGND 同源；另外 28 条是 netgen 压平 / 合并平行器件之后配对关系被打乱
+    的产物，不是版图上真的少 28 条网。
+
+四、"15,981 vs 15,983" 不能读成「少了 2 个器件」
+--------------------------------------------------------
+这两个数是 netgen 重整之后的计数，同一次输出里紧跟着：
+  3,782/3,783  Flattening unmatched subcell sky130_fd_sc_hd__fill_8(15,122 instances) / fill_4(5,710)
+  3,805/3,806  Class sha256_axil (0): Merged 591 / (1): Merged 569 parallel devices
+压平前的顶层实例表（同口径）：
+  layout_f4.spice  16,552 个实例，diode_2 327，fill 0
+  layout_g5.spice  16,572 个实例，diode_2 347，fill 0
+  /tmp/lvs_it2c/net.spice（参考） 37,384 个实例，diode_2 327，fill_8 15,122 / fill_4 5,710
+参考网表比版图多 20,832 个 fill，是 fill 单元无器件、版图抽取不收它，netgen 压平后不影响器件数。
+所以 15,981 / 15,983 是压平 + 合并之后的数，不能当「器件差额」的判据。
+
+五、真正的硬事实：这一版抽出来的网表里，VGND 整个并进了 VPWR
+--------------------------------------------------------
+顶层 .subckt 的实例引脚按网名计数（拼接 "+" 续行后按 token 统计）：
+  run_f4/layout_f4.spice  inst 16,552  VGND 33,104  VPWR 33,104  VNB 0  VPB 0  端口 94（prep_lay 后）
+  run_g5/layout_g5.spice  inst 16,572  VGND      0  VPWR 66,562  VNB 0  VPB 0  端口 93（prep_lay 后）
+  → 通过版每颗单元 2 个 VGND + 2 个 VPWR；it2g 版四个电源脚全记在 VPWR 上。
+  → 93 vs 94 端口只是表象，网表里 VGND 这条网已经不存在。
+
+六、标签层面已经证伪「标签丢了」
+--------------------------------------------------------
+两份 GDS 顶层 datatype == 5 的文本：
+  it2f 112 个，it2g 112 个；其中 VGND 各 8 个、VPWR 各 8 个，坐标逐点相同
+  （首三个 VGND：(319930,490370) (319930,337190) (319930,184010)）
+  bbox 均 (0,0;640000,640000)，dbu 0.001，top cell 均 sha256_axil
+→ 标签没丢、没改名。端口消失发生在抽取 / 命名层，不在版图文本层。
+
+在 it2g 上取两个标签点所在的 met1(68/20) 多边形：
+  VGND 点 (319930,490370) 落在 bbox (317945,490320;320090,490905)
+  VPWR 点 (319930,487070) 落在 bbox (5520,486640;634340,487120)
+  → 两个点不在同一个多边形，所以不是「同名标签压在一条线上」这种简单短路。
+  往下要查的是 via 链与 nwell/tap 的等电位，不是再补标签。
+
+七、下一轮入口：先让参考网表同版
+--------------------------------------------------------
+repro3.sh 默认参考是 /tmp/lvs_it2c/net.spice（327 颗 diode 的旧网表）。拿它判 347 颗那一版，
+天生差 20 颗二极管。同口径的参考要从 eco_it2_eco4.def 这一版重新出，再跑同一条命令；
+只有那一版参考下，2 器件 / 29 条网才是可比数字。
+
+附：本文件所有数字的复算入口
+--------------------------------------------------------
+  lvs_g5.out   /home/user/openlane-rootfs/tmp/repro/run_g5/lvs_g5.out（402,582 B / 5,366 行）
+  网表          run_f4/{layout_f4.spice, lay_f4.spice}、run_g5/{layout_g5.spice, lay_g5.spice}
+  参考          /home/user/openlane-rootfs/tmp/lvs_it2c/net.spice（2,872,118 B，94 脚）
+  GDS          /home/user/openlane-rootfs/tmp/eco/{eco_it2f.gds, eco_it2g.gds}
+  统计脚本      /home/user/cmp_top.py（顶层实例/引脚计数与差集）
+               /home/user/labels_diff.py（顶层 datatype 5 文本；须 /opt/python3.12/bin/python3）

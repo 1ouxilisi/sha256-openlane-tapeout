@@ -228,3 +228,64 @@ GitHub Pages 只发布 docs/：仓库根的 lvs-repro/ 与 REPRODUCE.md 在站�
 ——两份会各自漂移。本文与 onecmd_repro.txt 的分工：
   lvs_repro.txt      抽取复现性 + 调用方式 + 卡住的病根（本文）
   onecmd_repro.txt  一条命令的完整流程、产物指纹、两版结论（详细版）
+
+
+八、差额拆开看：2 个器件 / 29 条网 / 顶层 VGND 并进 VPWR（2026-11-11 追加）
+-------------------------------------------------------------------------
+先更正一处说法：「eco_it2f.gds 是无二极管版」是错的，撤回。
+  直接读两份 GDS 的顶层实例（klayout.db，不经过网表）：
+    eco_it2f.gds  顶层实例 57,382   diode_2 327   fill_8 15,122 / fill_4 5,710
+    eco_it2g.gds  顶层实例 57,395   diode_2 347   fill_8 15,117 / fill_4 5,711
+  按二极管放置坐标比对：it2g 新增 22 个位置、消失 2 个位置，327 - 2 + 22 = 347。
+  两版都带二极管，it2g = it2f + 20 颗。正确称法：上一轮 ECO 版（327 颗）/ 本轮 ECO 版（347 颗，+20）。
+
+8.1 那 2 个器件
+  lvs_g5.out 里 "(no matching instance)" 只有 2 条，第 5,200 / 5,204 行，两条都是
+  Instance: sky130_fd_sc_hd__diode_2:ANTENNA。
+  一侧 347 颗、另一侧 327 颗；netgen 先 "Flattening instances of ...diode_2 ... makes a
+  better match"（3,793/3,794 行）再压平配对，剩 2 颗配不上。
+  → 这 2 条不是「版图凭空少 2 个器件」，是 20 颗差额在压平配对后的余数。
+
+8.2 那 29 条网
+  "(no matching net)" 恰好 29 条（4,666 – 5,144 行），全部是参考网表侧有、版图侧无对应：
+    第 4,857 行  Net: VGND    （fanout 覆盖 17k 量级）
+    其余 28 条    net347、clknet_leaf_30_clk、clknet_leaf_154_clk、net2433、_07042_、
+                  u_core.h_in[5]、u_core.C[3]、u_core.h_in[153]、u_core.h_in[218]、
+                  _05692_、_05484_ …
+  → 「29」里只有 1 条与 VGND 同源；另外 28 条是压平 / 合并平行器件后配对关系被打乱的产物，
+    不是版图上真的少 28 条网。
+
+8.3 「15,981 vs 15,983」不是器件差额
+  这两个数是 netgen 重整后的计数，同一次输出紧跟着：
+    3,782/3,783  Flattening unmatched subcell fill_8(15,122 instances) / fill_4(5,710)
+    3,805/3,806  Merged 591 / 569 parallel devices
+  压平前的顶层实例表：
+    layout_f4.spice  16,552   diode_2 327   fill 0
+    layout_g5.spice  16,572   diode_2 347   fill 0
+    net.spice（参考） 37,384   diode_2 327   fill_8 15,122 / fill_4 5,710
+  参考侧多出的 20,832 个 fill 是 fill 单元无器件、版图抽取不收，压平后不影响器件数。
+
+8.4 硬事实：这一版抽出的网表里 VGND 整个并进了 VPWR
+  顶层实例引脚按网名计数（拼 "+" 续行后按 token 计）：
+    layout_f4.spice  inst 16,552  VGND 33,104  VPWR 33,104  VNB 0  VPB 0  （prep_lay 后 94 脚）
+    layout_g5.spice  inst 16,572  VGND      0  VPWR 66,562  VNB 0  VPB 0  （prep_lay 后 93 脚）
+  通过版每颗单元 2 个 VGND + 2 个 VPWR；it2g 版四个电源脚全记在 VPWR 上。
+  93 vs 94 端口只是表象，网表里 VGND 这条网已经不存在。
+
+8.5 标签层面已证伪「标签丢了」
+  两份 GDS 顶层 datatype == 5 的文本各 112 个，其中 VGND 各 8、VPWR 各 8，坐标逐点相同
+  （首三个 VGND：(319930,490370) (319930,337190) (319930,184010)），bbox 均 (0,0;640000,640000)，
+  bbox dbu 0.001，top cell 均 sha256_axil。
+  → 标签没丢、没改名；端口消失发生在抽取 / 命名层。
+  it2g 上两个标签点所在的 met1(68/20) 多边形：
+    VGND 点 (319930,490370) → bbox (317945,490320;320090,490905)
+    VPWR 点 (319930,487070) → bbox (5520,486640;634340,487120)
+    两点不在同一多边形，不是「同名标签压在一条线上」这种简单短路。
+    往下要查 via 链与 nwell/tap 的等电位，不是再补标签。
+
+8.6 下一轮入口：先让参考网表同版
+  repro3.sh 默认参考 /tmp/lvs_it2c/net.spice 是 327 颗 diode 的旧网表；拿它判 347 颗那版，
+  天生差 20 颗。同口径参考要从 eco_it2_eco4.def 这一版重新出，再跑同一条命令；
+  只有那一版参考下，2 器件 / 29 条网才是可比数字。
+
+（本节数字的复算入口见 evidence/lvs_diff_breakdown.txt。）

@@ -146,3 +146,12 @@ summary.txt；不会「挂着等人看」。
   run_g5/lay_g5.spice      1,684,268 B
   run_g5/lvs_g5.out          402,582 B  Final result: Top level cell failed pin matching.
   cache_stdcel/                 148 个 .ext、572,151 B（可从 PDK 重建）
+
+注（2026-11-11 更正，正文保留不覆盖）
+  上面把 eco_it2f.gds 写成「无二极管版」是错的：直接读 GDS 顶层实例，
+  eco_it2f.gds 有 327 颗 sky130_fd_sc_hd__diode_2，eco_it2g.gds 有 347 颗
+  （按放置坐标比：新增 22 个位置、消失 2 个）。两版都带二极管，称法应为
+  「上一轮 ECO 版（327 颗）」与「本轮 ECO 版（347 颗，+20）」。
+  另，「15,981 vs 15,983 器件 / 15,799 vs 15,828 网」是 netgen 压平 fill 与合并
+  平行器件之后的计数，不能读成「版图少了 2 个器件」。
+  拆解与出处见 lvs_diff_breakdown.txt 与 lvs_repro.txt 第八节。
