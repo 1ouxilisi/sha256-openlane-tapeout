@@ -1,0 +1,115 @@
+T8 慢角频率边界：40 MHz setup 通过，临界 41.5 MHz，hold 仍 1 条
+============================================================
+生成时间 2026-11-11  现场 /home/user/openlane-rootfs/tmp/eco/ 与 /home/user/
+
+一、结论
+--------------------------------
+同一版图、同一份 SPEF，只把 SDC 里的 clk 周期从 18 ns 拉到 25 ns，慢角 setup 由 -6.057 变 +0.943。
+五档实测的 slack 与周期是严格 1:1 关系：周期每加 1 ns，最差 slack 加 1.000 ns。
+
+  周期 ns   频率 MHz   clk 组 setup   TNS       异步组最差   hold 最差
+  18.0      55.56      -6.057         -228.15   +10.414      -0.141
+  22.0      45.45      -2.057         -8.20     +14.414      -0.141
+  23.0      43.48      -1.057         -2.12     +15.414      -0.141
+  24.0      41.67      -0.057         -0.06     +16.414      -0.141
+  25.0      40.00      +0.943          0.00     +17.414      -0.141
+
+临界周期 24.057 ns，即 41.566 MHz。40 MHz（25 ns）留 0.943 ns 余量；41.67 MHz（24 ns）差 0.057 ns 不过。
+
+40 MHz 三个角：
+
+  corner                           clk 组 setup    hold 最差
+  slow  ss_100C_1v60 + max.spef    +0.943          -0.141（1 条 VIOLATED）
+  typ   tt_025C_1v80 + nom.spef    +15.271         +0.683
+  fast  ff_n40C_1v95 + min.spef    +16.893         +0.436
+
+所以能写的那句是：这版在 40 MHz 下慢角 setup 成立，临界 41.5 MHz。
+不能写的那句是：40 MHz 时序通过 —— 慢角还有 1 条 hold（removal）违例，DRV 也没清。
+
+二、这一组数字为什么可信
+--------------------------------
+三条，缺一条都不写。
+
+1. 寄生是 OpenRCX 从 T8 自己的 ODB 现抽的真 SPEF，不是 estimate_parasitics 估算。
+   上一份证据已经证明估算口径会让慢角算反。
+
+2. slack 与周期严格 1:1 且残差为 0：18 / 22 / 23 / 24 / 25 五档实测 -6.057 / -2.057 / -1.057 /
+   -0.057 / +0.943，每 1 ns 周期对应 1.000 ns slack，没有任何一档偏离。这说明违例完全由
+   周期决定，不是随机波动，也不是某条路径的偶发。
+
+3. 五次运行除 period 一行外输入完全相同：同一 ODB、同一 max.spef、其余 SDC 内容逐字不变。
+   DRV 也逐项相同（见第三节），进一步证明改的只有时钟约束。
+
+三、DRV 与周期无关（这是旁证）
+--------------------------------
+40 MHz 与 18 ns 两次运行的 DRV 违例逐项相同：
+
+  corner   max slew   max cap   max fanout   合计
+  slow     14,560     589       63           15,212
+  typ      419        0         63           482
+  fast     2,413      2         63           2,478
+
+18 ns 那次也是 15,212 / 482 / 2,478。DRV 由布局与线长决定，降频不会减少它。
+所以换频率只能解决 setup，解决不了 DRV，也解决不了下面那一条 hold。
+
+四、hold 那一条是什么，为什么降频修不掉
+--------------------------------
+起点 reset_n（输入端口），终点 _20031_，类型 removal check（异步复位释放检查），slack -0.141。
+它在 18 / 22 / 23 / 24 / 25 五档里数值完全一样，因为异步复位路径不随时钟周期变化。
+40 MHz 下 typ 角 hold +0.683、fast 角 +0.436，都不违例；只有慢角这一条。
+
+时钟偏斜（setup）：slow 1.008 / typ 0.474 / fast 0.531，三个频率读数相同——偏斜是绝对量，与周期无关。
+
+要修它只有两条路：
+  (a) 在 reset_n 到 _20031_ 这段加 delay（几级 delay cell）。代价是拉长复位释放时间，且改动版图后
+      必须重跑 DRC 与 LVS；
+  (b) 把异步复位改成同步复位释放。代价是改 RTL，整版重跑。
+两条都不是降频能做掉的。
+
+五、功耗（40 MHz 慢角）
+--------------------------------
+总 7.53e-03 W：Sequential 2.87e-03（38.2%）、Clock 4.27e-03（56.7%）、
+Combinational 3.85e-04（5.1%）、leakage 1.11e-04。
+18 ns 时是 1.04e-02 W，降到 40 MHz 后少 28%，但时钟组仍占 56.7%——clock 树是这版的主要功耗项，
+与它在慢角单级 1.159 ns 的观察一致。
+
+六、这份证据不覆盖什么
+--------------------------------
+1. 只改 SDC 周期，没有改版图。40 MHz 是"降频到能过"，不是"版图变好"。
+2. 没有重跑 DRC / LVS，因为版图一个多边形都没动；但这同时意味着这份证据不能用来支撑任何版图改动。
+3. hold 那条仍未修，DRV 仍未修，pad ring 仍未做。所以"能不能挂单"的结论不变。
+4. 三个 liberty corner 各跑一次，没有做多 corner 组合扫描，也没有换 calibre 提取规则互校。
+5. 没有固定随机种子，也没有同配置重复跑第二次；1:1 线性是这里能做的最强一致性证据。
+
+七、复算入口
+--------------------------------
+脚本（与仓库 signoff-repro/ 同源）：
+
+  /tmp/eco/sta_rcx_run.sh <liberty> <sdc> <spef> <tag>      宿主 /home/user/openlane-rootfs/tmp/eco/
+  /home/user/scan40.sh                                      本轮五档 + 两角的批量脚本
+
+输入：
+
+  /tmp/eco/eco_it2_t8.odb       35,780,577 B  md5 7b724dbf94efdb64dd4c468fb231021d
+  /tmp/eco/t8_max.spef          19,473,693 B（slow 角用）
+  /tmp/eco/t8_nom.spef          19,428,734 B（typ 角用）
+  /tmp/eco/t8_min.spef          19,280,997 B（fast 角用）
+  /tmp/eco/sdc_t8_40mhz.sdc     period 25.0000，由 sdc_t8_55mhz.sdc 改 create_clock 一行得到
+  /tmp/eco/sdc_p24.0.sdc        同法生成，其余 sdc_p*.sdc 同理
+
+日志：
+
+  /home/user/sta_t8_slow40.log   1,186,214 B
+  /home/user/sta_t8_slow24.0.log 1,186,217 B
+  /home/user/sta_t8_slow23.0.log 1,186,262 B
+  /home/user/sta_t8_slow22.0.log 1,186,262 B
+  /home/user/sta_t8_typ40.log    125,300 B
+  /home/user/sta_t8_fast40.log   410,966 B
+
+每份日志用 SECTION_* 标记切成六段；setup 用 report_checks、hold 用 report_worst_slack -min。
+18 ns 那份基准是 /home/user/sta_t8_slow18.log（1,186,268 B），数字见 sta_t8_3corner.txt。
+
+八、一句话
+--------------------------------
+这版不是"没法用"，是"41.5 MHz 以上慢角 setup 不成立、41.5 MHz 以下成立，但 hold 与 DRV 得另修"。
+对外只写这一句，不写时序通过。
