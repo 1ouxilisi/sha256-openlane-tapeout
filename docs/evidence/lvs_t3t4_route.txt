@@ -1,0 +1,217 @@
+==========================================================================
+T2 剩余开路 + T3/T4/T5 三轮修复实验：仍是结构性二选一，没有 LVS 通过版
+日期：2026-11-11
+口径：只写能从真实 DEF/GDS/日志复算的数字；不写 signoff 通过。
+上一份 lvs_short_fix.txt 停在「T2 并网消失、LVS 仍不通过，器件数差 214」。
+本文件先把 T2 那 214 的差额查实（39 颗二极管物理开路），再记录为了修这
+39 颗开路连跑的 T3、T4、T5 三个实验。结论是：补布线会把上一版刚消掉的
+跨行 li1 feedthrough 重新长回来，回填 filler 又把这些 feedthrough 接成
+真实短接。三个实验都没有出现「电源网分开 + LVS 通过」的版图。旧文件全部
+保留不删，本文件只追加，不覆盖。
+==========================================================================
+
+一、结论（一句话）
+--------------------------------------------------------------------------
+T2 剩下的 LVS 差异不是一类 214 颗的器件错位，而是 39 颗二极管的 DIODE
+脚在物理上没接线（逻辑网名还把它列在网内，GDS 几何没接）。为了接上这
+39 颗去补跑详细布线，布线器重新回落 feedthrough 模式、长出 23 条（最少
+一轮也有 15 条）跨行 li1——就是上一版刚消掉的那个短接源；再回填 filler，
+这些跨行 li1 被电源轨接通，短接真正落地。开路与跨行 feedthrough 在这条
+流程里是二选一，四轮实验没有同时为零的时候。
+
+二、先纠正解析器：T2 顶层实例总数其实完全相等
+--------------------------------------------------------------------------
+早期用 cls.py 数 magic 网表，把每行第二个 token 当成单元名，输出 13 万条
+噪声。magic 网表的单元名是一行最后一个 token（第二个 token 是网名）。
+正确脚本 cls2.py 对 run_t2s/lay_t2s.spice 与 net_t2.spice 做顶层逐类计数：
+  TOTAL 16,572 vs 16,572，diff 0
+  143 个单元类，逐类无一差异
+  netgen 日志里 143 处 "Netlists match uniquely"
+所以 T2 不是「多了 214 颗器件」，类级与实例总数都对得上；问题在更细的
+连接层。cls.py 那个错误版本不再使用。
+
+三、T2 剩余缺陷：39 颗二极管 DIODE 脚物理开路
+--------------------------------------------------------------------------
+用两路互相独立的方法定位，数字完全一致：
+
+(1) magic 抽取件 lay_t2s.spice 里有 39 个孤立节点，名字形如
+    ANTENNA_<n>/DIODE，只在二极管上出现、没有任何其它连接。
+(2) klayout 几何扫描（conn_all2.py）：对 347 颗二极管逐颗检查 DIODE
+    li1 盒（局部盒 (85,255;835,2465)）有没有顶层 li1/mcon 或邻单元
+    li1 触碰，同样是 39 颗没有任何触碰。
+    好管的典型连接是一颗 170×170 的 mcon 落在 DIODE 盒内，已用两只
+    好管验证过这个判据。
+
+39 颗的拆分（old27.txt / new20.txt / open39.txt 精确比对）：
+  20 颗是新插的：ANTENNA_328..347，即 repair_antennas 在全局布线级
+       插入的那批，日志 GRT-0015 "Inserted 20 diodes"。
+  19 颗是旧管：ANTENNA_23,24,25,26,27,41,67,68,138,140,156,197,230,
+       255,259,260,261,262,313。
+
+机制：
+  - 20 颗新管：repair_antennas 是全局布线级插管，只更新连接性，后面没有
+    再跑详细布线，新管没有详细布线落点。
+  - 19 颗旧管：T2 第一次 detailed_route 一边报 DRT-0199 "Number of
+    violations = 0"、DRT-0198 "Complete detail routing"，一边把这 19 颗
+    的 li1 连接丢了。对照 eco2 DEF，net2482 原本有 NEW li1
+    ( 527390 272510 ) L1M1_PR_MR 落在 DIODE 盒内，T2 DEF 该坐标 li1
+    消失，只剩该网其它 21 个位置的 li1 桩。
+  DEF 逻辑网名仍把 DIODE 脚列在网内，GDS 几何却没接——LVS 抓的就是
+  这个矛盾。
+
+四、T3：补跑详细布线，39 颗开路清零，但 23 条跨行 li1 长回来
+--------------------------------------------------------------------------
+脚本 tmp/ant/t3.tcl：
+  read_db eco_it2_t2.odb
+  detailed_route -droute_end_iter 16 -verbose 1
+  check_antennas
+  write_def/db eco_it2_t3
+布线各轮违规数：1551 → 318 → 288 → 52 → 1 → 0，最后 DRT-0198
+Complete detail routing，check_antennas 0 net / 0 pin。
+
+实测：
+  eco_it2_t3.def   14,416,132 B
+  DEF 级开路检查（def_open.py，按 347 颗 DIODE 盒是否含 routed li1）
+                   open = 0，347 颗全部接上
+  eco_it2t3.gds    38,848,030 B
+  sha256_axil.ext  10,145,380 B
+  layout_t3.spice  1,711,285 B md5 092442ffb5d911944c02be38898d83d2
+                   TOP_PORTS 94 / TOP_INST 16,572
+  电源 token       VGND 33,988 / VPWR 31,630（平衡，没塌缩）
+
+但 li1_guard.py 立刻报 FAIL：
+  cross-row li1 23 条，最长一条 net _09192_ 竖线 11,220 dbu
+  其中 x=515890 那条 net _02497_ 竖线 490450..499970 长 9,520 dbu
+这 23 条与上一版 eco3/eco4 的 23 条是同一类 feedthrough（网名单不完全
+相同，但触发模式相同）。
+
+同版 LVS（repro3.sh，参考 net_t3.spice 1,590,445 B，md5
+8ec46593bc22d7cb97b06626ae2fbc6f）仍 NOT-PASS：
+  143 类仍全部 match uniquely，39 个孤立 ANTENNA_n/DIODE 节点归零
+  Number of devices 16,231 vs 15,995（差 236）Mismatch
+  Number of nets   16,943 vs 15,828（差 1,115）Mismatch
+  日志 4,157 条 "no matching net"，多为 _09325_/B、_19294_/Q 这类
+  magic 局部名节点
+原因：T3 没有 filler，井里没有 VPWR 标签，magic 把井节点命名成局部
+_ inst/VPB，netgen 按名匹配找不到。即开路是修掉了，但接开路的代价是
+跨行 feedthrough 回来，且无 filler 时节点名也是局部的。
+
+五、T4：回填 filler，NWELL 恢复连续，但节点名塌缩成短接
+--------------------------------------------------------------------------
+脚本 tmp/ant/t4.tcl：
+  read_db eco_it2_t3.odb
+  filler_placement [list sky130_fd_sc_hd__fill_8 sky130_fd_sc_hd__fill_4
+                   sky130_fd_sc_hd__fill_2 sky130_fd_sc_hd__fill_1]
+  check_antennas
+  write_def/db eco_it2_t4
+坑：filler_placement 只接受一个位置参数（一个 Tcl list），把四个 cell
+名分开写会报 STA-0565 "filler_placement requires one positional
+argument"。
+
+回填后实测：
+  eco_it2_t4.def   17,658,963 B（与原 eco4 同量级），347 颗二极管，
+                   check_antennas 仍 0/0
+  eco_it2t4.gds    41,685,148 B（与原 g6 同大小）
+  NWELL 几何恢复：merge 后 114 片、area 202,221,734,000，与 f4 完全
+                   一致（T3 无 filler 时是 5,075 片、area
+                   105,057,389,900）
+  共插入 35,327 颗 filler：fill_8 15,117、fill_1 7,529、fill_2 6,970、
+                   fill_4 5,711
+
+但 magic 抽取塌缩：
+  layout_t4.spice  1,686,616 B md5 0751c0c82e7e39007c97a33a84d9cbc2
+                   ——与 g5/g6 抽取件逐字节相同
+  电源 token       VGND 843 / VPWR 67,436（g7 短接签名是 842/66,019）
+  顶层实例所有电源/地脚都被命名成 VPWR，如
+                   X_09671_ VPWR VPWR VPWR VPWR ...（本应
+                   VPWR/VGND/VPB/VNB）
+  prep_lay FAIL@C：raw 顶层 97 个端口（94 + 4 个 bresp/rresp，且缺
+                   VGND），DROP_PORTS 去掉 4 个 bresp/rresp 后 93 ≠ 94
+  netgen 未跑。
+
+几何对照（t3t4.py）：met1（68/20）及以上各层 T3 与 T4 完全相同
+（56,445 片、同 area，via1/met2 等也全同），差异只在 li1、mcon、
+NWELL——即全部来自 filler。filler 单元内部 VGND（y=0）与 VPWR
+（y=2720）两条 li1/met1 轨本身分开、无内部短。
+
+六、T5：只补一轮详细布线，确认二选一无法靠减少迭代绕开
+--------------------------------------------------------------------------
+脚本 tmp/ant/t5.tcl：read t2.odb → detailed_route -droute_end_iter 1
+→ check_antennas → write_def/db t5。
+  布线违规 1551 → 318 后按要求停（仍有 318 条违规）
+  check_antennas 1 net violation / 1 pin violation
+  DEF 开路检查 open = 0（39 颗接上了）
+  但 li1_guard 报 cross-row li1 15 条
+  eco_it2_t5.def 14,431,763 B
+即只让布线器跑一轮，开路能清零，但仍长出 15 条跨行 li1，且设计本身
+还没收敛（318 违规、天线也回来 1 条）。没有任何迭代数能同时给出
+open=0 与 cross-row=0。
+
+七、连通引擎的可信度更正（重要踩坑）
+--------------------------------------------------------------------------
+本项目经验要求：自建连通判据必须先用已知干净对照（f4）通过，才能作
+判据。
+  - 旧引擎 conn_engine.py（met1 起、不含 li1，标签就近吸附）在 f4 上
+    也报 VGND 标签与 VPWR 标签落在同一组件，T2/T3/T4 同样报共享。
+    既然 f4 已 LVS 通过，这个「共享组件」是标签吸附的假阳性，该引擎
+    不能再用于判定短接。
+  - 修正版 conn_full2.py：纳入 li1 与 mcon，且标签只在标签所在的同一
+    金属层内匹配（met4 标签只对 met4 多边形），不再跨层就近吸附。
+    校准结果：
+      f4（LVS 通过） VGND、VPWR 两组件，SEPARATE
+      g6（已知短接） 两标签同一组件，SHORT
+    用校准后的引擎实测：
+      T2 SEPARATE、T3 SEPARATE、T4 SHORT
+  这与 magic 抽取 token 计数一致：T2/T3 平衡、T4 塌缩。
+  短接判据以「magic 抽取 VGND/VPWR token 平衡与否 + 校准后连通引擎 +
+  netgen/几何细查」三者互证为准，不再用未校准的单引擎下结论。
+
+八、四轮实验放在一起：结构性二选一
+--------------------------------------------------------------------------
+                跨行li1  39开路   电源token(VGND/VPWR)   LVS
+  T2（无filler）   0       39      33,134/30,737 平衡    NOT-PASS(开路)
+  T3（无filler）  23        0      33,988/31,630 平衡    NOT-PASS(局部名)
+  T5（无filler）  15        0      未收敛(318违规)       天线1/1
+  T4（有filler）  23(接成)  0        843/67,436 塌缩     FAIL@C(93端口)
+没有任何一版同时满足「跨行 li1 = 0、二极管开路 = 0、电源分开、端口
+94」。布线器把「接二极管脚」和「跨行 feedthrough」绑在一起：要接上
+就得让 li1 跨行，不跨行就接不上。
+
+九、仍未闭合（如实记录）
+--------------------------------------------------------------------------
+- 仍然没有「电源网分开 + LVS 通过」的 GDS；最接近的是 T2（电源分开、
+  无跨行 li1），但它有 39 颗二极管开路，且无 filler。
+- T3/T4/T5 各只跑过一次，未做稳定性复现；修复版均未跑 STA、DRC 与
+  天线复检以外的检查。
+- 「为什么这些网插完二极管后 pin access 失败、具体被哪个 pin 什么挡住」
+  仍停在网级，没查到实例级。
+- 天线仍记 16 条 / 20 脚；ECO it2g 的 STA 未跑（SPEF eco4nom.spef
+  19,538,041 B 已就绪）。
+- T3/T4/T5 均为实验版图，不作发布版图，也没有在任何页面当作「通过」
+  依据。
+
+十、复算入口（vm 上，chroot 内 /tmp 对应宿主
+    /home/user/openlane-rootfs/tmp）
+--------------------------------------------------------------------------
+跨行 li1 判定（任意 DEF）：
+  /opt/python3.12/bin/python3 lvs-repro/li1_guard.py <def>
+  退出码 0 通过 / 1 发现跨行 li1 / 2 用法错误
+
+DEF 级二极管开路：
+  /opt/python3.12/bin/python3 def_open.py <def>
+
+校准后连通判定（f4=SEPARATE、g6=SHORT 为基准）：
+  /opt/python3.12/bin/python3 conn_full2.py <gds>
+
+三个实验脚本：
+  tmp/ant/t3.tcl、t4.tcl、t5.tcl（+ run_t3/t4/t5.sh）
+  magic 流片 tmp/gds2/mkgds_t3/t4.tcl（+ run_t3/t4g.sh）
+LVS：
+  /home/user/repro3.sh /tmp/gds2/eco_it2t3.gds t3 94 /tmp/eco/net_t3.spice
+  /home/user/repro3.sh /tmp/gds2/eco_it2t4.gds t4 94 /tmp/eco/net_t4.spice
+  注：repro3.sh 参数必须传 chroot 可见路径 /tmp/...，传宿主路径会
+      FAIL@A。
+39 开路名单：
+  magic：grep -oE 'ANTENNA_[0-9]+/DIODE' lay_t2s.spice（39）
+  名单文件 open39.txt / new20.txt / old27.txt
+==========================================================================
