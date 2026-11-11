@@ -1,0 +1,134 @@
+================================================================================
+MCMM 四角时序复核 — ctsfix3（sha256_axil，clk 18 ns = 55.56 MHz）
+生成时间：2026-11-12
+版图：results/final（gl 网表 + final.lef + final.sdc，40,396,222 B 那一版 GDS 的同一套产物）
+工具：OpenROAD b16bda7e82721d10566ff7e2b68f1ff0be9f9e38（OpenSTA 多 corner 模式）
+口径：define_corners + 每角 liberty + 每角 SPEF（max→slow/slow-cold，nom→typ，min→fast）
+================================================================================
+
+一、为什么要补第四个角
+
+流程（OpenLane）只在 min / nom / max 三份 SPEF 上各跑一次 STA，对应 fast / typ / slow。
+这三个角里没有「低温 + 标称电压」这个角落，而 130 nm 工艺在 −40 °C 下阈值电压升高、
+驱动变弱，setup 会变差。所以「三 corner 全通过」这句话不覆盖低温工况，
+必须补 ss_n40C_1v60 才能把温度范围说清。
+
+二、四角结果（同一份版图、同一份网表、同一份 SDC）
+
+corner         liberty               SPEF        setup     hold
+--------------------------------------------------------------------------------
+slow           ss_100C_1v60           max.spef    +0.51     +1.61
+slow-cold      ss_n40C_1v60           max.spef    -1.46     +1.10
+typ            tt_025C_1v80           nom.spef    +9.19     +0.75
+fast           ff_n40C_1v95           min.spef   +13.61     +0.40
+
+四个角的最差 setup 路径都是同一条：
+  _20154_/Q (sky130_fd_sc_hd__dfrtp_2)  →  _20185_/D (sky130_fd_sc_hd__dfrtp_2)
+
+三、关键结论
+
+1. slow 角 +0.51 与流程日志 31-rcx_mcsta.max.log 的 worst slack 0.5077 完全一致。
+   说明这套脚本复现的是流程自己的口径，不是另起一套算法；两个数差 0.02 ns 是
+   报告位数（两位小数 vs 四位小数）造成的，不是口径差。
+2. 补上冷角后 setup = -1.46 ns，18 ns 周期在 −40 °C 不成立。
+   该路径在冷角需要 18 + 1.46 = 19.46 ns，即 51.4 MHz。
+3. 冷角 hold +1.10 ns，不违例；冷角的问题只在 setup，不在 hold。
+4. 对外口径改为：
+     55.56 MHz @ 25–100 °C，51.4 MHz @ −40 °C
+   不再写「全角通过」，写「3 角通过 + 冷角 setup −1.46」。
+
+四、超规格供电角（只记录，不作签核）
+
+ss_100C_1v40：setup −7.59
+ss_n40C_1v35：setup −26.65，hold −1.57
+
+1.8 V ±10% 的下限是 1.62 V，1.40 V / 1.35 V 都在规格外。这两行只说明
+「掉压到 1.35–1.40 V 会彻底崩」，不构成合规结论，也不进任何对外表格。
+
+五、复跑方法（chroot 内，路径为 chroot 视图）
+
+  R=/home/user/openlane-rootfs
+  OR=<nix openroad>/bin/openroad
+  sudo -n /usr/sbin/chroot $R $OR /tmp/mcmm/run4.tcl
+
+run4.tcl 全文：
+
+  set run /designs/sha256_v7b/runs/ctsfix3/results/final
+  set libs /pdk/sky130A/libs.ref/sky130_fd_sc_hd/lib
+  define_corners slow slowcold typ fast
+  read_liberty -corner slow     $libs/sky130_fd_sc_hd__ss_100C_1v60.lib
+  read_liberty -corner slowcold $libs/sky130_fd_sc_hd__ss_n40C_1v60.lib
+  read_liberty -corner typ      $libs/sky130_fd_sc_hd__tt_025C_1v80.lib
+  read_liberty -corner fast     $libs/sky130_fd_sc_hd__ff_n40C_1v95.lib
+  read_lef /pdk/sky130A/libs.ref/sky130_fd_sc_hd/lef/sky130_fd_sc_hd.lef
+  read_lef $run/lef/sha256_axil.lef
+  read_verilog $run/verilog/gl/sha256_axil.v
+  link_design sha256_axil
+  read_sdc $run/sdc/sha256_axil.sdc
+  read_spef -corner slow     $run/spef/multicorner/sha256_axil.max.spef
+  read_spef -corner slowcold $run/spef/multicorner/sha256_axil.max.spef
+  read_spef -corner typ      $run/spef/multicorner/sha256_axil.nom.spef
+  read_spef -corner fast     $run/spef/multicorner/sha256_axil.min.spef
+  foreach c {slow slowcold typ fast} {
+    report_checks -corner $c -path_delay max -format summary -group_count 1 -endpoint_count 1
+    report_checks -corner $c -path_delay min -format summary -group_count 1 -endpoint_count 1
+  }
+  exit
+
+踩过的坑（都是 Tcl 层，不是算法层）：
+- 必须先 read_liberty / read_lef 再 link_design，否则 link_design 报 cell 找不到。
+- report_checks 用 -group_count / -endpoint_count，没有 -count。
+- report_worst_slack 不支持 -corner；sta::worst_slack 的角对象不能当位置参数传。
+- 用 sed 删行曾误删 read_liberty -corner slow 整行，导致
+  [ERROR STA-1112] Liberty cell ... not found；改用 python 显式插入后跑通。
+
+六、原始输出摘录（/home/user/mcmm/mcmm_out.log，334,941 B）
+
+== MCMM5 ==
+------ slow setup ------
+reset_n (input)                      _19318_/SET_B (sky130_fd_sc_hd__dfstp_2)   12.43
+_20154_/Q (sky130_fd_sc_hd__dfrtp_2) _20185_/D (sky130_fd_sc_hd__dfrtp_2)    0.51
+
+------ slow hold ------
+reset_n (input)                      _20031_/RESET_B (sky130_fd_sc_hd__dfrtp_4)    1.68
+s_axil_rready (input)                _18593_/D (sky130_fd_sc_hd__dfrtp_2)    1.61
+
+------ slowcold setup ------
+reset_n (input)                      _19318_/SET_B (sky130_fd_sc_hd__dfstp_2)   11.82
+_20154_/Q (sky130_fd_sc_hd__dfrtp_2) _20185_/D (sky130_fd_sc_hd__dfrtp_2)   -1.46
+
+------ slowcold hold ------
+reset_n (input)                      _20209_/RESET_B (sky130_fd_sc_hd__dfrtp_1)    1.35
+s_axil_rready (input)                _18593_/D (sky130_fd_sc_hd__dfrtp_2)    1.10
+
+------ typ setup ------
+reset_n (input)                      _19318_/SET_B (sky130_fd_sc_hd__dfstp_2)   13.26
+_20154_/Q (sky130_fd_sc_hd__dfrtp_2) _20185_/D (sky130_fd_sc_hd__dfrtp_2)    9.19
+
+------ typ hold ------
+reset_n (input)                      _20031_/RESET_B (sky130_fd_sc_hd__dfrtp_4)    2.45
+_18868_/Q (sky130_fd_sc_hd__dfrtp_1) _18868_/D (sky130_fd_sc_hd__dfrtp_1)    0.75
+
+------ fast setup ------
+reset_n (input)                      _19318_/SET_B (sky130_fd_sc_hd__dfstp_2)   13.61
+_19369_/Q (sha256_axil)              s_axil_wready (output)                 11.98
+
+------ fast hold ------
+reset_n (input)                      _20031_/RESET_B (sky130_fd_sc_hd__dfrtp_4)    2.76
+_20714_/Q (sky130_fd_sc_hd__dfrtp_1) _20682_/D (sky130_fd_sc_hd__dfrtp_1)    0.40
+
+== END ==
+
+七、这份证据证明什么、不证明什么
+
+证明：
+- 同一份版图在四个工艺角上的 setup / hold 都能被复跑出同样的数；
+- slow 角与流程自身日志逐位对齐，口径可追溯；
+- 冷角 setup −1.46 是真的，且有具体路径、具体单元。
+
+不证明：
+- 不证明版图在 −40 °C 下可用（这一版不能，需要把周期放到 19.46 ns 以上）；
+- 不证明 DRV 已清（slew / fanout 违例仍是独立的未过关项）；
+- 不证明 pad 级或芯片级时序（pad ring 未接线，core 仍只有内部 pin）；
+- 不替代工艺厂签核（SPEF 只由 OpenRCX 单工具提取，无第二工具互校）。
+================================================================================

@@ -94,7 +94,7 @@ footer p{margin:6px 0}
     <p class="sub">没有商业 EDA 授权，没有流片预算，没有制造排期。OpenLane 1.1.1 + SkyWater sky130A，全开源工具链。</p>
     <table>
       <tr><th>项目</th><th>结果</th></tr>
-      <tr><td>最终工作点</td><td><b>55.56 MHz</b>（18 ns，三 corner setup/hold 全正）</td></tr>
+      <tr><td>最终工作点</td><td><b>55.56 MHz @ 25–100 °C</b>（18 ns；三 corner setup/hold 全正）· <b>51.4 MHz @ −40 °C</b>（补第四角 <code>ss_n40C_1v60</code> 后 setup −1.46 ns，需 19.46 ns）</td></tr>
       <tr><td>面积 / 单元</td><td><b>0.4096 mm²</b>（640 × 640 µm die）· <b>11,475 cells</b> · 利用率 45.77%</td></tr>
       <tr><td>物理验证</td><td><b>DRC 0</b>（Magic signoff 规则，不含天线与密度）· Magic 与 KLayout 双 GDS 逐层 XOR：<b>21 个制造层全 0</b> · <b>LVS 通过（口径写在明处）</b>：展平后顶层 <b>166,353 个器件、84,178 条网两侧完全相等</b>，netgen 原文 <code>Circuits match uniquely</code>；口径是井/衬底并入电源（<code>VNB≡VGND</code>、<code>VPB≡VPWR</code>，版图里由 5,496 个 tap 接到电源）；<b>天线修好后的新版 GDS 上，同一套 LVS 也跑通</b>：两侧 15,588 器件 / 15,645 网、149 个单元逐个匹配，原文 <code>Final result: Circuits match uniquely.</code>。KLayout 侧 signoff DRC 在 <code>metrics.csv</code> 里仍是 <code>-1</code>（flow 没跑到那一步），已另行补跑：<b>218 个规则类、0 条</b>。整条 flow 重跑的那一版（<code>ctsfix3</code>）上，天线复检先报 <b>39 net / 49 pin</b>，随后在同一份布线后 ODB 上三轮压到 <b>0 / 0</b>（另起进程独立复检仍 0/0），补 fill 重出 GDS（<b>40,666,588 B</b>），在这份 GDS 上同版复跑：<b>DRC 218 类 0 条、密度六层 0 条、LVS <code>Circuits match uniquely</code>、双路径 GDS XOR <code>TOTAL_DIFF=0</code></b>；<b>该版随后又补跑了 RCX 寄生提取 + 三 corner STA（setup +11.97 / +9.17 / +0.45、hold +0.40 / +0.76 / +1.59，TNS 0.00）与 DRV，按 PDK 库自身口径 0 条、按自加严 0.75 / 10 口径未清（275 条 slew、61 条 fanout），仍不叫签核</b></td></tr>
       <tr><td>第 7 代做了什么</td><td>换掉消息调度结构（16 深循环窗口 → 移位寄存器），同 die 从 41.67 MHz 提到 <b>55.56 MHz（+33%）</b>，cells 反而从 12,288 降到 11,475</td></tr>
