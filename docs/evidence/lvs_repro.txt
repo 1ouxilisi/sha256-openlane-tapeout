@@ -141,3 +141,90 @@ netgen -batch lvs "<lay.spice sha256_axil>" "<net.spice sha256_axil>" sky130A_se
 /home/user/openlane-rootfs/tmp/n52/sp_re.tcl                       正解：不带 ext 参数，落盘
 /home/user/openlane-rootfs/tmp/repro/{ext.tcl,sp.tcl,run.sh}        复现脚本
 /home/user/openlane-rootfs/tmp/lvs_it2c/net.spice                 2,872,118 B  网表侧基准
+
+====================================================================
+七、2026-11-11 追加：第四节那两条未闭合，已闭合；并给出「卡住」的真病根
+====================================================================
+
+本节只追加，不改上文。第四节的第 1、2 项在这一节里被实测取代，
+旧判断（"带 diode 版尚未出结论"、"97 端口结论不能当判据"）按原文保留。
+
+--- 7.1 第四节第 1 项已闭合：带 diode 版在同口径下重跑，结论是不通过
+同一条命令、同一份基准 /tmp/lvs_it2c/net.spice、只换 GDS：
+  run_g5  eco_it2g.gds  22:08:44 起、22:10:11 止
+          layout_g5.spice  1,686,616 B  md5 0751c0c82e7e39007c97a33a84d9cbc2
+          （与历史 layout_it2g.spice 逐字节一致，说明抽取链这次是干净的）
+          lay_g5.spice     1,684,268 B
+          lvs_g5.out       402,582 B
+          Final result: Top level cell failed pin matching.
+          devices 15981 vs 15983、nets 15799 vs 15828、TOP_INST 16572
+  verdict  NOT-PASS（退出码 2）
+
+为什么是 pin matching 而不是器件/网对不上：
+  eco_it2g 顶层 .subckt 头行只有 VPWR、没有 VGND（eco_it2f 是 "VGND VPWR"），
+  与 nod 谱系 97 端口无 VGND 同一模式。VGND 在通过版网表里出现 17,395 次，
+  在二极管版只有 842 次（全在子单元引脚上）—— 顶层这一脚是丢的。
+  端口统计别用 awk NF 直接数：.subckt 头是 "+" 续行，必须拼接后再数。
+  prep_lay 在 g5 上数出 TOP_PORTS 93（不是 97），run_g4 按 97 跑就在 C 段
+  报 "port count 93 != expected 97" 直接 FAIL@C，用一个错的期望值换来一次假失败。
+
+没有定位的，明写：那 2 个器件 / 29 条网差额与"顶层丢 VGND"是不是同源，
+本轮没有追到证据，所以不写成同源。
+
+--- 7.2 第四节第 2 项的口径更新
+旧口径："带 diode 的最终候选版尚未出结论" -> 现在有结论：不通过，卡在顶层少一脚 VGND。
+旧口径里"天线仍按 16 条 / 20 脚记账"这一句不变，本轮没有重跑天线。
+
+--- 7.3 "magic 卡住"的真病根：cwd 里没有标准单元的 .ext 缓存
+先撤回一条旧判断：反复 kill 的那几次并不是挂死，而是在极慢推进 ——
+CPU TIME 6s -> 11s 持续上涨、RSS 恒 420 MB、无子进程、/proc/<pid>/io 的 rchar
+停在 44,246,538、vmstat r=0，日志停在 "Processing sha256_axil" 之后不是死锁，
+是前面那些 cell 还在等。
+病根：magic 顶层 extract 要逐个 cell 出 .ext，cwd 里找不到就现场重抽，
+148 个标准单元 × 每次几秒到几十秒 = 十几分钟到假死量级。
+三组对照（均在空目录里起跑）：
+  t8  只抽单个 sky130_fd_sc_hd__inv_1            -> 秒级完成
+  t9  连续抽 5 个 cell                            -> 全部完成（T9_DONE）
+  t6  先把 148 个 .ext 拷进 cwd、删掉 sha256_axil.ext 强制重抽顶层
+      -> 完整跑完（Total of 2 warnings. / ext2spice finished. / T6_DONE）
+         sha256_axil.ext 19,823,266 B
+         layout_t6.spice 1,686,735 B md5 09183c364b9f5e749c05cfb23a8e3333（与历史通过版逐字节相同）
+  t7  把 148 个 .ext 放另一个目录、两次 addpath 指过去、cwd 仍为空 -> 照样停住
+结论：修法是 cp 进 cwd，addpath 不能替代。
+（附带：t6 的 .ext md5 97846eb5… 与 /tmp/n52 的 31cd200c… 不同，但导出的 spice
+ 完全一致 —— .ext 的中间态不稳定，判据只认 spice。）
+
+--- 7.4 固化成一条命令：/home/user/repro3.sh（四段 + 阶段 0）
+阶段 0  缓存自建：cache.tcl / cache.sh 从 PDK 的 sky130_fd_sc_hd.gds 一次抽出 148 个 .ext
+        （实测 148 个 / 572,151 B / 收尾 CACHE_DONE）；缓存少于 100 个时自动重建。
+A 段    rm -rf 工作目录 -> cp 缓存 .ext 进 cwd -> 删 sha256_axil.ext/.mag
+        -> chroot 内 magic 跑 ext.tcl（drc off / tech load / addpath / gds read / load /
+        extract do local + no capacitance/coupling/resistance/adjust + extract unique + extract）
+        -> 打 PHASE_A extract_done，timeout 1800
+B 段    新会话 sp.tcl（ext2spice lvs + ext2spice -o $env(REPRO_SPICE)，不带 ext 名）
+        -> PHASE_B spice_done，timeout 900
+C 段    宿主 /opt/python3.12/bin/python3 prep_lay.py -i … -o … --expect-ports <PORTS>
+D 段    chroot 内 netgen -batch lvs；按 Final result 是否含 match uniquely 判 PASS/NOT-PASS
+        退出码 0 PASS / 2 NOT-PASS / 3 提取链失败 / 4 用法错
+D 段路径必须是 chroot 视角：第一次写宿主路径报
+  Error in SPICE file read: No file /home/user/openlane-rootfs/tmp/repro/run_f3/lay_f3.spice
+（run_f3：A/B/C 全过、D 假失败，此条留作反例）
+
+两条结论 run（同一条命令，只换参数）：
+  run_f4  21:58:00 起 / 21:58:01 A / 21:59:19 A done（sha256_axil.ext 19,823,266 B）
+          / 21:59:22 B done（layout_f4.spice 1,686,735 B md5 09183c36…）
+          C 段 TOP_PORTS 94 / TOP_INST 16552 / 21:59:28 Final result: Circuits match uniquely.
+          VERDICT: PASS  2026-11-10T21:59:28+08:00  gds=eco_it2f.gds  spice_md5=09183c36…
+          全程 88 秒；lay_f4.spice 1,684,381 B、lvs_f4.out 288,455 B
+          日志 phaseA 22,636 B / phaseB 1,177 B / phaseC 164 B / phaseD 178,616 B
+  run_g5  VERDICT: NOT-PASS（数字见 7.1）
+
+--- 7.5 脚本已入库，位置与「站内打不开」这件事
+仓库 lvs-repro/ 七个文件：repro3.sh、ext.tcl、sp.tcl、build_cache.tcl、cache.sh、
+masters.txt（148 行）、README.md（用法 / 四条实跑 / 三条别改的地方）。
+build_cache.tcl 已在 vm 上真跑过 5 个单元验证（BUILD_CACHE done n=5）。
+GitHub Pages 只发布 docs/：仓库根的 lvs-repro/ 与 REPRODUCE.md 在站内是 404
+（实测三次 NotFound），所以页面里的链接一律指向 GitHub 原文件，不复制一份进 docs
+——两份会各自漂移。本文与 onecmd_repro.txt 的分工：
+  lvs_repro.txt      抽取复现性 + 调用方式 + 卡住的病根（本文）
+  onecmd_repro.txt  一条命令的完整流程、产物指纹、两版结论（详细版）
