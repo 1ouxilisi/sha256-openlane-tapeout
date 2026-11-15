@@ -6,7 +6,7 @@
 
 > **设计说明（RTL 架构）**：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) —— v1–v6 的三级流水与 W 窗口架构、v7 的移位寄存器消息调度与 AXI4-Lite 寄存器映射、频率的三种口径怎么读，以及明确列出的已知限制。
 
-> **卡在 LVS / DRC / STA 上？** 直接看 [排障索引](#排障索引)：九条症状、根因与修法，全部来自这个项目真实的失败记录。
+> **卡在 LVS / DRC / STA 上？** 直接看 [排障索引](#排障索引)：十条症状、根因与修法，全部来自这个项目真实的失败记录。
 
 
 [![verify](https://github.com/1ouxilisi/sha256-openlane-tapeout/actions/workflows/verify.yml/badge.svg)](https://github.com/1ouxilisi/sha256-openlane-tapeout/actions/workflows/verify.yml)
@@ -277,9 +277,17 @@ openlane-chips/
 - **修法**：流程内关掉 KLayout（`RUN_KLAYOUT=0` / `RUN_KLAYOUT_DRC=0`），DRC 与 stream_out 在宿主侧单独跑；或者 bind mount 一个可用的 `/proc`。
 - **证据**：`docs/evidence/axil_spi_flow.txt`
 
+### 10. pad 控制脚 tie 打上去，DRC 从 514 条涨到 1582 条
+
+- **症状**：给 100 pad 的静态脚挂 tie stub 后，`m2.2`（最小 met2 间距 0.14）从 14 条涨到 1082 条，条目都是 0.14×0.14 的小 notch；顶层出现 `441.30,2222.00..441.62,2409.78` 这种 187.8 µm 的长条。
+- **真根因**：不是 DRC 参数，是**方向判错**。stub 的方向用 `trans*(0,-10)` 与「pad 中心指向 die 中心」求点积来判，W/E 侧 pad 旋转 90° 后点积判反，stub 从 pin 反向长进 pad 体内、穿过内壁金属，notch 是穿过时留下的。同类错误还有两种写法：用 pin 中心减 pad 中心选主轴，会被 `ENABLE_VDDIO` 那根 184.775 µm 长的 pin 带偏成 184 µm 横条；用 bbox 中心判南北，会把旋转后 y 跨度只有 81 µm 的 E/W pad 误判成南侧，只出 304 条 stub（覆盖率 24%）。
+- **修法**：方向只在 die 坐标里判——取 pad bbox 到 die 四条边的最小间距决定它在哪一边，再沿该边法向从 pin 的边缘接到环线；stub 宽度等于 pin 原始截面宽、不压入、只贴边。终版 1248 条 stub（96 个 gpiov2 各 13 个静态脚）加 met3 内缩 3 µm、met2 内缩 10 µm 两条环。
+- **验收判据**：不要看总数降了多少，要看**与无 tie 版逐字节相同**——两份报告同 202,598 B、同 md5 `9321c30c…`、逐类一致，514 条全部来自 pad 单元自身，tie 零增量才算收口。
+- **证据**：`docs/evidence/padring_tie_v5.txt`
+
 ---
 
-这九条的共性只有一句：**先证明"数字对不对得上"，再找"哪一步引入的"，最后用一次对照实验收口。** 大部分时间浪费在跳过第一步。
+这十条的共性只有一句：**先证明"数字对不对得上"，再找"哪一步引入的"，最后用一次对照实验收口。** 大部分时间浪费在跳过第一步。
 
 ## 复现方式
 

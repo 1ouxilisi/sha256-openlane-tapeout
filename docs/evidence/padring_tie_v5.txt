@@ -1,0 +1,71 @@
+pad ring tie v5 —— 100 pad / 96 gpiov2 静态脚 tie 收口记录
+2026-11-15   sky130A / KLayout 0.29.1 / dbu = 0.001 µm
+
+一、结论
+1. 结构：96 个 gpiov2 各 13 个 met2/met3 静态脚，共 1248 条 stub；met3 环内缩 3 µm（北 2222、南 203、东 2221.6、西 203），
+   met2 环内缩 10 µm（北 2215、南 210、东 2214.6、西 210），环宽 0.4 µm。stub 保持 pin 原始截面宽 0.23–0.33 µm，
+   不压入 pad、只贴边。
+2. DRC：tie 版 514 条，与无 tie 版 514 条的报告**逐字节相同**（两文件同为 202,598 B，
+   md5 均为 9321c30c147e3709dea0d0cd20ea9a04）。逐类：m1.3ab 228 / m2.3ab 181 / m3.3ab 65 / m4.5ab 21 / m2.2 14 / m1.2 5。
+   即 1248 条 stub 加双环没有引入任何一条新违例。
+3. 这 514 条全部来自 pad 单元自身：单个 PAD_gpiov2 单独跑全规则 224 条；3 个 pad 按 81 µm 横排仍 224 条
+   （排布不新增违例）；100 pad 全片 514 条。tie 只是把 static pin 接到环，不碰 pad 内部几何。
+4. 口径修订：此前记录的 610 条来自另一次运行（含 96 条 m2_OFFGRID 类别），本次 deck
+   （/pdk/sky130A/libs.tech/klayout/drc/sky130A.lydrc）不产出 m2_OFFGRID，无 tie 与 tie 都在 514。对外统一写 514。
+
+二、v4 的失败真实根因（更正上一版归因）
+上一版把 v4 的 1082 条 m2.2 解释为「stub 压入 pad 造成的跨 cell 邻近违例」，并进一步推断
+「96 路 OUT 短 VSSIO、96 路 IN 短 VDDIO、电气失效」。几何复算后更正：
+- v4 的 tie 清单本来只有 HI（ENABLE_VDDIO）加 LO（14 个静态低脚），从未包含 IN / OUT，
+  所以「信号脚短路」这个说法不成立，撤回。
+- 真相：v4 判向用 trans*(0,-10) 与「pad 中心指向 die 中心」求点积，W / E 侧旋转后判反，
+  stub 从 pin 反向长进 pad 体内。例：441.30,2222.00..441.62,2409.78 长 187.78 µm（应只有 3 µm），
+  穿过 pad 内壁金属造出大量 0.14×0.14 级 notch，这就是 m2.2 1082 条的来源。
+- met2 合并多边形 bbox 122.455..2302.545、面积 13,946 µm²（v4 为 14,026）是 tie 环把 96 个 pad
+  的静态脚并成一个网的必然结果：pin 连到 pad 单元内部金属，合并后 bbox 覆盖 pad 体。
+  这是设计意图（同一条 VDDIO / VSSIO 总线），不是短路。判「是否并网」不能只看合并多边形面积，
+  要看合并的是哪些脚。
+
+三、v5 的四个版本迭代（每一步都由几何检查定位）
+1. 判向 1.0：沿用 v4 的 mirror 点积。N 侧 stub 长到 2409（pad 体内）。废弃。
+2. 判向 2.0：按「pin 中心减 pad 中心」选主轴。ENABLE_VDDIO 的 pin 是 met3 (78.58,0)–(78.91,184.775)，
+   长 184.775 µm 沿 pad 内壁，被判成横向主伸轴，生成 15.22,2222.00..200.00,2223.62 这种 184 µm 横条。废弃。
+3. 判边 3.0：改按 pad bbox 中心 cy / cx 判 N / S / W / E。E / W pad 旋转 90° 后 bbox 的 y 跨度只有 81 µm
+   （padmap 里 E 侧 x 2225–2425、y 200–281，cy ≈ 240），落进 S 的判据，结果只有 N 侧出 stub，
+   304 条、覆盖率 24%。废弃。
+4. 判边 4.0（采用）：按 pad bbox 到 die 四条边的最小间距判方位，min(x0, y0, 2425-x1, 2425-y1)，
+   得到 N / S / W / E 各 299 / 299 / 325 / 325 条，合计 1248。
+   最后一个违例来源：南侧 met3 环误画在 y 200..200.4（压在 pad 内缘），改到 203..203.4 后，
+   DRC 从 560 回到 514。
+
+四、v1 → v5 的 DRC 轨迹（同一套 GDS 生成链）
+v1 3606（stub 加 0.06、环跨度越界、未处理 mirror）
+v2 1099（m3.2 295：ENABLE_VDDIO 78.58–78.91 与 IN 79.24–79.57 只隔 0.33，加宽后 0.27 < 0.3）
+v3 2247（两侧各内缩 0.05，掉到 m2.1 / m3.1 最小线宽下）
+v4 1582（本次按同一 deck 重算；旧记录 1678 含另一口径的 96 条 m2_OFFGRID）
+v5 570（304 条 stub，判边 3.0）
+v5 最终 514（1248 条 stub，判边 4.0 加南环内缩修正）
+注：v1–v3 的数字来自早期运行，违例类别集合与本次 deck 不完全一致（含 m2_OFFGRID 等），
+只能做趋势对比；v4 / v5 为本次同 deck 重算，可逐类对比。
+
+五、证明什么 / 不证明什么
+证明：
+- 100 pad、81 µm pitch 的 padframe 在「pad 单元既有 514 条违例」之外，可以零代价挂上 1248 条静态脚 tie 与双环，
+  不改动任何 pad 几何。
+- tie 方向必须用 die 坐标按边判定，不能靠 mirror / 旋转启发式。pad 单元 pin 长度差异极大
+  （1.185 µm 到 184.775 µm），按 pin 形状猜主轴必错。
+不证明：
+- 不证明 padframe 可用：电源环（VDDIO / VSSIO / VCCD / VSSD / VDDA / VSSA 六网）未做，4 个电源 pad
+  只覆盖部分电源球；96 路信号尚未接到 core（640 × 640）。
+- 不证明 tie 的电气正确性：pad 级 LVS 判不了，netgen sky130A_setup.tcl 第 378 行 devices
+  只有 sky130_fd_io__condiode 与 sky130_fd_io__tap_1，只能用几何与网表人工核对。
+- 514 条违例本身仍未收口（m1.3ab 228 / m2.3ab 181 / m3.3ab 65 等），来源是 pad 单元内部。
+
+六、复现
+1. 生成：/opt/python3.12/bin/python3 add_ties5.py，输入 padring100.gds，输出 padring100_tied5.gds，打印 stubs 1248。
+2. 判并网与朝向：/opt/python3.12/bin/python3 加 klayout.db，对顶层 begin_shapes_rec 取 Region.merged()，
+   看最大多边形 bbox 与面积；同时列顶层长条 shape 的 bbox，检查每条 stub 是否朝 die 内、长度是否等于环内缩量。
+3. DRC：cp 进 openlane-rootfs/tmp/padring/ 后
+   chmod +x drc_tied5.sh; sudo -n /usr/sbin/chroot <rootfs> /tmp/padring/drc_tied5.sh
+   deck 为 /pdk/sky130A/libs.tech/klayout/drc/sky130A.lydrc，实测约 90–100 s 一次。
+4. 判「零增量」：diff 两份报告，逐字节相同才算 tie 没引入新违例；只比总数会被类别口径差异骗。
