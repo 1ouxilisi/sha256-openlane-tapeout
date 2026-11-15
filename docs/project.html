@@ -403,7 +403,7 @@ footer p{margin:6px 0}
 </section>
 <section>
   <div class="wrap">
-    <h2>core 电源环：把 VPWR / VGND 从 pad 接进 core（chip13 → chip14）</h2>
+    <h2>core 电源环：把 VPWR / VGND 从 pad 接进 core（chip13 → chip14 → chip16）</h2>
     <p class="sub">上一节 chip6 的结尾写着「电源环六网仍未做，core 的 VPWR/VGND 到电源 pad 没接」。那是 chip6 当时的状态，旧文不改；这一节补上后面两版实际做的事——先接上，再把 8 条 stripe 全接，然后把 flat DRC 重新跑一遍看有没有多出一条。</p>
 
     <p><b>先看环本身。</b>100 个 pad 里，W 边和 E 边共 50 个位置全是 <code>PAD_gpiov2</code> 信号 pad，一个电源 pad 都没有；电源只在 N/S 两边：<code>PAD_pwr_hv</code>（rot0，x200–275，y2225–2425）、<code>PAD_gnd_hv</code>（rot0，x281–356）、<code>PAD_gnd_lv</code>（rot2，x2069–2144，y0–198）、<code>PAD_pwr_lv</code>（rot2，x2150–2225，y0–198）。所以「四边都补电源」这个方向不成立，能做的是「core 的 8 条 stripe 全接 + N/S 各做一组出线」。core 侧只有两个电源网：<code>VPWR</code>（1.8 V，对应 pad 的 VCCD / VCCHIB）与 <code>VGND</code>（地，对应 VSSD / VSSA）；<code>VDDIO</code> / <code>VSSIO</code> 是 3.3 V IO 电源，接进 core 就是过压，不允许。</p>
@@ -437,8 +437,28 @@ footer p{margin:6px 0}
       <img src="images/sha256_chip14_coreleft.png" alt="core 左侧 4 组 VPWR / VGND 与环的连接" loading="lazy">
       <figcaption>core 左侧：VPWR 走 met4 横条 + via4 上接 stripe，VGND 走 met5 横条同层直并</figcaption>
     </figure>
+    <figure>
+      <img src="images/sha256_chip16_ring.png" alt="chip16 全 die：VPWR met4 环 2.9、VGND met5 环 3.2" loading="lazy">
+      <figcaption>chip16 全 die：环加宽到 met4 2.9 / met5 3.2，拓扑与 chip14 相同 · <code>sha256_chip16.gds</code> 88,236,352 B · flat DRC 22019</figcaption>
+    </figure>
+    <figure>
+      <img src="images/sha256_chip16_sexit.png" alt="chip16 S 边出线：环加宽后竖条端点跟着外沿走" loading="lazy">
+      <figcaption>S 边出线（环加宽版）：met5 竖条端点跟着环外沿同步外扩，仍与环相并</figcaption>
+    </figure>
+    <figure>
+      <img src="images/sha256_chip16_coreleft.png" alt="chip16 core 左侧 4 组连接" loading="lazy">
+      <figcaption>core 左侧（环 2.9/3.2）：VPWR 横条起点随 met4 环内沿外扩，VGND 横条随 met5 环内沿外扩</figcaption>
+    </figure>
 
-    <p class="sub" style="margin-top:22px">证据：<a href="evidence/core_power_ring14.txt">core_power_ring14.txt</a>（增量 14 图形 / 几何自检 / 并查集 / DRC 22019 / 电阻口径 / 复现指针 / 仍未做），前一版 <a href="evidence/core_power_ring13.txt">core_power_ring13.txt</a>。脚本 <code>tools/padring/build_chip14.py</code>、<code>check_chip14.py</code>、<code>verify_chip14.py</code>、<code>render_chip14.py</code>。两个 GDS 各 88 MB，没有塞进仓库。</p>
+    <p><b>再把环加宽试一次，撞到一个硬顶（chip15 / chip16）。</b>加宽环是唯一不要 IO 代价的杠杆，所以直接问「能加多宽」。两版只差一个数：chip15 把两条环都抬到 3.2 µm，flat DRC 跑出 <b>22023</b>，比 chip14 多 4 条，全部是 <code>m4.5ab</code>；chip16 把 met4 退回 2.9、met5 保持 3.2，跑出 <b>22019</b>，与 chip14 逐条相同（新增条目 0、消失条目 0）。</p>
+
+    <p>那 4 条多在哪：坐标全在 <code>x = 863.6</code>，也就是 3.2 宽环的内沿，y 区间正好罩住 4 条 VPWR 横条的上下沿与外沿 —— <code>(863.6, 918.83–921.23)</code>、<code>(1072.01–1074.41)</code>、<code>(1225.19–1227.59)</code>、<code>(1378.37–1380.77)</code>。规则出处是 <code>sky130A_flat.lydrc</code> 第 630 行的 <code>huge_m4 = m4.sized(-1.5).sized(1.5)</code>：宽 &gt; 3 µm 的 met4 与邻居要 0.4 µm。环宽 2.9 时 <code>sized(-1.5)</code> 之后为空集，整条规则不触发。met5 侧没有同类规则（第 661 / 663 行宽 1.6、间距 1.6，第 644 行 max width 10.0），所以 VGND 环 3.2 是零代价 —— chip15 的 4 条里一条 m5 类都没有，这一点被实测确认。</p>
+
+    <p><b>换来的方数。</b>环边 VPWR 701 µm、VGND 685 µm；单入口到最远端要绕 1402 µm：宽 1.6 是 876 方，2.9 是 483 方，3.2 是 438 方；环到 stripe 的接头仍只有 6.75 / 4.7 方，差 60–130 倍，可以忽略。所以这一版把「环上绕行」压到原来的 0.55 倍左右，代价是 0 条新 DRC、0 个 IO。连通性照旧用并查集 12 个探针验：VPWR 侧 1 个分量、VGND 侧 1 个分量、两网隔离。</p>
+
+    <p><b>仍然不给电阻和压降。</b>加宽只说明方数变少，不说明压降降到多少 —— <code>RESOVER</code> 表仍只有一列量纲不明的数，<code>metrics.csv</code> 的功耗字段仍只有约 0.0095 µW（≈5 nA @1.8 V，默认活动率估计），拿它定容就是编。零新增 DRC 也不写成 signoff。</p>
+
+    <p class="sub" style="margin-top:22px">证据：<a href="evidence/core_power_ring16.txt">core_power_ring16.txt</a>（chip15/16 两版环宽对照、4 条 m4.5ab 坐标、deck 规则出处、方数表、并查集、复现指针），前一版 <a href="evidence/core_power_ring14.txt">core_power_ring14.txt</a>（增量 14 图形 / DRC 22019 / 电阻口径 / 仍未做），再前一版 <a href="evidence/core_power_ring13.txt">core_power_ring13.txt</a>。脚本 <code>tools/padring/build_chip15.py</code>、<code>build_chip16.py</code>、<code>verify_chip16.py</code>、<code>render_chip16.py</code>（前一版另有 <code>build_chip14.py</code> / <code>verify_chip14.py</code> / <code>render_chip14.py</code>）。GDS 各 88 MB，没有塞进仓库，走 Release 资产。</p>
   </div>
 </section>
 <section>
@@ -446,7 +466,7 @@ footer p{margin:6px 0}
     <h2>边界：这一页不写的东西</h2>
     <div class="note">
       <p><b>不是量产芯片。</b>作品集与方法论验证，商用价值为零 —— SHA-256 加速器本身没有稀缺性。</p>
-      <p><b>W/E 边补电源 pad 的账单独算过，结论不塞在这一页。</b>100 个 pad 里 W/E 各 25 个全是 <code>PAD_gpiov2</code>，电源 pad 只有 4 个（N 边一对 3.3V、S 边一对 1.8V）。「50 个 IO 电源悬空」这个说法不成立：它们挂在侧总线上，由 1440 条缝桥分配，缺的是冗余注入点而不是连接。按方数量，环上最远绕行 876 方，环→stripe 接头只有约 7 方；加宽环（1.6 → 3.2）和加 W 边入口都约是 2 倍改善，前者不要 IO 代价、后者要拿信号换。取舍与代价清单见 <a href="evidence/w_e_power_pad_tradeoff.txt">evidence/w_e_power_pad_tradeoff.txt</a>。</p>
+      <p><b>W/E 边补电源 pad 的账单独算过，结论不塞在这一页。</b>100 个 pad 里 W/E 各 25 个全是 <code>PAD_gpiov2</code>，电源 pad 只有 4 个（N 边一对 3.3V、S 边一对 1.8V）。「50 个 IO 电源悬空」这个说法不成立：它们挂在侧总线上，由 1440 条缝桥分配，缺的是冗余注入点而不是连接。按方数量，环上最远绕行 876 方，环→stripe 接头只有约 7 方；加宽环和加 W 边入口都约是 2 倍改善，前者不要 IO 代价、后者要拿信号换。加宽的天花板已经实测：met4 超 3.0 µm 撞 <code>m4.5ab</code>（3.2 时多 4 条），所以 VPWR 停在 2.9、VGND（met5 无同类规则）可以到 3.2，见 <a href="evidence/core_power_ring16.txt">core_power_ring16.txt</a>。取舍与代价清单见 <a href="evidence/w_e_power_pad_tradeoff.txt">evidence/w_e_power_pad_tradeoff.txt</a>。</p>
       <p><b>v1–v4 时序确实没收敛。</b>SPEF 重签核后 setup 余量全负（v4 nom -7.63 ns），按签核标准不合格。不写这一点，就是把估算当签核。</p>
       <p><b>v5 的通过靠的是降低频率，不是提高设计能力。</b>38.46 MHz 不代表性能强，它是在该工艺下"真能签核"的工作点。</p>
       <p><b>22.75 ns 是"v6 那套 RTL"的边界，不是工艺边界。</b>v7 换掉消息调度后，18 ns 三 corner 仍全正余量（最紧 +0.56 ns）。把架构上限说成工艺上限，是这个项目前六代差点犯的错。</p>
