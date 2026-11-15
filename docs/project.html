@@ -458,7 +458,7 @@ footer p{margin:6px 0}
 
     <p><b>仍然不给电阻和压降。</b>加宽只说明方数变少，不说明压降降到多少 —— <code>RESOVER</code> 表仍只有一列量纲不明的数，<code>metrics.csv</code> 的功耗字段仍只有约 0.0095 µW（≈5 nA @1.8 V，默认活动率估计），拿它定容就是编。零新增 DRC 也不写成 signoff。</p>
 
-    <p class="sub" style="margin-top:22px">证据：<a href="evidence/core_power_ring16.txt">core_power_ring16.txt</a>（chip15/16 两版环宽对照、4 条 m4.5ab 坐标、deck 规则出处、方数表、并查集、复现指针），前一版 <a href="evidence/core_power_ring14.txt">core_power_ring14.txt</a>（增量 14 图形 / DRC 22019 / 电阻口径 / 仍未做），再前一版 <a href="evidence/core_power_ring13.txt">core_power_ring13.txt</a>。脚本 <code>tools/padring/build_chip15.py</code>、<code>build_chip16.py</code>、<code>verify_chip16.py</code>、<code>render_chip16.py</code>（前一版另有 <code>build_chip14.py</code> / <code>verify_chip14.py</code> / <code>render_chip14.py</code>）。GDS 各 88 MB，没有塞进仓库，走 Release 资产。</p>
+    <p class="sub" style="margin-top:22px">证据：<a href="evidence/core_power_ring16.txt">core_power_ring16.txt</a>（chip15/16 两版环宽对照、4 条 m4.5ab 坐标、deck 规则出处、方数表、并查集、复现指针），前一版 <a href="evidence/core_power_ring14.txt">core_power_ring14.txt</a>（增量 14 图形 / DRC 22019 / 电阻口径 / 仍未做），再前一版 <a href="evidence/core_power_ring13.txt">core_power_ring13.txt</a>。脚本 <code>tools/padring/build_chip15.py</code>、<code>build_chip16.py</code>、<code>verify_chip16.py</code>、<code>render_chip16.py</code>（前一版另有 <code>build_chip14.py</code> / <code>verify_chip14.py</code> / <code>render_chip14.py</code>）。GDS 各 88 MB，不进仓库，走 Release 资产：<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip16-padring">chip16-padring</a>（<code>sha256_chip16.gds</code> 88,236,352 B）、<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip14-padring">chip14-padring</a>（chip14 / chip13 两个 GDS）。</p>
   </div>
 </section>
 <section>

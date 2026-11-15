@@ -482,6 +482,7 @@ bash scripts/synth_check.sh       # 裸 yosys + sky130 liberty，输出 cells �
 - **chip16（met4 2.9 / met5 3.2）**：flat DRC **22019**，与 chip14 逐条相同（按 category + 边坐标做集合差：新增 0、消失 0），用时 2281.610 s。两版都是 1470 个新图形（met4 1448 / met5 12 / via4 10）。
 - **连通性**：并查集 12 个探针 —— VPWR 侧 1 个分量（4 条 stripe + 4 段环 + N/S 两个 VCCD pin），VGND 侧 1 个分量（同构 4 + 4 + 两个 VSSD pin），两网隔离。
 - **方数**：环边 VPWR 701 µm / VGND 685 µm；单入口到最远端 1402 µm → 宽 1.6 = 876 方，2.9 = 483 方，3.2 = 438 方；环→stripe 接头 6.75 / 4.7 方，可忽略。
+- **GDS**：不进仓库，走 Release —— [chip16-padring](https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip16-padring)（`sha256_chip16.gds` 88,236,352 B）、[chip14-padring](https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip14-padring)（chip14 / chip13）。
 - **边界**：只给几何，不给电阻与压降（`RESOVER` 表量纲不明、`metrics.csv` 功耗字段约 0.0095 µW ≈ 5 nA 不可定容）；22019 是存量，零新增不等于 signoff；pad 级 LVS 在本环境仍判不了。
 
 
