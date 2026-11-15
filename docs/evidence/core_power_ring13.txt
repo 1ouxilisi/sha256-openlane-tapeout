@@ -1,0 +1,71 @@
+CORE POWER RING — VPWR/VGND 双环接入证据（sha256_chip13）
+============================================================
+日期：2026-11-15
+路线：A（先把 core 电源环打通，区别于 W/E 边补电源 pad 的 B 路线）
+
+1. 电压映射（决定哪些 pad 电源能进 core）
+-----------------------------------------
+core 是 1.8V 数字核心，其内部 PDN 只有两个 net：
+  VPWR（1.8V 核心电源） <- 对应 pad 侧 VCCD / VCCHIB（1.8V）
+  VGND（核心地）        <- 对应 pad 侧 VSSD / VSSA（地）
+VDDIO / VSSIO 是 3.3V IO 电源，禁止接入 core（过压烧毁）。
+
+2. core PDN 几何（从 ctsfix3 DEF SPECIALNETS 解析，dbu=0.001）
+--------------------------------------------------------------
+DEF：/home/user/openlane-rootfs/designs/sha256_v7b/runs/ctsfix3/results/final/def/sha256_axil.def
+core 内 met5 横向 stripe（x5.28–634.58，宽 1.6），各 4 条：
+  VPWR y = 27.53 / 180.71 / 333.89 / 487.07（local）
+  VGND y = 30.83 / 184.01 / 337.19 / 490.37（local）
+两网交替，纵向间隔 3.3。实例偏移 OFF=892.5，故全局：
+  VPWR 最低 stripe 中心 y=920.03；VGND 最低 y=923.33。
+解析结果存 /tmp/core_pdn_met5.json（脚本逻辑内联，可从 DEF 重跑）。
+
+3. 实现的图形（build_chip13.py，共新增 1456 个）
+------------------------------------------------
+met4 1445 = 1440 缝桥接 + VPWR ring 4 边 + core VPWR 横条 1
+met5    7 = VGND ring 4 边 + core VGND 横条 1 + N 边出线竖条 2
+via4    4 = core VPWR 1 + VCCD 出线 2（pin + ring）+ VSSD 出线 1（pin）
+  VPWR ring（met4）：中心线 x/y 862 与 1563，线宽 1.6
+  VGND ring（met5）：内缩 8，中心线 x/y 870 与 1555，线宽 1.6
+  N 边出线（中部 gpiov2，x 原点 1172）：
+    VCCD pin(met4) -> via4 -> met5 竖条 -> via4 -> VPWR ring 顶(y1563)
+    VSSD pin(met4) -> via4 -> met5 竖条 -> VGND 顶(y1555，同层免 via)
+  core 左侧连接：
+    VPWR met4 横条(862–900) + via4(898.6…) 上接 core VPWR met5 stripe
+    VGND met5 横条(870–900) 同层接 core VGND stripe
+设计要点：met5 竖条在每个 via 纵向两端外伸 0.35、横向包 0.4，
+满足 m5 包 via4 0.31；via 0.8 完全落在对侧 met4 pin/ring 内（包 >=0.19）。
+
+4. flat DRC：TOTAL 22019，零新增
+--------------------------------
+报告：/home/user/openlane-rootfs/tmp/padring/drc_chip13_flat.txt
+对比含 core 基线 chip6（22019），分类逐项相同：
+  m1.3ab 8924 / m3.3ab 6173 / m2.3ab 4469 / m4.5ab 1968
+  m2.2 242 / m1.2 147 / m2_OFFGRID 96
+Total elapsed 2279.550s（flat deck，非 deep；deep 模式不可用）。
+注：deck L430（此前 chip12 崩溃点）本版正常通过，未复现崩溃。
+
+5. 端到端连通性 + 无短路（并查集，硬证据）
+------------------------------------------
+对 clip 区域（x855–1580, y855–2275）merge 后的 met4/met5 polygon，
+经 via4 建立跨层连接、同层相交合并，结果：
+  VPWR：VCCD pad pin -> core VPWR stripe 同连通分量 = True
+  VGND：VSSD pad pin -> core VGND stripe 同连通分量 = True
+  VPWR 与 VGND 分量隔离（无短路）= True
+
+6. 复现指针
+-----------
+  重建：/opt/python3.12/bin/python3 build_chip13.py
+  （依赖 /tmp/pwr_bridges.json；丢失时先 parse_pwr_pins.py 再 probe_bus2.py）
+  渲染：/opt/python3.12/bin/python3 render_chip13.py
+  图：sha256_chip13_ring.png（全 die）、sha256_chip13_detail.png（环+出线）
+  GDS：/home/user/padring/sha256_chip13.gds（88,235,456 B，含 core）
+
+7. 剩余缺口（本版为最小可验证闭环，尚未补全）
+---------------------------------------------
+- 仅 1 个 gpiov2 出线、core 仅各接 1 条 stripe；生产版需对四边
+  补多个出线点、core 各 stripe 全接（同算法复制，坐标已验证可扩展）。
+- 缝内六网合并（chip12 那 10 条 met4 竖条）本版已移除：它在
+  m4.5ab 产生 +8，且依赖用户尚未确认的电源域合并口径，单独处理。
+- W/E 边无电源 pad（结构性缺口，B 路线内容，未决）。
+- pad 级 LVS 工具不可用（netgen 限制），连通性以几何并查集替代。

@@ -293,9 +293,20 @@ openlane-chips/
 - **验收判据**：deep 模式对环缝碎片化版图跑 57 分钟不收敛，弃用；用 flat 模式与独立 padring 基线做差，从 chip1 的 +345 一路压到 chip6，最终两版 TOTAL 同为 22019、七项逐类差全为 0，接线零新增才算收口。
 - **证据**：`docs/evidence/chip6_routing_drc.txt`，渲染 `docs/images/sha256_chip6_layout.png`
 
+### 12. core 电源环从 pad 接进 core：chip13 先接上，chip14 全接（DRC 零新增）
+
+- **症状**：96 路信号接完之后，整颗芯片还是「没插电」的状态 —— core 的 VPWR / VGND 到 pad 侧电源一点没接。
+- **先证伪一个方向**：「四边都补电源 pad」不成立 —— 100 个 pad 里 W/E 两边 50 个位置全是 `PAD_gpiov2` 信号 pad，电源 pad 只有 N/S 各 2 个（`PAD_pwr_hv` / `PAD_gnd_hv` rot0，`PAD_gnd_lv` / `PAD_pwr_lv` rot2）。可行的是「core 的 8 条 stripe 全接 + N/S 各一组出线」。
+- **电压映射是硬约束**：core 只有 VPWR（1.8 V，对应 pad 的 VCCD / VCCHIB）与 VGND（对应 VSSD / VSSA）；VDDIO / VSSIO 是 3.3 V IO 电源，接进 core 就是过压。
+- **chip13（最小闭环）**：新增 1456 个图形 —— met4 1445（1440 条 pad 缝桥 + VPWR 环 4 边 + core VPWR 横条 1）、met5 7（VGND 环 4 边 + core VGND 横条 1 + N 边出线 2）、via4 4。VPWR 环走 met4（中心线 862 / 1563，宽 1.6），VGND 环走 met5（内缩 8，中心线 870 / 1555）。只接 core 各自最低 1 条 stripe、只有 N 边 1 组出线。
+- **chip14（全接 + S 边镜像）**：只加 14 个图形。① core 余下 6 条 stripe 全接：VPWR 3 条 met4 横条 x862–905 + via4（y 中心 1073.21 / 1226.39 / 1379.57）；VGND 3 条 met5 横条 x870–900（同层直并 core stripe 左端 897.78，免 via）。② S 边补一组出线与 N 边镜像：VCCD 右 pin → via4 → met5 竖条（1549.6–1551.2，187.6–862.75）→ via4 → VPWR 环底；VSSD 左 pin → via4 → met5 竖条（1509.6–1511.2，155.1–870.0）→ VGND 环底（同层相并）。VSSD 用左 pin 是因为右 pin x1563.0–1576.9 落在 VGND 环底 x 范围（…1555.8）之外，接不上。
+- **两件事分开证**：几何用并查集 —— clip 区 merge met4/met5、via4 中心点跨层，VPWR 分量数 1（4 stripe + N/S 两个 VCCD pin）、VGND 分量数 1、两网交集为空；版图用 flat DRC —— chip14 跑 2296.890 s，TOTAL 22019，七类与 chip13 逐项 diff **完全相同**，零新增。
+- **不写电阻**：出线宽 1.6 µm 已是 met5 最小宽度，长约 675 µm、约 422 方；PDK 的 `Metal 4/5 RESOVER` 表那列 `0.000156667` 量纲不明，不据此算电阻与压降。定性只说「拓扑闭环 + 几何合法」，不冒充产品级 PDN。
+- **证据**：`docs/evidence/core_power_ring14.txt`、`docs/evidence/core_power_ring13.txt`；渲染 `docs/images/sha256_chip14_ring.png`、`sha256_chip14_sexit.png`、`sha256_chip14_coreleft.png`；脚本 `tools/padring/`（两个 GDS 各 88 MB，未进仓库）。
+
 ---
 
-这十一条的共性只有一句：**先证明"数字对不对得上"，再找"哪一步引入的"，最后用一次对照实验收口。** 大部分时间浪费在跳过第一步。
+这十二条的共性只有一句：**先证明"数字对不对得上"，再找"哪一步引入的"，最后用一次对照实验收口。** 大部分时间浪费在跳过第一步。
 
 ## 复现方式
 
@@ -455,7 +466,7 @@ bash scripts/synth_check.sh       # 裸 yosys + sky130 liberty，输出 cells �
 
 ## 需要帮助
 
-这个仓库里的十条排障记录，是能公开的部分。如果你正卡在具体的一步上：
+这个仓库里的十二条排障记录，是能公开的部分。如果你正卡在具体的一步上：
 
 - **免费**：开一个 Issue，标题带 `[debug]`，贴三样东西——你跑的命令、报错原文（不要截图）、工具版本。信息够的话我会在 Issue 里回答。
 - **付费**：需要我直接上手排查（远程、按次）的，Issue 里标 `[paid]`，我会回复需要哪些材料和报价。
