@@ -403,7 +403,7 @@ footer p{margin:6px 0}
 </section>
 <section>
   <div class="wrap">
-    <h2>core 电源环：把 VPWR / VGND 从 pad 接进 core（chip13 → chip14 → chip16）</h2>
+    <h2>core 电源环：把 VPWR / VGND 从 pad 接进 core（chip13 → chip14 → chip16 → chip19）</h2>
     <p class="sub">上一节 chip6 的结尾写着「电源环六网仍未做，core 的 VPWR/VGND 到电源 pad 没接」。那是 chip6 当时的状态，旧文不改；这一节补上后面两版实际做的事——先接上，再把 8 条 stripe 全接，然后把 flat DRC 重新跑一遍看有没有多出一条。</p>
 
     <p><b>先看环本身。</b>100 个 pad 里，W 边和 E 边共 50 个位置全是 <code>PAD_gpiov2</code> 信号 pad，一个电源 pad 都没有；电源只在 N/S 两边：<code>PAD_pwr_hv</code>（rot0，x200–275，y2225–2425）、<code>PAD_gnd_hv</code>（rot0，x281–356）、<code>PAD_gnd_lv</code>（rot2，x2069–2144，y0–198）、<code>PAD_pwr_lv</code>（rot2，x2150–2225，y0–198）。所以「四边都补电源」这个方向不成立，能做的是「core 的 8 条 stripe 全接 + N/S 各做一组出线」。core 侧只有两个电源网：<code>VPWR</code>（1.8 V，对应 pad 的 VCCD / VCCHIB）与 <code>VGND</code>（地，对应 VSSD / VSSA）；<code>VDDIO</code> / <code>VSSIO</code> 是 3.3 V IO 电源，接进 core 就是过压，不允许。</p>
@@ -457,6 +457,37 @@ footer p{margin:6px 0}
     <p><b>换来的方数。</b>环边 VPWR 701 µm、VGND 685 µm；单入口到最远端要绕 1402 µm：宽 1.6 是 876 方，2.9 是 483 方，3.2 是 438 方；环到 stripe 的接头仍只有 6.75 / 4.7 方，差 60–130 倍，可以忽略。所以这一版把「环上绕行」压到原来的 0.55 倍左右，代价是 0 条新 DRC、0 个 IO。连通性照旧用并查集 12 个探针验：VPWR 侧 1 个分量、VGND 侧 1 个分量、两网隔离。</p>
 
     <p><b>仍然不给电阻和压降。</b>加宽只说明方数变少，不说明压降降到多少 —— <code>RESOVER</code> 表仍只有一列量纲不明的数，<code>metrics.csv</code> 的功耗字段仍只有约 0.0095 µW（≈5 nA @1.8 V，默认活动率估计），拿它定容就是编。零新增 DRC 也不写成 signoff。</p>
+
+
+    <p><b>接着问下一个问题：met5 环的真实上限在哪。</b>chip16 只把 VGND 环保守选到 3.2 µm。先通读 deck 纠正一个前提：本 <code>sky130A_flat.lydrc</code> 里 met5 只有第 661 行最小宽度 1.6、第 663 行最小间距 1.6、第 665/666 行 via4 包围，以及第 899 行 ongrid、第 900 行角度检查，<b>没有 met5 的 max width / slotting 规则</b>（第 644 行那条 10 µm 是 CU 分支里 met4 的 slotting 规则，不是 met5）。上一节正文里「第 644 行 max width 10.0」的说法在此更正。所以 met5 环的上限只能靠同层间距实测。</p>
+
+    <p>连续跑三版，每版新增图形数不变（1470：met4 1448 / met5 12 / via4 10），中心线、拓扑、1440 缝桥、8 stripe、N/S 出线全部不动，只改 <code>W5</code> 一个数：</p>
+    <p style="margin-top:10px"><b>chip17（W5 = 5.0）flat DRC 22019。</b>与 chip16 按 (category, edge-pair 坐标) 做 XML 集合差：条目都是 21995，新增 0、消失 0。y=1200 处切片实测 met5 环宽 5.000 µm，met4 环仍是 2.900 µm。</p>
+    <p style="margin-top:10px"><b>chip18（W5 = 10.0）flat DRC 22021，多出 2 条，全部是 <code>m5.2</code>。</b>坐标在 <code>x 1549.6–1551.757，y 863.5–865</code>：S 边 VCCD 出线的 met5 竖条属于 VPWR 侧，顶端停在 863.5；VGND 环下沿在 865.0，同层间距 1.5 µm &lt; 1.6，触发规则。失败是同层间距，不是宽度超限。N 边对应位置间距恰好 1.6，不触发。</p>
+    <p style="margin-top:10px"><b>chip19（W5 = 9.8）flat DRC 22019，边界确认。</b>间距公式 <code>gap = 870 − W5/2 − 863.5 = 6.5 − W5/2</code>，要求 gap ≥ 1.6 得 W5 ≤ 9.8。实测环下沿 865.1、gap 1.6，集合差对 chip17 新增 0、消失 0。9.8 通过、10.0 失败，本拓扑 met5 环宽实测上限 = 9.8 µm，限制来自 S 边出线竖条与 VGND 环的同层间距。</p>
+
+    <p><b>方数对照（单入口长 1402 µm，L/W）。</b>1.6 µm 是 876.25 方，2.9 是 483.45，3.2 是 438.13，5.0 是 280.40，9.8 是 143.06，10.0 是 140.20（但 DRC 不通过）。从 3.2 到 9.8 单入口方数再降 67%，从 1.6 基线累计降 84%，代价仍是 0 条新 DRC、0 个 IO。</p>
+
+    <p><b>边界照旧写清楚。</b>本 deck 没有宽金属 slotting 规则，这是 deck 覆盖缺口；真实流片依赖 slotting 时要补规则或换完整厂商 deck，本实验不宣称 signoff。要突破 9.8 必须改 S 边出线拓扑（缩短竖条或换层），属于改设计而非改参数。方数下降只证明电阻余量变大，仍不能替代带 SPEF 的功耗/IR 分析，电流预算数据源依旧缺。</p>
+
+    <figure>
+      <img src="images/sha256_chip19_ring.png" alt="chip19 全 die：VGND met5 环 9.8，VPWR met4 环 2.9" loading="lazy">
+      <figcaption>chip19 全 die：VGND 环加宽到 met5 9.8 µm · <code>sha256_chip19.gds</code> 88,236,352 B · flat DRC 22019</figcaption>
+    </figure>
+    <figure>
+      <img src="images/sha256_chip19_sexit.png" alt="chip19 S 边：竖条顶端 863.5 到环下沿 865.1 间距 1.6" loading="lazy">
+      <figcaption>chip19 S 边（上限）：VCCD met5 竖条顶端 863.5 到 VGND 环下沿 865.1，同层间距恰好 1.6 µm</figcaption>
+    </figure>
+    <figure>
+      <img src="images/sha256_chip19_coreleft.png" alt="chip19 core 左侧 4 组连接" loading="lazy">
+      <figcaption>chip19 core 左侧（环 2.9/9.8）：4 条 VPWR（met4 横条 + via4）/ 4 条 VGND（met5 横条同层直并）</figcaption>
+    </figure>
+    <figure>
+      <img src="images/sha256_chip18_sexit.png" alt="chip18 S 边：间距 1.5 触发 m5.2" loading="lazy">
+      <figcaption>chip18 对照（W5=10.0，DRC 22021）：同一位置间距 1.5 µm，2 条 <code>m5.2</code> 违例</figcaption>
+    </figure>
+
+    <p class="sub" style="margin-top:22px">证据：<a href="evidence/core_power_ring19.txt">core_power_ring19.txt</a>（deck 规则核对、三版 DRC 与集合差、2 条 m5.2 坐标、上限推导、方数表、复现指针）。脚本 <code>tools/padring/build_chip17.py</code>、<code>build_chip18.py</code>、<code>build_chip19.py</code>、<code>verify_chip17.py</code>、<code>verify_chip18.py</code>、<code>verify_chip19.py</code>、<code>render_chip17.py</code>、<code>render_chip18.py</code>、<code>render_chip19.py</code>。GDS 走 Release 资产：<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip19-padring">chip19-padring</a>（<code>sha256_chip19.gds</code> 88,236,352 B），前两版见 <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip16-padring">chip16-padring</a>、<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip14-padring">chip14-padring</a>。</p>
 
     <p class="sub" style="margin-top:22px">证据：<a href="evidence/core_power_ring16.txt">core_power_ring16.txt</a>（chip15/16 两版环宽对照、4 条 m4.5ab 坐标、deck 规则出处、方数表、并查集、复现指针），前一版 <a href="evidence/core_power_ring14.txt">core_power_ring14.txt</a>（增量 14 图形 / DRC 22019 / 电阻口径 / 仍未做），再前一版 <a href="evidence/core_power_ring13.txt">core_power_ring13.txt</a>。脚本 <code>tools/padring/build_chip15.py</code>、<code>build_chip16.py</code>、<code>verify_chip16.py</code>、<code>render_chip16.py</code>（前一版另有 <code>build_chip14.py</code> / <code>verify_chip14.py</code> / <code>render_chip14.py</code>）。GDS 各 88 MB，不进仓库，走 Release 资产：<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip16-padring">chip16-padring</a>（<code>sha256_chip16.gds</code> 88,236,352 B）、<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip14-padring">chip14-padring</a>（chip14 / chip13 两个 GDS）。</p>
   </div>

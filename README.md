@@ -485,6 +485,16 @@ bash scripts/synth_check.sh       # 裸 yosys + sky130 liberty，输出 cells �
 - **GDS**：不进仓库，走 Release —— [chip16-padring](https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip16-padring)（`sha256_chip16.gds` 88,236,352 B）、[chip14-padring](https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip14-padring)（chip14 / chip13）。
 - **边界**：只给几何，不给电阻与压降（`RESOVER` 表量纲不明、`metrics.csv` 功耗字段约 0.0095 µW ≈ 5 nA 不可定容）；22019 是存量，零新增不等于 signoff；pad 级 LVS 在本环境仍判不了。
 
+### 14. chip17 → chip19：met5 VGND 环加宽到实测上限 9.8 um
+
+- 先核对 deck：本 `sky130A_flat.lydrc` 没有 met5 的 max width / slotting 规则，met5 只有最小宽 1.6、最小间距 1.6、via4 包围、ongrid、角度；旧口径「第 644 行 max width 10.0」是 met4 CU 分支规则，已更正。
+- chip17（W5=5.0）flat DRC 22019，对 chip16 集合差新增 0 / 消失 0。
+- chip18（W5=10.0）flat DRC 22021，新增 2 条 `m5.2`：S 边 VCCD 出线 met5 竖条顶端 863.5 与 VGND 环下沿 865.0 间距 1.5 < 1.6。
+- chip19（W5=9.8）flat DRC 22019，间距恰好 1.6，对 chip17 零新增零消失；本拓扑 met5 环宽实测上限 9.8 um，限制来自 S 边同层间距而非宽度规则。
+- 方数（单入口 1402 um）：3.2 um 438 方 → 5.0 um 280.4 方 → 9.8 um 143.06 方；相对 1.6 um 基线 876 方累计降 84%，零新增 DRC、零 IO 代价。
+- 边界：deck 无宽金属 slotting 规则是覆盖缺口，不宣称 signoff；突破 9.8 需改 S 边出线拓扑；电流预算数据源仍缺，方数不等于 IR 分析。
+- 证据 `docs/evidence/core_power_ring19.txt`，GDS 走 Release `chip19-padring`。
+
 
 ## 许可与致谢
 
