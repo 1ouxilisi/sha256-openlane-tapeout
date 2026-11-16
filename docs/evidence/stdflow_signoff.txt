@@ -1,0 +1,97 @@
+# SHA256 主版图标准流程收尾证据（stdflow）
+
+- 设计：sha256_axil（sha256_core 压缩核 + AXI4-Lite 顶层）
+- PDK / 库：sky130A / sky130_fd_sc_hd
+- 流程：OpenLane 1.1.1 干净标准流程，**不保留任何手工 holdfix**，时序由流程自动处理
+- Run 目录：designs/sha256_v7b/runs/stdflow/
+- 日期：2026-11-16
+
+## 一、结论
+
+标准流程从综合到 signoff 完整闭环：详细布线零违例、Magic DRC 零违例、三角 SPEF 多角 STA 的 setup/hold 全部为正、LVS 电路唯一匹配。中途 magic spice 提取的 hang 已定位并修复，最终产出 LVS spice 网表。
+
+## 二、流程各步骤结果
+
+| 阶段 | 结果 |
+|---|---|
+| Verilator lint | 0 error / 0 warning |
+| 综合（yosys, AREA 0） | 11,475 综合单元 |
+| 布图规划 | die 640×640 µm，core 利用率目标 45% |
+| IO / tap / decap / 电源规划 | 完成 |
+| 全局 + 详细布局 | 完成 |
+| CTS / resizer | 完成 |
+| 全局布线 | 完成 |
+| 详细布线（TritonRoute） | 违例多轮收敛至 0 |
+| Magic DRC | 0 违例 |
+| 三角 SPEF + 多角 STA | setup/hold 全正 |
+| Magic GDS 流出 | 完成 |
+| Spice 提取 + LVS | 匹配 |
+
+TritonRoute 详细布线违例收敛序列：4974 → 4733 → 1076 → 79 → 34 → 1 → 0（多轮 optimization）。
+
+## 三、物理指标
+
+| 指标 | 值 |
+|---|---|
+| Die 面积 | 0.4096 mm²（640×640 µm） |
+| 最终利用率 | 46.20% |
+| 总实例数 | 47,559 |
+| Well tap / Diode / Fill 单元 | 5,496 / 196 / 7,881 |
+| 总线长 | 618,229 µm |
+| 过孔数 | 117,592 |
+| TritonRoute 违例 | 0 |
+| Magic DRC 违例 | 0 |
+| 峰值内存 | 1,155.99 MB |
+| 总运行时长 | 46m21s（routed 16m04s） |
+
+## 四、MCMM 时序（基于 SPEF 三角）
+
+| 角 | Setup worst slack | Hold worst slack |
+|---|---|---|
+| min（fast） | +0.99 | +0.40 |
+| nom（typ） | +0.74 | +0.41 |
+| max（slow） | +0.51 | +0.41 |
+
+三角 setup、hold 均为正，时序全部满足。该结果与历史手工 holdfix 版（ctsfix3）的 STA 数字一致，但本次全程由流程自动达成，未插入任何手工 delay。
+
+约束时钟周期 18 ns；工具给出 critical path 2.25 ns、建议工作频率 55.56 MHz。
+
+## 五、Magic spice 提取 hang：根因与修复
+
+### 现象
+
+OpenLane 默认 extract_spice.tcl 使用裸 extract（incremental 模式）。magic 8.3.483 在处理 physical-only 子 cell sky130_fd_sc_hd__tapvpwrvgnd_1（设计中 5,496 个实例）时进入无限重试：
+
+- 进程 state=S，wchan=request_wait_answer
+- 每秒约 1,000 次 voluntary context switch，几乎不耗 CPU
+- 反复 openat 各搜索路径下的 sky130_fd_sc_hd__tapvpwrvgnd_1.ext，均不存在
+
+### 根因
+
+incremental 模式依赖已存在的 .ext 增量文件。PDK 只提供 .mag，不提供 .ext（.ext 由 magic 本地生成）。magic 沿 cell 基路径与全部搜索路径寻找该 .ext 失败后，未对该子 cell 回退为现场提取，陷入无限重试。该问题在历史 ctsfix3 run 的同一位置同样出现（当时以 child killed 终止）。
+
+### 修复
+
+改用 extract all：显式递归提取 root cell 与全部 children，magic 按依赖顺序现场提取每个子 cell，不依赖预存 .ext，正常完成；随后 ext2spice lvs 生成 LVS 网表。
+
+修复脚本见同目录 Release 资产 magic_extract_hang_fix.tcl。
+
+## 六、LVS 结果
+
+- 工具：netgen（batch）
+- 版图（layout）：magic 提取的 sha256_axil.spice
+- 原理图（schematic）：powered verilog 36-sha256_axil.pnl.v
+- 两边器件数：15,873 / 15,873（经并串器件合并）
+- 两边网表数：15,795 / 15,795
+- Final result: Circuits match uniquely
+- JSON 顶层总结：badnets 为空、badelements 为空
+
+日志中 black-box abstract subckt 的 disconnected node 提示为 maglef 抽象视图独立读取时的正常现象，在顶层合并后全部连接，不影响匹配。
+
+## 七、最终产物
+
+| 产物 | 大小 |
+|---|---|
+| sha256_axil.gds | 40,396,222 B |
+| sha256_axil.spice（LVS 网表） | 3,463,849 B |
+| magic_extract_hang_fix.tcl（修复脚本） | 2,237 B |

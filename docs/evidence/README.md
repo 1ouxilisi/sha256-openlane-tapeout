@@ -253,3 +253,15 @@ fd2925846022aeaee377c91e5bb7b9aa9b8e1b1aa9a82f03b8b0b3a85cf5bc76  onecmd_repro.t
 5ab9ffbdaf81bcf08ee91efb88a61b01e5c0e96511186c7b2077ac575e15f311  sta_t8_3corner.txt
 e90e369d0f15b0aa03201261b155fffff6e36a3a4f536f3a96105b5191c47477  padring_t8.txt
 6f07d6340b9d594f7a1c1fb51315fe11b844cba498e6c6162e596c562b26b7e5  sta_t8_freq_boundary.txt
+
+---
+
+## 标准流程（stdflow，2026-11-16）
+
+来源 run：`designs/sha256_v7b/runs/stdflow`（干净 OpenLane 1.1.1，不保留手工 holdfix，CLOCK_PERIOD = 18.0 ns）。
+
+| 文件 | 是什么 |
+|---|---|
+| `stdflow_signoff.txt` | 标准流程完整收尾证据：TritonRoute 违例 0、Magic DRC 0、三角 SPEF 多角 STA（setup +0.51/+0.74/+0.99，hold +0.40/+0.41）、magic 8.3.483 extract 死锁的根因与修复（改用 `extract all`）、netgen LVS「Circuits match uniquely」（两边 15,873 器件 / 15,795 网，badnets/badelements 空） |
+
+GDS、LVS spice 网表与修复脚本随 Release `stdflow-signoff` 发布。

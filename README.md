@@ -376,6 +376,8 @@ bash tools/lvs/run_lvs.sh /home/user/openlane-rootfs/designs/sha256_v7b/runs/cts
 
 物理验证：七代详细布线 **DRC 0 违例**（v4 经 14 轮迭代从 16,283 收敛到 0）；Magic 与 KLayout 双工具 GDS 逐层 XOR 比对，**七代均为 40/41 层共同层零差异**（唯一差异为标定层 81/14，非结构层）。
 
+**标准流程 signoff（stdflow，2026-11-16）**：干净 OpenLane 1.1.1 全程自动、不保留手工 holdfix。TritonRoute 违例 0、Magic DRC 0；三角 SPEF 多角 STA 全正（setup +0.51/+0.74/+0.99，hold +0.40/+0.41）；netgen LVS 电路唯一匹配（两边 15,873 器件 / 15,795 网，badnets/badelements 空）。中途 magic 8.3.483 的 extract 死锁已定位并修复（改用 `extract all`）。完整证据见 [`docs/evidence/stdflow_signoff.txt`](docs/evidence/stdflow_signoff.txt)，GDS/网表/修复脚本见 Release `stdflow-signoff`。
+
 **一键复现（任何人都能在本地重跑）**
 
 ```bash
