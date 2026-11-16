@@ -1,0 +1,87 @@
+import json, os, klayout.db as db
+
+SRC = "/home/user/padring/sha256_chip6.gds"
+OUT = "/home/user/padring/sha256_chip20.gds"
+W4 = 2.9                     # met4(VPWR) 环宽：>=3.0 会触发 m4.5ab
+W5 = 10.0                    # met5(VGND) 环宽：chip18 同宽 2 条 m5.2，本版改 S 边出线拓扑
+STRIP_TOP = 862.75           # S 边 VCCD met5 竖条新顶端：via4(y862) 上留 0.35 m5 包围
+L = db.Layout(); L.dbu = 0.001
+L.read(SRC)
+D = L.dbu
+U = lambda v: int(round(v / D))
+def lid(ln, dt):
+    for i in L.layer_indexes():
+        inf = L.get_info(i)
+        if inf.layer == ln and inf.datatype == dt:
+            return i
+M4, M5, V4 = lid(71, 20), lid(72, 20), lid(71, 44)
+top = L.top_cell()
+ADDED = []
+def add(li, x0, y0, x1, y1):
+    if x1 <= x0 or y1 <= y0:
+        raise ValueError("degenerate %s %s" % (li, (x0, y0, x1, y1)))
+    top.shapes(li).insert(db.Box(U(x0), U(y0), U(x1), U(y1)))
+    ADDED.append((li, x0, y0, x1, y1))
+
+h4 = W4 / 2.0
+h5 = W5 / 2.0
+n4 = n5 = nv = 0
+
+# ---- 1. 1440 seam bridges（与 chip13/14/16/19 相同）----
+for (net, x0, y0, x1, y1) in json.load(open("/tmp/pwr_bridges.json")):
+    add(M4, x0, y0, x1, y1); n4 += 1
+
+# ---- 2. rings（中心线不变：VPWR x/y 862 & 1563；VGND 870 & 1555）----
+VX0, VX1, VY0, VY1 = 862.0, 1563.0, 862.0, 1563.0
+GX0, GX1 = 870.0, 1555.0
+for (x0, y0, x1, y1) in [
+    (VX0 - h4, VY0 - h4, VX0 + h4, VY1 + h4),
+    (VX1 - h4, VY0 - h4, VX1 + h4, VY1 + h4),
+    (VX0 - h4, VY0 - h4, VX1 + h4, VY0 + h4),
+    (VX0 - h4, VY1 - h4, VX1 + h4, VY1 + h4),
+]:
+    add(M4, x0, y0, x1, y1); n4 += 1
+for (x0, y0, x1, y1) in [
+    (GX0 - h5, GX0 - h5, GX0 + h5, GX1 + h5),
+    (GX1 - h5, GX0 - h5, GX1 + h5, GX1 + h5),
+    (GX0 - h5, GX0 - h5, GX1 + h5, GX0 + h5),
+    (GX0 - h5, GX1 - h5, GX1 + h5, GX1 + h5),
+]:
+    add(M5, x0, y0, x1, y1); n5 += 1
+
+# ---- 3. core 8 条 stripe（横条起点随环内沿外扩）----
+VPWR_Y = [920.03, 1073.21, 1226.39, 1379.57]
+VGND_Y = [923.33, 1076.51, 1229.69, 1382.87]
+CORE_X1 = 900.0
+add(M5, GX0 - h5, VGND_Y[0] - 0.8, CORE_X1, VGND_Y[0] + 0.8); n5 += 1
+add(M4, VX0 - h4, VPWR_Y[0] - 0.8, CORE_X1, VPWR_Y[0] + 0.8); n4 += 1
+add(V4, 898.6, VPWR_Y[0] - 0.4, 899.4, VPWR_Y[0] + 0.4); nv += 1
+for y in VPWR_Y[1:]:
+    add(M4, VX0 - h4, y - 0.8, CORE_X1, y + 0.8); n4 += 1
+    add(V4, 898.6, y - 0.4, 899.4, y + 0.4); nv += 1
+for y in VGND_Y[1:]:
+    add(M5, GX0 - h5, y - 0.8, CORE_X1, y + 0.8); n5 += 1
+
+# ---- 4. N 边出线（W5=10 时间距恰 1.6，保持不动）----
+add(V4, 1173.2, 2235.6, 1174.0, 2236.4); nv += 1
+add(M5, 1172.8, VY1 - h4 + 0.05, 1174.4, 2236.75); n5 += 1
+add(V4, 1173.2, 1562.6, 1174.0, 1563.4); nv += 1
+add(V4, 1178.0, 2268.6, 1178.8, 2269.4); nv += 1
+add(M5, 1177.6, GX1 - h5 + 0.05, 1179.2, 2269.75); n5 += 1
+
+# ---- 5. S 边出线（VCCD 竖条顶端截到 862.75，经 via4 并入 met4 环带）----
+add(V4, 1550.0, 188.0, 1550.8, 188.8); nv += 1
+add(M5, 1549.6, 187.6, 1551.2, STRIP_TOP); n5 += 1
+add(V4, 1550.0, VY0 - 0.4, 1550.8, VY0 + 0.4); nv += 1
+add(V4, 1510.0, 155.5, 1510.8, 156.3); nv += 1
+add(M5, 1509.6, 155.1, 1511.2, GX0 + h5 - 0.05); n5 += 1
+
+L.write(OUT)
+lname = {M4: "met4", M5: "met5", V4: "via4"}
+json.dump([(lname[li], a, b, c, d) for (li, a, b, c, d) in ADDED],
+          open("/tmp/chip20_delta.json", "w"))
+print("ring width met4 %.2f met5 %.2f" % (W4, W5))
+print("S VCCD strip top %.2f, gap to VGND ring bottom (865.0) = %.2f" %
+      (STRIP_TOP, 870.0 - W5 / 2.0 - STRIP_TOP))
+print("met4", n4, "met5", n5, "via4", nv, "total added", n4 + n5 + nv)
+print("->", OUT, os.path.getsize(OUT))
