@@ -403,7 +403,7 @@ footer p{margin:6px 0}
 </section>
 <section>
   <div class="wrap">
-    <h2>core 电源环：把 VPWR / VGND 从 pad 接进 core（chip13 → chip14 → chip16 → chip19 → chip22）</h2>
+    <h2>core 电源环：把 VPWR / VGND 从 pad 接进 core（chip13 → chip14 → chip16 → chip19 → chip22 → chip23），不动中心线 12.9、移中心线 16.9）</h2>
     <p class="sub">上一节 chip6 的结尾写着「电源环六网仍未做，core 的 VPWR/VGND 到电源 pad 没接」。那是 chip6 当时的状态，旧文不改；这一节补上后面两版实际做的事——先接上，再把 8 条 stripe 全接，然后把 flat DRC 重新跑一遍看有没有多出一条。</p>
 
     <p><b>先看环本身。</b>100 个 pad 里，W 边和 E 边共 50 个位置全是 <code>PAD_gpiov2</code> 信号 pad，一个电源 pad 都没有；电源只在 N/S 两边：<code>PAD_pwr_hv</code>（rot0，x200–275，y2225–2425）、<code>PAD_gnd_hv</code>（rot0，x281–356）、<code>PAD_gnd_lv</code>（rot2，x2069–2144，y0–198）、<code>PAD_pwr_lv</code>（rot2，x2150–2225，y0–198）。所以「四边都补电源」这个方向不成立，能做的是「core 的 8 条 stripe 全接 + N/S 各做一组出线」。core 侧只有两个电源网：<code>VPWR</code>（1.8 V，对应 pad 的 VCCD / VCCHIB）与 <code>VGND</code>（地，对应 VSSD / VSSA）；<code>VDDIO</code> / <code>VSSIO</code> 是 3.3 V IO 电源，接进 core 就是过压，不允许。</p>
@@ -504,6 +504,17 @@ footer p{margin:6px 0}
     <p><b>缝桥数据在环境重置后丢了，改用版图反推。</b><code>/tmp/pwr_bridges.json</code>（1440 条）不见了，<code>build_chip20.py</code> 第一步就断。修法不依赖备份：chip6（基线）与 chip19 各取 met4 (71/20) merge，<code>added = chip19 − chip6</code> 得 1441 个多边形，减去该参数下已知的 4 段 VPWR 环 + 4 条 stripe 盒，merge 后剩 <b>1440</b> 个互不重叠多边形，断言 <code>size == 1440</code> 通过后按 bbox 写回。脚本进仓库（<code>tools/padring/reconstruct_bridges.py</code>），下次再丢能直接重建。</p>
 
     <p><b>方数（单入口绕行 1402 µm，L/W）。</b>1.6 µm 称 876.25 方，2.9 是 483.45，3.2 是 438.13，5.0 是 280.40，9.8 是 143.06，10.0 是 140.20，12.0 是 116.83，12.9 是 108.68。3.2 到 12.9 再降 75%，相对 1.6 基线累计降 88%，代价仍是 0 条新 DRC、0 个 IO。</p>
+    <p><b>chip23 / chip24（2026-11-16）：把「移环中心线」这件事真做了一遍。</b>chip22 结束时留的结论是「再宽必须移中心线，属另一次设计」——这一轮就把那次设计做掉。改动只有两件：VGND 环（met5）四条边的中心线整体内移 2.000 µm（左/下 870 → 872，右/上 1555 → 1553），VPWR 环（met4）中心线 862 / 1563 与 2.9 µm 宽度完全不动，8 条 stripe、N/S 出线竖条、via4 全部沿用 chip22。两版：chip23 W5 = 16.9，chip24 W5 = 17.0。</p>
+
+    <p><b>上限是一条能写下来的式子，不是试出来的数。</b>环朝 die 边的那条外沿贴近 S/N 出线竖条，两条都是 met5、受 <code>m5.2</code> 1.6 约束；竖条端点又被 via4 钉死（via4 要在 met4 环带 860.55–863.45 内留 0.19，met5 还要再包住 via4 顶点 0.31）。于是 <code>gap = (G0 − W5/2) − 861.95 ≥ 1.60</code>，即 <code>W5max = 2 × (6.45 + Δ)</code>，Δ 是中心线内移量：Δ = 0 → 12.9（chip22），Δ = 2 → 16.9（chip23）。同一条式子还解释了跨层：环外沿被 1.6 顶在 863.55，离 met4 外沿 863.45 恰好 0.100，所以 W5 怎么变跨层间隙都还是 0.100 —— <b>met4 从来不是瓶颈，出线位置才是</b>。</p>
+
+    <p><b>两版实跑：16.9 过，17.0 正好卡在 1.55。</b>chip23 flat DRC <b>22019</b>（1711.920 s），七类分布与 chip22 逐条相同，集合差新增 0 / 消失 0（各 21,995 条唯一坐标）；切片实测环宽 16.900（863.550–880.450 / 1544.550–1561.450），两侧跨层间隙 0.100，环内沿距 core 12.050。chip24 flat DRC <b>22021</b>（1689.060 s），只多 2 条 <code>m5.2</code>：S 边 (1549.6, 861.95) 对 (1551.597, 863.5)、N 边 (1172.403, 1561.5) 对 (1174.4, 1563.05)，两侧都是 1.550 —— 与式子算出的位置一一对应。连通性两版都完好：met4 / met5 各自单网络、无短路，N/S VCCD→VPWR、N/S VSSD→VGND 全通。</p>
+
+    <p><b>更正上一节一句话：跨层重叠不是短路。</b>上一节写「met5 环内沿与 met4 环外沿相切，再宽就是几何重叠、直接短路」，这句不成立。met4 与 met5 是不同层的两块金属，面积重叠只产生耦合，短路只发生在同层接触或 via4 错接。实测三版 met4 ∩ met5 重叠多边形都是 <b>1301</b> 个（面积 99,907.4 / 99,933.0 / 99,933.6 µm²），而连通性核验里两网始终分离 —— 这类重叠从 chip13 起就一直存在，且不短路。所以 12.9 这条线其实是两件事叠在一起：DRC 上的 <code>m5.2</code> 1.6 由出线竖条给出（12.9 先到），版图意图上的「不把 met5 环压到 met4 环上」由 863.45 给出（13.1 才到）。正确说法是：<b>12.9 是 m5.2 给的，met4 那条是设计者自己加的余量线</b>。旧句保留不改，以这段为准。</p>
+
+    <p><b>下一步不在这条路上。</b>把上限定死在 core 边上（环内沿贴 892.5 / 1532.5），G0 最多 877.975、对应 W5 约 29.05 —— 那时环已经贴着 core、没有布线通道，工程上不可用；而且 via4 在 2.90 高的 met4 环带里被 0.19 + 0.31 夹住，理论还能下移的余量只有约 0.06 µm。也就是说：单纯加宽环这条线已经走到收益递减，真正还能动的是「出线位置 + 环中心线 + 环整体外移」三者联动。</p>
+
+    <p><b>方数补两格。</b>16.9 → 82.96 方，17.0 → 82.47 方；从 12.9 的 108.68 再降 23.7%，相对 1.6 基线（876.25 方）累计降 90.5%。代价与之前一样：0 条新 DRC、0 个 IO。</p>
 
     <figure>
       <img src="images/sha256_chip20_sexit.png" alt="chip20 S 边出线：竖条顶端截到 862.75，经 via4 接进 met4 环带" loading="lazy">
@@ -529,8 +540,32 @@ footer p{margin:6px 0}
       <img src="images/sha256_chip22_coreleft.png" alt="chip22 core 左侧 4 组连接（环 2.9 / 12.9）" loading="lazy">
       <figcaption>chip22 core 左侧（环 2.9 / 12.9）：VGND 环加宽后内沿逼近 core，连接仍是 4 条 met5 横条同层直并</figcaption>
     </figure>
+    <figure>
+      <img src="images/sha256_chip23_ring.png" alt="chip23 全 die：VGND 环 16.9，中心线内移 2 µm" loading="lazy">
+      <figcaption>chip23 全 die：VGND 环 16.9 µm · 中心线 872 / 1553（内移 2 µm）· flat DRC 22019 · 对 chip22 零新增</figcaption>
+    </figure>
+    <figure>
+      <img src="images/sha256_chip23_sexit.png" alt="chip23 S 边：竖条端 861.95 对环底 863.55，间距 1.600" loading="lazy">
+      <figcaption>chip23 S 边：出线竖条端 861.95 对环底 863.55 = 1.600，恰在 m5.2 1.6 上</figcaption>
+    </figure>
+    <figure>
+      <img src="images/sha256_chip23_coreleft.png" alt="chip23 core 左侧连接（环 2.9 / 16.9）" loading="lazy">
+      <figcaption>chip23 core 左侧（环 2.9 / 16.9）：环加宽只朝 core 内沿长，连接仍是 4 条 met5 横条同层直并</figcaption>
+    </figure>
+    <figure>
+      <img src="images/sha256_chip24_ring.png" alt="chip24 全 die：VGND 环 17.0，flat DRC 22021" loading="lazy">
+      <figcaption>chip24 失败对照：VGND 环 17.0 µm · 同拓扑只改一个数 · flat DRC 22021（2 条 m5.2）</figcaption>
+    </figure>
+    <figure>
+      <img src="images/sha256_chip24_sexit.png" alt="chip24 S 边：竖条端 861.95 对环底 863.50，间距 1.550 触发 m5.2" loading="lazy">
+      <figcaption>chip24 S 边：861.95 对 863.50 = 1.550 &lt; 1.6，就是那 2 条 m5.2 的位置</figcaption>
+    </figure>
+    <figure>
+      <img src="images/sha256_chip24_coreleft.png" alt="chip24 core 左侧连接（环 2.9 / 17.0）" loading="lazy">
+      <figcaption>chip24 core 左侧（环 2.9 / 17.0）：与 chip23 同一套连接，只差环宽 0.1</figcaption>
+    </figure>
 
-    <p class="sub" style="margin-top:22px">证据：<a href="evidence/core_power_ring22.txt">core_power_ring22.txt</a>（chip20/21/22 三版 DRC 与集合差、via4.4 返修、缝桥重建、两道边界、方数全序列），单版 <a href="evidence/core_power_ring20.txt">core_power_ring20.txt</a>。脚本 <code>tools/padring/build_chip2{0,1,2}.py</code>、<code>verify_chip2{0,1,2}.py</code>、<code>render_chip2{0,1,2}.py</code>、<code>reconstruct_bridges.py</code>。GDS 走 Release 资产：<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip22-padring">chip22-padring</a>（<code>sha256_chip22.gds</code> 88,236,352 B）；chip20 / chip21 只入仓库脚本与图，不单独发 Release。</p>
+    <p class="sub" style="margin-top:22px">证据：<a href="evidence/core_power_ring23.txt">core_power_ring23.txt</a>（约束式推导、chip23/24 两版 DRC 与集合差、连通性、跨层重叠更正），<a href="evidence/core_power_ring22.txt">core_power_ring22.txt</a>（chip20/21/22 三版 DRC 与集合差、via4.4 返修、缝桥重建、两道边界、方数全序列），单版 <a href="evidence/core_power_ring20.txt">core_power_ring20.txt</a>。脚本 <code>tools/padring/build_chip2{0,1,2}.py</code>、<code>verify_chip2{0,1,2}.py</code>、<code>render_chip2{0,1,2}.py</code>、<code>reconstruct_bridges.py</code>。GDS 走 Release 资产：<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip22-padring">chip22-padring</a>（<code>sha256_chip22.gds</code> 88,236,352 B）；chip20 / chip21 只入仓库脚本与图，不单独发 Release。本轮 <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/chip23-padring">chip23-padring</a> （<code>sha256_chip23.gds</code> 88,236,352 B）；chip24 是失败对照版，不进 Release。脚本 <code>tools/padring/build_chip2{3,4}.py</code>、<code>verify_chip2{3,4}.py</code>、<code>render_chip2{3,4}.py</code>、<code>measure_chip23.py</code>。</p>
   </div>
 </section>
 <section>
@@ -538,7 +573,7 @@ footer p{margin:6px 0}
     <h2>边界：这一页不写的东西</h2>
     <div class="note">
       <p><b>不是量产芯片。</b>作品集与方法论验证，商用价值为零 —— SHA-256 加速器本身没有稀缺性。</p>
-      <p><b>W/E 边补电源 pad 的账单独算过，结论不塞在这一页。</b>100 个 pad 里 W/E 各 25 个全是 <code>PAD_gpiov2</code>，电源 pad 只有 4 个（N 边一对 3.3V、S 边一对 1.8V）。「50 个 IO 电源悬空」这个说法不成立：它们挂在侧总线上，由 1440 条缝桥分配，缺的是冗余注入点而不是连接。按方数量，环上最远绕行 876 方，环→stripe 接头只有约 7 方；加宽环和加 W 边入口都约是 2 倍改善，前者不要 IO 代价、后者要拿信号换。加宽的天花板已经实测：met4 超 3.0 µm 撞 <code>m4.5ab</code>（3.2 时多 4 条），所以 VPWR 停在 2.9、VGND（met5 无同类规则）可以到 3.2，见 <a href="evidence/core_power_ring16.txt">core_power_ring16.txt</a>。<b>更正（chip22 那轮）：</b>「VGND 可以到 3.2」是 chip16 当时的保守取值，不是上限 —— 改掉出线拓扑后 met5 环实测到 <b>12.9 µm</b> 仍对上一版零新增，见上文 chip20→chip22 一节与 <a href="evidence/core_power_ring22.txt">core_power_ring22.txt</a>；不动环中心线时真正的天花板是 met5 12.9 / met4 2.9。取舍与代价清单见 <a href="evidence/w_e_power_pad_tradeoff.txt">evidence/w_e_power_pad_tradeoff.txt</a>。</p>
+      <p><b>W/E 边补电源 pad 的账单独算过，结论不塞在这一页。</b>100 个 pad 里 W/E 各 25 个全是 <code>PAD_gpiov2</code>，电源 pad 只有 4 个（N 边一对 3.3V、S 边一对 1.8V）。「50 个 IO 电源悬空」这个说法不成立：它们挂在侧总线上，由 1440 条缝桥分配，缺的是冗余注入点而不是连接。按方数量，环上最远绕行 876 方，环→stripe 接头只有约 7 方；加宽环和加 W 边入口都约是 2 倍改善，前者不要 IO 代价、后者要拿信号换。加宽的天花板已经实测：met4 超 3.0 µm 撞 <code>m4.5ab</code>（3.2 时多 4 条），所以 VPWR 停在 2.9、VGND（met5 无同类规则）可以到 3.2，见 <a href="evidence/core_power_ring16.txt">core_power_ring16.txt</a>。<b>更正（chip22 那轮）：</b>「VGND 可以到 3.2」是 chip16 当时的保守取值，不是上限 —— 改掉出线拓扑后 met5 环实测到 <b>12.9 µm</b> 仍对上一版零新增，见上文 chip20→chip22 一节与 <a href="evidence/core_power_ring22.txt">core_power_ring22.txt</a>；不动环中心线时真正的天花板是 met5 12.9 / met4 2.9。<b>再更正（chip23/24 那轮）：</b>把 VGND 环中心线内移 2 µm 后，met5 环宽实测到 <b>16.9 µm</b> 仍对 chip22 零新增（17.0 才报 1.550 的 2 条 m5.2）；并且 met4 环外沿那条线只是版图意图余量 —— 跨层面积重叠不构成短路（三版 met4 ∩ met5 重叠多边形都是 1301 个、两网始终分离），见 <a href="evidence/core_power_ring23.txt">core_power_ring23.txt</a>。上限的真实卡点是 S/N 出线竖条的位置，不是 met4。取舍与代价清单见 <a href="evidence/w_e_power_pad_tradeoff.txt">evidence/w_e_power_pad_tradeoff.txt</a>。</p>
       <p><b>v1–v4 时序确实没收敛。</b>SPEF 重签核后 setup 余量全负（v4 nom -7.63 ns），按签核标准不合格。不写这一点，就是把估算当签核。</p>
       <p><b>v5 的通过靠的是降低频率，不是提高设计能力。</b>38.46 MHz 不代表性能强，它是在该工艺下"真能签核"的工作点。</p>
       <p><b>22.75 ns 是"v6 那套 RTL"的边界，不是工艺边界。</b>v7 换掉消息调度后，18 ns 三 corner 仍全正余量（最紧 +0.56 ns）。把架构上限说成工艺上限，是这个项目前六代差点犯的错。</p>
