@@ -593,6 +593,76 @@ footer p{margin:6px 0}
 </section>
 <section>
   <div class="wrap">
+    <h2>标准流程：把手伸开，让流程自己跑完</h2>
+    <p class="sub">此前所有「时序通过」的版本，都对时序动过手 —— ctsfix 线上每一版都插了手工 delay。这一段说的是另一件事：<b>不插任何手工 holdfix</b>，让 OpenLane 自己从综合走到 GDS，看它能不能自己立住。run 名 <code>stdflow</code>，约束仍是 18 ns。</p>
+
+    <p>跑通的顺序：verilator lint（0 error / 0 warning）→ 综合（Yosys，<code>AREA 0</code>，11,475 单元）→ 布图规划 → IO / tap / decap / 电源规划 → 全局布局 → CTS → resizer → 全局布线 → 详细布线 → Magic DRC → 三角 SPEF 提取 → 多角 STA → Magic 出 GDS → spice 提取 → netgen LVS。中间没有一次人工干预。</p>
+
+    <p>详细布线是这轮最直观的一段：TritonRoute 的违例数一路收敛 <b>4974 → 4733 → 1076 → 79 → 34 → 1 → 0</b>，末轮打出 <code>No Magic DRC violations after detailed routing</code>。</p>
+
+    <h3>这一轮撞到的两个坑，都不是设计问题</h3>
+    <div class="note">
+      <p><b>坑一：locale 把 lint 弄崩了。</b>flow 只跑了 20 秒就退。根因是宿主注入了 <code>LC_ALL=en_US.UTF-8</code>，而 chroot 里没有这个 locale，于是每次 bash 启动都往 stderr 打一行 <code>setlocale: cannot change locale</code>；tcl 的 <code>exec bash -c</code> 把任何非空 stderr 都当命令失败，lint 还没开始就被判死。修法是在 chroot 启动命令开头补 <code>export LC_ALL=C; export LANG=C</code>。</p>
+      <p><b>坑二：magic 8.3.483 的 <code>extract</code> 会无限等下去。</b>OpenLane 默认的 <code>extract_spice.tcl</code> 用的是裸 <code>extract</code>，也就是 <b>incremental 模式</b>。碰到 physical-only 子 cell <code>sky130_fd_sc_hd__tapvpwrvgnd_1</code>（这个设计里有 <b>5,496 个实例</b>）时，magic 会沿基路径和全部搜索路径去找 <code>tapvpwrvgnd_1.ext</code> —— PDK 只带 <code>.mag</code>、不带 <code>.ext</code>，找不到之后它<b>没有回退成现场提取</b>，而是进入无限重试。进程状态 <code>S</code>、<code>wchan=request_wait_answer</code>、每秒约 1,000 次 voluntary context switch、几乎不耗 CPU —— 看上去像死锁，其实是找不到文件又不肯放弃。当年 ctsfix3 就死在同一行。</p>
+      <p>独立实验先排除了「magic 坏了」：对单个 cell 用绝对路径 <code>load</code> 再 <code>extract</code>，正常生成 856 B 的 <code>.ext</code>；但裸 <code>load &lt;cellname&gt;</code> 只会 "Creating new cell"，建一个空的。这说明 magic 本身没坏，坏的是 incremental 的查找策略。<b>修法换成 <code>extract all</code></b>：显式递归提取 root 加全部 children，magic 按依赖顺序现场生成每个子 cell 的 <code>.ext</code>，完全不依赖预存文件。干净目录一次就跑过，产出 153 个 <code>.ext</code>（顶层 17,151,056 B），随后 <code>ext2spice lvs</code> 出 LVS 网表（3,463,849 B，153 个 subckt）。这个修法脚本随 Release 一起放出去了，因为它跟具体设计无关，任何 sky130A + OpenLane 的 run 都会撞上同一个坑。</p>
+    </div>
+
+    <h3>数字</h3>
+    <table>
+      <thead>
+        <tr><th>项</th><th>值</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>GDS</td><td><code>sha256_axil.gds</code> 40,396,222 B</td></tr>
+        <tr><td>Die</td><td>640 × 640 µm（0.4096 mm²）</td></tr>
+        <tr><td>最终利用率</td><td>46.20%</td></tr>
+        <tr><td>总实例</td><td>47,559（welltap 5,496 / diode 196 / fill 7,881）</td></tr>
+        <tr><td>线长 / 过孔</td><td>618,229 µm / 117,592</td></tr>
+        <tr><td>TritonRoute 违例</td><td class="pass">0</td></tr>
+        <tr><td>Magic DRC 违例</td><td class="pass">0</td></tr>
+        <tr><td>峰值内存 / 总时长</td><td>1,155.99 MB / 46m21s（其中 routed 16m04s）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>MCMM 三角：全部为正</h3>
+    <p class="sub">寄生来自三角真实提取的 SPEF（min / nom / max），不是布线器估算。</p>
+    <table>
+      <thead>
+        <tr><th>角</th><th>Setup worst slack</th><th>Hold worst slack</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>min（fast）</td><td class="pass">+0.99</td><td class="pass">+0.40</td></tr>
+        <tr><td>nom（typ）</td><td class="pass">+0.74</td><td class="pass">+0.41</td></tr>
+        <tr><td>max（slow）</td><td class="pass">+0.51</td><td class="pass">+0.41</td></tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:16px">三角 setup、hold 六格全正。critical path 2.25 ns，约束周期 18 ns，工具建议工作频率 <b>55.56 MHz</b>。这组数字与历史上手工 holdfix 的那一版几乎一致 —— 区别在于这一版是流程自己走出来的，不是人调出来的。</p>
+
+    <h3>LVS：电路唯一匹配</h3>
+    <p class="sub">版图侧是 magic 提出的 spice，原理图侧是 powered verilog <code>36-sha256_axil.pnl.v</code>，netgen 跑 batch。</p>
+    <table>
+      <thead>
+        <tr><th>项</th><th>值</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>两侧器件数</td><td>15,873 / 15,873</td></tr>
+        <tr><td>两侧网表数</td><td>15,795 / 15,795</td></tr>
+        <tr><td>结论</td><td class="pass"><code>Final result: Circuits match uniquely</code></td></tr>
+        <tr><td>JSON 顶层</td><td>badnets <code>[]</code> · badelements <code>[]</code></td></tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:16px">日志里有一类 <code>disconnected node</code> 提示，出现在 black-box abstract subckt 上 —— 那是 maglef 抽象视图被单独读取时的正常现象，合并到顶层后全部连接，不影响判据。</p>
+
+    <div class="note">
+      <p><b>这一段不写 signoff。</b>要说的就三件：DRT 0、Magic DRC 0、三角时序通过、LVS 匹配。仍然缺的是电流预算 —— 真实活动率、向量集、带 SPEF 的 IR 分析一项都没有，所以「供电够不够」这个结论不成立，只能说不亮红灯。冷角（−40 °C）这一版没有单独跑，本文不把 ctsfix3 的冷角数字挪过来充数。magic 那个死锁是这版工具的 bug，修法是绕过去、不是修好它；把绕法公开，是因为下一个撞上的人不该再花两天。</p>
+    </div>
+
+    <p class="sub" style="margin-top:22px">证据：<a href="evidence/stdflow_signoff.txt">stdflow_signoff.txt</a>（流程逐步结果、物理指标、MCMM 三角、extract 死锁的完整根因与修法、LVS 判据与黑盒提示的解释）。产物随 Release <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/stdflow-signoff">stdflow-signoff</a> 发布：<code>sha256_axil.gds</code> 40,396,222 B、<code>sha256_axil.spice</code> 3,463,849 B、<code>magic_extract_hang_fix.tcl</code> 2,237 B。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
     <h2>边界：这一页不写的东西</h2>
     <div class="note">
       <p><b>不是量产芯片。</b>作品集与方法论验证，商用价值为零 —— SHA-256 加速器本身没有稀缺性。</p>
