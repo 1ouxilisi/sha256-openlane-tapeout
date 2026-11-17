@@ -67,7 +67,7 @@ footer p{margin:6px 0}
 
 <nav><div class="wrap">
   <span>1OUXILISI · PORTFOLIO</span>
-  <span><a href="project.html">项目详情 →</a> &nbsp;·&nbsp; <a href="VERIFYING.md">验收手册</a> &nbsp;·&nbsp; <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">GitHub</a> &nbsp;·&nbsp; <a href="portfolio.pdf">PDF ↓</a></span>
+  <span><a href="service.html">服务与报价 →</a> &nbsp;·&nbsp; <a href="project.html">项目详情</a> &nbsp;·&nbsp; <a href="case-magic-extract.html">排障案例</a> &nbsp;·&nbsp; <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">GitHub</a> &nbsp;·&nbsp; <a href="portfolio.pdf">PDF ↓</a></span>
 </div></nav>
 
 <header>
@@ -103,7 +103,21 @@ footer p{margin:6px 0}
     <div class="note" style="margin-top:22px">
       <p><b>没做成的部分也在这页上。</b>v1–v4 时序没收敛（v4 nom setup 余量 -7.63 ns，按签核标准不合格）；裸综合对照与 OpenLane 结论符号相反；功耗角名一度标错（6.84 mW 是 Typical 不是 Fastest）。这些不是我丢人的地方，是我判断力的来源。</p>
     </div>
-    <p style="margin-top:22px;font-size:14px"><a href="project.html">→ 项目完整页（七代数据、签字报告、版图）</a> &nbsp;·&nbsp; <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">→ GitHub 仓库</a></p>
+    <p style="margin-top:22px;font-size:14px"><a href="project.html">→ 项目完整页（八轮数据、签字报告、版图）</a> &nbsp;·&nbsp; <a href="case-magic-extract.html">→ 排障案例（可售样品）</a> &nbsp;·&nbsp; <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">→ GitHub 仓库</a></p>
+  </div>
+</section>
+
+<section style="background:linear-gradient(180deg,rgba(74,222,128,.06),transparent 60%)">
+  <div class="wrap">
+    <h2>如果这些对你有用，可以买什么</h2>
+    <p class="sub">我不卖芯片，也不卖 PPT。卖的是「把一件卡住的事查到底」——按次诊断，先判断能不能定位，定位不了不收费。</p>
+    <table>
+      <tr><th>档</th><th>管什么</th><th>价格</th></tr>
+      <tr class="hl"><td><b>按次诊断</b></td><td>流程卡住不报错、报错看不懂、DRC / LVS / 时序某一项不收敛、环境与 locale 问题。<b>交付根因 + 可执行修法 + 验证步骤</b></td><td><b>300–800</b></td></tr>
+      <tr><td>小 block 收口</td><td>给你的 RTL 或模块，从综合跑到 GDS，含 DRC 清零、时序收敛、LVS 匹配</td><td>5k–20k</td></tr>
+      <tr><td>环境与流程包</td><td>OpenLane + sky130A 可复现环境，容器自包含、普通笔记本能跑、含踩坑清单与自动修复脚本</td><td>1k–3k</td></tr>
+    </table>
+    <p style="margin-top:24px"><a href="service.html">→ 看完整报价、交付标准、我不接什么，以及下单入口</a></p>
   </div>
 </section>
 
@@ -270,7 +284,7 @@ python3 scripts/check_vectors.py</pre>
 <footer>
   <div class="wrap">
     <p>署名 <b>1ouxilisi</b>（公众号：欧西1847）。一个人，不是团队。</p>
-    <p>联系：<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">GitHub</a> &nbsp;·&nbsp; <a href="https://gitee.com/beyond-invincibility/sha256-openlane-tapeout">Gitee</a> &nbsp;·&nbsp; <a href="project.html">项目页</a> &nbsp;·&nbsp; <a href="VERIFYING.md">验收手册</a> &nbsp;·&nbsp; <a href="portfolio.pdf">下载 16 页 PDF 作品集</a></p>
+    <p>联系：<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">GitHub</a> &nbsp;·&nbsp; <a href="https://gitee.com/beyond-invincibility/sha256-openlane-tapeout">Gitee</a> &nbsp;·&nbsp; <a href="project.html">项目页</a> &nbsp;·&nbsp; <a href="service.html">服务与报价</a> &nbsp;·&nbsp; <a href="VERIFYING.md">验收手册</a> &nbsp;·&nbsp; <a href="portfolio.pdf">下载 17 页 PDF 作品集</a></p>
     <p style="color:#5f6b7a">本页所有数字均可在仓库对应日志里查到；跑不通的命令，欢迎直接说它是假的。</p>
   </div>
 </footer>
