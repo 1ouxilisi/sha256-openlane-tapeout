@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>按次诊断 · 报价与交付标准 — 1ouxilisi</title>
+<meta name="description" content="OpenLane / OpenROAD / magic 流程卡住、DRC/LVS/时序不收敛、环境配置问题：按次诊断 300–800，先判断能否定位，定位不了不收费。含三档服务、交付物、边界与下单流程。">
+<style>
+:root{
+  --bg:#0e1116; --panel:#161a21; --panel2:#1c222b; --line:#2a323d;
+  --text:#e8edf4; --muted:#8d9aab; --accent:#4ade80; --accent2:#38bdf8; --warn:#fbbf24;
+  --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.9em;background:#0b0e13;border:1px solid var(--line);
+  padding:1px 5px;border-radius:4px}
+nav{border-bottom:1px solid var(--line);padding:14px 0;font-family:var(--mono);font-size:12.5px;
+  color:var(--muted);letter-spacing:.04em}
+nav .wrap{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+nav a{color:var(--muted)} nav a:hover{color:var(--accent)}
+header{border-bottom:1px solid var(--line);padding:60px 0 48px;
+  background:radial-gradient(1200px 400px at 20% -10%,rgba(74,222,128,.10),transparent 70%),var(--bg)}
+.tag{display:inline-block;font-family:var(--mono);font-size:12px;letter-spacing:.08em;
+  color:var(--accent);border:1px solid rgba(74,222,128,.35);border-radius:999px;padding:4px 12px;margin-bottom:20px}
+h1{font-size:36px;line-height:1.28;margin:0 0 16px;font-weight:700;letter-spacing:-.01em}
+h1 span{color:var(--accent)}
+.lead{font-size:16.5px;color:var(--muted);max-width:800px;margin:0}
+section{padding:50px 0;border-bottom:1px solid var(--line)}
+h2{font-size:21px;margin:0 0 8px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:4px;height:18px;background:var(--accent);border-radius:2px;display:inline-block}
+h3{font-size:15.5px;color:var(--accent);margin:22px 0 8px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 26px}
+p.body{font-size:14.5px;color:#d4dae3;margin:10px 0}
+table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border-radius:10px;overflow:hidden;margin:14px 0}
+th,td{padding:11px 13px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:#1b222c;color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.04em}
+td:first-child,th:first-child{white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr.hl td{background:rgba(74,222,128,.07)}
+.tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:18px 0}
+.tier{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 18px;display:flex;flex-direction:column}
+.tier.pick{border-color:rgba(74,222,128,.45);background:rgba(74,222,128,.05)}
+.tier .no{font-family:var(--mono);font-size:11.5px;color:var(--muted);letter-spacing:.08em}
+.tier h3{margin:6px 0 4px;font-size:16px;color:var(--text)}
+.tier .price{font-family:var(--mono);font-size:22px;color:var(--accent);margin:6px 0 4px;letter-spacing:-.02em}
+.tier .when{font-size:12px;color:var(--muted);font-family:var(--mono);margin-bottom:12px}
+.tier ul{margin:0;padding-left:18px;font-size:13px}
+.tier li{color:#cfd6e0;margin:5px 0}
+.btn{display:inline-block;background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.45);
+  color:var(--accent);border-radius:8px;padding:12px 22px;font-family:var(--mono);font-size:13px;letter-spacing:.04em}
+.btn:hover{background:rgba(74,222,128,.2);text-decoration:none}
+.note{border-left:3px solid var(--warn);background:rgba(251,191,36,.06);padding:14px 18px;border-radius:0 8px 8px 0;margin:16px 0}
+.note p{margin:6px 0;font-size:14px;color:#d9dee6}
+pre.cb{background:#0b0e13;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;
+  font-family:var(--mono);font-size:12.5px;line-height:1.7;color:#d7dee8;margin:14px 0}
+pre.cb .cm{color:#7d8a9c}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}
+.step{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.step b{display:block;font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:4px}
+.step span{font-size:13px;color:var(--muted)}
+footer{padding:40px 0 64px;color:var(--muted);font-size:13px}
+footer p{margin:6px 0}
+ul{margin:8px 0 0;padding-left:20px;font-size:14px}
+li{margin:5px 0;color:#cfd6e0}
+@media(max-width:800px){
+  h1{font-size:27px} .tiers{grid-template-columns:1fr} .steps{grid-template-columns:1fr 1fr}
+  table{font-size:12.5px} th,td{padding:9px 10px} td:first-child,th:first-child{white-space:normal}
+}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <span>1OUXILISI · 服务与报价</span>
+  <span><a href="index.html">作品集</a> · <a href="case-magic-extract.html">排障案例</a> · <a href="project.html">项目详情</a></span>
+</div></nav>
+
+<header>
+  <div class="wrap">
+    <div class="tag">PAID DIAGNOSIS · OPEN SOURCE EDA</div>
+    <h1>你的 flow 卡住了，<span>我按次给根因</span></h1>
+    <p class="lead">
+      我不卖芯片，也不卖 PPT。卖的是「把一件卡住的事查到底」：可观察的症状、进程级证据、被证死的误判、
+      能跑的修法、可复现的验证、以及明确的边界。下面每一档都写清交付物和不要什么——
+      你先看能不能接受这个标准，再谈钱。
+    </p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>三档，按问题形态分</h2>
+    <p class="sub">同一套方法，三种规模。价格是区间而不是定价，区间由问题复杂度、以及是否需要远程复现决定。</p>
+
+    <div class="tiers">
+      <div class="tier pick">
+        <span class="no">01</span>
+        <h3>按次诊断</h3>
+        <div class="price">300–800</div>
+        <div class="when">一个具体卡点 · 1–2 天</div>
+        <ul>
+          <li>流程卡住 / 不报错也不退出</li>
+          <li>报错看不懂，不知道从哪下手</li>
+          <li>DRC、LVS、时序某一项不收敛</li>
+          <li>环境、locale、版本组合问题</li>
+          <li>交付：根因说明 + 可执行修法 + 验证步骤</li>
+        </ul>
+      </div>
+      <div class="tier">
+        <span class="no">02</span>
+        <h3>小 block 收口</h3>
+        <div class="price">5k–20k</div>
+        <div class="when">一个模块跑通到可交付 · 2–4 周</div>
+        <ul>
+          <li>给你的 RTL / 模块，从综合跑到 GDS</li>
+          <li>含 DRC 清零、时序收敛、LVS 匹配</li>
+          <li>交付：GDS + 网表 + 全部报告 + 复现脚本</li>
+          <li>边界写在交付物里，不冒充 signoff</li>
+        </ul>
+      </div>
+      <div class="tier">
+        <span class="no">03</span>
+        <h3>环境与流程包</h3>
+        <div class="price">1k–3k</div>
+        <div class="when">一次配好 · 3–5 天</div>
+        <ul>
+          <li>OpenLane + sky130A 可复现环境</li>
+          <li>容器自包含，普通笔记本能跑</li>
+          <li>含我踩过的坑清单与自动修复脚本</li>
+          <li>轻量版 299–999：只交付脚本与说明</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="note">
+      <p><b>先判断，再收钱。</b>你描述完现象，我先说能不能定位。定位不了、或者我判断不在我能处理的范围，直接告诉你，不收费也不占你时间。这一条是硬规则，不是客气话。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>交付长什么样</h2>
+    <p class="sub">按次诊断的成品，就是下面这个案例页的形态。你可以先看一份完整的，再决定要不要买。</p>
+    <table>
+      <thead><tr><th>交付项</th><th>具体内容</th></tr></thead>
+      <tbody>
+        <tr><td>症状读数</td><td>把你说的「卡住」拆成可观察的指标：进程状态、CPU、内存、日志停在哪一行</td></tr>
+        <tr><td>排除记录</td><td>哪些常见判断被证伪了、用什么实验证伪的 —— 避免你按错误方向改一圈</td></tr>
+        <tr><td>根因</td><td>落到具体机制层，不是「大概是环境问题」这种话</td></tr>
+        <tr><td>修法</td><td>能直接跑的命令或脚本，标出哪些行是关键改动</td></tr>
+        <tr><td>验证</td><td>修完之后跑什么、看什么数字算通过</td></tr>
+        <tr class="hl"><td>边界</td><td>这个修法管什么、不管什么、什么版本组合下才成立</td></tr>
+      </tbody>
+    </table>
+    <p class="body"><a href="case-magic-extract.html">→ 看一份完整的：magic extract 无限等待的根因与修法</a></p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>怎么下单</h2>
+    <p class="sub">四步。第一步不要钱，也不用先加好友。</p>
+    <div class="steps">
+      <div class="step"><b>STEP 1</b><span>点下面按钮提一份申请，把现象、工具版本、日志尾巴贴进去。Issue 模板已经填好骨架。</span></div>
+      <div class="step"><b>STEP 2</b><span>我看完回一句：能定位 / 不能定位。不能就直接说不收费，能就报确切价格和工期。</span></div>
+      <div class="step"><b>STEP 3</b><span>你确认范围与价格，我发收款方式（微信 / 支付宝）。诊断类先付后做。</span></div>
+      <div class="step"><b>STEP 4</b><span>交付文档 + 脚本。修法在你机器上跑通算完成；跑不通我继续，不加钱。</span></div>
+    </div>
+    <p style="margin:26px 0 0">
+      <a class="btn" id="issueBtn" href="https://github.com/1ouxilisi/sha256-openlane-tapeout/issues/new">→ 提交诊断申请（Issue 模板已预填）</a>
+    </p>
+    <p class="body" style="margin-top:14px;color:var(--muted);font-size:13px">
+      点开会自动带上骨架：现象 / 工具与版本 / 复现方式 / 日志尾巴 / 你试过什么。填完提交即可，不需要注册额外账号。
+      不方便用 GitHub 的话，去知乎任意一篇芯片文章下留言，说明来意。<a href="https://www.zhihu.com/people/1ouxilisi">→ 知乎主页</a>
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>我不接什么</h2>
+    <p class="sub">写清楚比写漂亮有用。下面这些直说不做，省得双方浪费时间。</p>
+    <table>
+      <thead><tr><th>不接</th><th>原因</th></tr></thead>
+      <tbody>
+        <tr><td>商业 EDA 工具（Innovus / ICC2 / Calibre / Tessent）</td><td>没有授权，也没在真实项目里跑过。我不用没做过的东西接活。</td></tr>
+        <tr><td>ATPG / scan insertion</td><td>开源的 openroad 与 yosys 这条路我验过，是死路（preview_dft 必崩、无 ATPG pass）。真要做得上商用工具，不是我现在的能力。</td></tr>
+        <tr><td>流片与制造</td><td>不做 shuttle 排期、不碰代工厂。我只做到 GDS 与可核对报告。</td></tr>
+        <tr><td>签核级 signoff 背书</td><td>开源 PDK 与开源工具链做不出商业签核效力。我给的每个结论都带版本与口径，不冒充 signoff。</td></tr>
+        <tr><td>纯代跑（「帮我跑一下就行」）</td><td>跑一遍谁都会。我卖的是定位与收口，不做廉价代跑。</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>为什么这个价，凭什么信我</h2>
+    <p class="body">不是按小时算的，是按「这个问题值不值得查到底」算的。同一个卡点，你重跑十遍也只是把同一次失败再演十遍；而根因定位一次，后面所有 run 都不再撞同一面墙。</p>
+    <p class="body">信不信不用听我说，看这些能自己核对的东西：</p>
+    <table>
+      <tbody>
+        <tr><td>方法可验</td><td>上面那个案例页的每一步都能在 <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">仓库</a> 里对上原始证据，包括进程状态读数与修复脚本</td></tr>
+        <tr><td>项目可验</td><td><a href="project.html">一颗 SHA-256 从 RTL 到 GDS 的八轮迭代</a>，每轮的数字都指到具体报告文件</td></tr>
+        <tr><td>过程可验</td><td>八轮里有失败版本：DRC 不通过的、LVS 不匹配的，都留在记录里没有删</td></tr>
+        <tr><td>代码可验</td><td>修复脚本随 Release 公开，<a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/stdflow-signoff">stdflow-signoff</a> 里能直接下载</td></tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <p>如果你要的是「三天交一份看起来很专业的报告」，我不是最合适的。我能保证的是：结论落到读数、修法能跑、边界写清楚、判断错了会说错了。</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>1ouxilisi · 按次诊断 · 2026-11-17</p>
+    <p>价格区间为人民币，含交付文档与脚本；差旅、远程环境搭建、超出原范围的追加工作另议。<br>
+    本页列出的能力范围以公开证据页与仓库代码为准，不以口头承诺扩展。</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var body = [
+    "## 现象",
+    "（一句话说清：哪一步、停在哪、多久不动）",
+    "",
+    "## 工具与版本",
+    "- 流程 / 工具：OpenLane ___ / OpenROAD ___ / magic ___ / netgen ___",
+    "- PDK：",
+    "- 宿主环境：",
+    "",
+    "## 复现方式",
+    "（命令、config 关键量、能否在干净目录重跑）",
+    "",
+    "## 日志尾巴",
+    "```",
+    "（最后 20–30 行，含报错原文）",
+    "```",
+    "",
+    "## 我已经试过什么",
+    "- ",
+    "",
+    "## 期望",
+    "（要根因 / 要修法 / 要跑通到某个报告）"
+  ].join("\n");
+  var url = "https://github.com/1ouxilisi/sha256-openlane-tapeout/issues/new"
+            + "?title=" + encodeURIComponent("[诊断] ")
+            + "&body=" + encodeURIComponent(body)
+            + "&labels=" + encodeURIComponent("diagnosis");
+  document.getElementById("issueBtn").href = url;
+})();
+</script>
+
+</body>
+</html>
