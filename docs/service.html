@@ -55,6 +55,11 @@ tr.hl td{background:rgba(74,222,128,.07)}
 .btn{display:inline-block;background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.45);
   color:var(--accent);border-radius:8px;padding:12px 22px;font-family:var(--mono);font-size:13px;letter-spacing:.04em}
 .btn:hover{background:rgba(74,222,128,.2);text-decoration:none}
+.pay{display:grid;grid-template-columns:290px 1fr;gap:30px;align-items:start;margin-top:20px}
+.pay img{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;display:block}
+.pay .paytext p{font-size:14px;color:#d4dae3;margin:9px 0}
+.pay .paytext b{color:var(--text)}
+@media(max-width:760px){.pay{grid-template-columns:1fr;max-width:320px}}
 .note{border-left:3px solid var(--warn);background:rgba(251,191,36,.06);padding:14px 18px;border-radius:0 8px 8px 0;margin:16px 0}
 .note p{margin:6px 0;font-size:14px;color:#d9dee6}
 pre.cb{background:#0b0e13;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;
@@ -170,7 +175,7 @@ li{margin:5px 0;color:#cfd6e0}
     <div class="steps">
       <div class="step"><b>STEP 1</b><span>点下面按钮提一份申请，把现象、工具版本、日志尾巴贴进去。Issue 模板已经填好骨架。</span></div>
       <div class="step"><b>STEP 2</b><span>我看完回一句：能定位 / 不能定位。不能就直接说不收费，能就报确切价格和工期。</span></div>
-      <div class="step"><b>STEP 3</b><span>你确认范围与价格，我发收款方式（微信 / 支付宝）。诊断类先付后做。</span></div>
+      <div class="step"><b>STEP 3</b><span>你确认范围与价格，用下一节的微信码付款（需要支付宝在 Issue 里说）。诊断类先付后做。</span></div>
       <div class="step"><b>STEP 4</b><span>交付文档 + 脚本。修法在你机器上跑通算完成；跑不通我继续，不加钱。</span></div>
     </div>
     <p style="margin:26px 0 0">
@@ -180,6 +185,24 @@ li{margin:5px 0;color:#cfd6e0}
       点开会自动带上骨架：现象 / 工具与版本 / 复现方式 / 日志尾巴 / 你试过什么。填完提交即可，不需要注册额外账号。
       不方便用 GitHub 的话，去知乎任意一篇芯片文章下留言，说明来意。<a href="https://www.zhihu.com/people/1ouxilisi">→ 知乎主页</a>
     </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>付款方式</h2>
+    <p class="sub">确认范围与价格后再付。诊断类先付后做；如果你更想先看到我能不能定位，等 STEP 2 报价之后再付，不强制。</p>
+    <div class="pay">
+      <img src="images/wechat_pay_qr.png" alt="微信收款码">
+      <div class="paytext">
+        <p><b>微信扫码支付。</b>付款时请在转账备注里写清楚你的 Issue 编号，或者现象的关键词，方便我对账和把交付物对上号。</p>
+        <p>金额以 STEP 2 我报的确切价格为准，不要按区间自行估算。如果二维码无法识别，或你需要用支付宝，在 Issue 里说明，我另外发。</p>
+        <p>付款完成后把支付成功的截图贴到 Issue 里，我收到确认即开始计时工期。</p>
+      </div>
+    </div>
+    <div class="note">
+      <p>退款口径：如果我在约定工期内没给出可执行的根因与修法，全额退；如果修法在你机器上跑不通，我继续查，不另收费，仍跑不通同样退。能定位但你中途决定不做的，已付部分按已完成工作量结算。</p>
+    </div>
   </div>
 </section>
 
