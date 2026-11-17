@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>排障案例 · magic 8.3.483 extract 无限等待的根因与修法</title>
+<meta name="description" content="一个真实卡住并被定位到文件系统层面的 OpenLane/magic 问题：从「卡住不动、CPU 为零、不报错」一步步挖到 incremental extract 找不到 .ext 又不回退现场提取的根因，给出 extract all 可执行修法与验证。按次诊断服务的样品。">
+<style>
+:root{
+  --bg:#0e1116; --panel:#161a21; --panel2:#1c222b; --line:#2a323d;
+  --text:#e8edf4; --muted:#8d9aab; --accent:#4ade80; --accent2:#38bdf8; --warn:#fbbf24;
+  --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.9em;background:#0b0e13;border:1px solid var(--line);
+  padding:1px 5px;border-radius:4px}
+nav{border-bottom:1px solid var(--line);padding:14px 0;font-family:var(--mono);font-size:12.5px;
+  color:var(--muted);letter-spacing:.04em}
+nav .wrap{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+nav a{color:var(--muted)} nav a:hover{color:var(--accent)}
+header{border-bottom:1px solid var(--line);padding:60px 0 48px;
+  background:radial-gradient(1200px 400px at 20% -10%,rgba(74,222,128,.10),transparent 70%),var(--bg)}
+.tag{display:inline-block;font-family:var(--mono);font-size:12px;letter-spacing:.08em;
+  color:var(--accent);border:1px solid rgba(74,222,128,.35);border-radius:999px;padding:4px 12px;margin-bottom:20px}
+h1{font-size:36px;line-height:1.28;margin:0 0 16px;font-weight:700;letter-spacing:-.01em}
+h1 span{color:var(--accent)}
+.lead{font-size:16.5px;color:var(--muted);max-width:800px;margin:0}
+section{padding:50px 0;border-bottom:1px solid var(--line)}
+h2{font-size:21px;margin:0 0 8px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:4px;height:18px;background:var(--accent);border-radius:2px;display:inline-block}
+h3{font-size:15.5px;color:var(--accent);margin:22px 0 8px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 26px}
+p.body{font-size:14.5px;color:#d4dae3;margin:10px 0}
+table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border-radius:10px;overflow:hidden;margin:14px 0}
+th,td{padding:11px 13px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:#1b222c;color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.04em}
+td:first-child,th:first-child{white-space:nowrap}
+td.pass{color:var(--accent);font-weight:600}
+tr:last-child td{border-bottom:none}
+tr.hl td{background:rgba(74,222,128,.07)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.card h3{margin:0 0 10px}
+.card p{margin:0;color:var(--muted);font-size:13.8px}
+.card p b{color:var(--text)}
+.note{border-left:3px solid var(--warn);background:rgba(251,191,36,.06);padding:14px 18px;border-radius:0 8px 8px 0;margin:16px 0}
+.note p{margin:6px 0;font-size:14px;color:#d9dee6}
+pre.cb{background:#0b0e13;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;
+  font-family:var(--mono);font-size:12.5px;line-height:1.7;color:#d7dee8;margin:14px 0}
+pre.cb .cm{color:#7d8a9c}
+pre.cb .kw{color:var(--accent)}
+pre.cb .fix{color:var(--warn);font-weight:700}
+footer{padding:40px 0 64px;color:var(--muted);font-size:13px}
+footer p{margin:6px 0}
+ul{margin:8px 0 0;padding-left:20px;font-size:14px}
+li{margin:5px 0;color:#cfd6e0}
+@media(max-width:760px){
+  h1{font-size:27px} .grid2{grid-template-columns:1fr} table{font-size:12.5px} th,td{padding:9px 10px}
+  td:first-child,th:first-child{white-space:normal}
+}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <span>1OUXILISI · 排障案例</span>
+  <span><a href="index.html">作品集</a> · <a href="project.html">项目详情</a> · <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">GitHub</a></span>
+</div></nav>
+
+<header>
+  <div class="wrap">
+    <div class="tag">TROUBLESHOOTING CASE · 按次诊断样品</div>
+    <h1>magic 为什么在 extract 时<span>无限等下去</span></h1>
+    <p class="lead">
+      这是一个真实卡住、又被定位到文件系统层面的问题。不讲设计思想，只讲怎么从「卡住不动」一步步挖到根因、
+      给出能跑的修法。如果你在 OpenLane 里遇到过「流程跑到某一步就不动、CPU 几乎为零、不报错也不退出」，
+      这一页就是为你写的。
+    </p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>一、先看症状：没有报错，才最难查</h2>
+    <p class="sub">流程卡在 magic 的 spice 提取这一步（OpenLane 的 extract_spice.tcl）。下面每一项都是当时能直接观察到的，不是事后推测。</p>
+    <table>
+      <thead><tr><th>观察项</th><th>读数 / 现象</th></tr></thead>
+      <tbody>
+        <tr><td>卡住位置</td><td>magic spice 提取，日志停在处理顶层 cell，不再往下走</td></tr>
+        <tr><td>CPU 占用</td><td>几乎为 0 —— 不是算力不够，也不是死循环打满</td></tr>
+        <tr><td>内存</td><td>稳定、不增长 —— 不是内存耗尽</td></tr>
+        <tr><td>报错信息</td><td>没有任何 error，进程不退出</td></tr>
+        <tr><td>等待时长</td><td>无限。放一晚上回来，还停在原地</td></tr>
+      </tbody>
+    </table>
+    <p class="body">没有报错就意味着没有现成线索。这时候最容易做的事是杀掉重跑、再杀再重跑——但根因不变，重跑只会在同一位置再卡一次。所以先不重跑，先判断它到底在「算」还是在「等」。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>二、先排除三种常见误判</h2>
+    <p class="sub">每排除一种，方向就收窄一步。</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>① 不是死循环 / 死锁占 CPU</h3>
+        <p>如果是死循环，CPU 会被打满。实测 CPU 几乎为 0，说明进程在<b>等待</b>某件事，而不是在<b>计算</b>。这把方向从「逻辑算错」转到「在等资源」。</p>
+      </div>
+      <div class="card">
+        <h3>② 不是内存不足</h3>
+        <p>内存耗尽时，进程要么被内核的 OOM killer 杀掉，要么自己报错退出。实测内存稳定、进程仍然活着，排除内存问题。</p>
+      </div>
+      <div class="card">
+        <h3>③ 不是 magic 整个坏了</h3>
+        <p>拿单个 cell，用绝对路径加载再 extract，能正常产出一个 856 B 的 <code>.ext</code>。引擎本身工作正常，问题出在特定的工作方式上，不是程序崩了。</p>
+      </div>
+      <div class="card">
+        <h3>收窄后的判断</h3>
+        <p>一个活着、不占 CPU、不报错、又不退出的进程，基本可以断定它在<b>等一个它认为会出现的东西</b>——一个文件，或者一次回应。下一步就去看它在内核里到底等在哪个函数上。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>三、进程层面的证据：它在等什么</h2>
+    <p class="sub">Linux 下每个进程在 /proc 里都有状态。把状态读出来，「卡住」就变成了具体的读数。</p>
+    <table>
+      <thead><tr><th>指标</th><th>读数</th><th>含义（讲清楚语法）</th></tr></thead>
+      <tbody>
+        <tr><td>state</td><td><code>S</code></td><td>S 是可中断睡眠（interruptible sleep）。进程没在运行（运行是 R），它在等某个事件或资源，等到了会被唤醒。</td></tr>
+        <tr><td>wchan</td><td><code>request_wait_answer</code></td><td>wchan 是 wait channel，即内核里进程正等待的那个函数的名字。这个名字说明它在等一次「回答」——结合 magic 的行为，是在等一次文件查找的结果。</td></tr>
+        <tr><td>voluntary switch</td><td>每秒约 1,000 次</td><td>voluntary context switch 是进程主动让出 CPU 去等资源。每秒上千次，说明它在反复「问一下、没有、睡、再问」。</td></tr>
+      </tbody>
+    </table>
+    <p class="body">再看系统调用层面，能观察到它反复调用 <code>openat</code>，去各个搜索路径下打开同一个文件 <code>sky130_fd_sc_hd__tapvpwrvgnd_1.ext</code>，每次都返回 ENOENT（文件不存在），然后换一个路径再找。到这里，「它在等什么」就被具体化成了一个文件名。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>四、根因：incremental 模式找不到文件，又不肯现场提取</h2>
+    <h3>magic 的两种 extract 方式</h3>
+    <table>
+      <thead><tr><th>方式</th><th>行为</th></tr></thead>
+      <tbody>
+        <tr><td>裸 <code>extract</code></td><td>incremental（增量）模式。它假设子 cell 的 <code>.ext</code> 已经存在，直接复用；不存在就沿搜索路径去找。</td></tr>
+        <tr><td><code>extract all</code></td><td>递归地把 root 和所有 children 现场提取一遍，按依赖顺序生成，不依赖任何预存文件。</td></tr>
+      </tbody>
+    </table>
+    <h3>为什么偏偏是这个 cell</h3>
+    <p class="body"><code>sky130_fd_sc_hd__tapvpwrvgnd_1</code> 是一个 physical-only 单元——只做阱连接和电源钳位，没有逻辑功能。这个设计里它有 <b>5,496 个实例</b>。</p>
+    <p class="body">而 PDK 的事实是：它只发布 <code>.mag</code>（版图源文件），不发布 <code>.ext</code>。<code>.ext</code> 本来就是 magic 在本地提取时生成的中间产物，不该由 PDK 提供。</p>
+    <p class="body">关键缺陷在这里：incremental 模式沿 cell 基路径和全部搜索路径找 <code>.ext</code> 全部失败后，<b>没有回退成「那我现场提取这个子 cell」，而是无限重试</b>。于是进程停在 S 状态，反复 openat、反复 ENOENT，永不自救。</p>
+    <div class="note">
+      <p>历史上 ctsfix3 那次 run 就死在完全相同的位置，当时以 child killed 结束。是同一根因，只是那一次没有挖到文件系统这一层，把它当成了偶发的子进程被杀。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>五、对照实验：先证死，再动手修</h2>
+    <p class="sub">修之前先做三组对照，确认修法方向是对的，而不是换个姿势碰运气。</p>
+    <table>
+      <thead><tr><th>操作</th><th>结果</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>单 cell，绝对路径 load 再 extract</td><td class="pass">正常，出 856 B 的 .ext</td><td>引擎没坏，现场提取这条路是通的</td></tr>
+        <tr><td>裸 load 一个 cell 名（不带路径）</td><td>只打印 Creating new cell，建了个空 cell</td><td>名字解析找不到 PDK 里的真实 cell，反向印证路径的重要性</td></tr>
+        <tr><td>把缓存 .ext 拷进工作目录再跑</td><td class="pass">能过</td><td>证明它确实只认预存文件；有文件就走，没有就卡</td></tr>
+      </tbody>
+    </table>
+    <p class="body">三组对照指向同一个修法方向：让 magic 不依赖预存 <code>.ext</code>，也就是让它现场递归提取全部子 cell。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>六、修法与验证</h2>
+    <p class="sub">下面是修复脚本的关键部分，是真实跑过的代码，不是示意。</p>
+    <pre class="cb"><span class="cm"># 提取选项（与 OpenLane extract_spice.tcl 保持一致）</span>
+extract do local
+extract no capacitance
+extract no coupling
+extract no resistance
+extract no adjust
+
+<span class="cm"># 关键修复：用 extract all 代替裸 extract</span>
+<span class="fix">extract all</span>
+
+<span class="cm"># 转 LVS spice 网表</span>
+ext2spice lvs
+ext2spice -o $EXT_NETLIST $TOP</pre>
+    <p class="body"><code>extract all</code> 的作用是显式递归提取 root 加全部 children，magic 按依赖顺序现场生成每个 <code>.ext</code>，不再去找一个 PDK 本来就不提供的文件。</p>
+    <table>
+      <thead><tr><th>验证项</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>干净目录重跑</td><td class="pass">一次跑过，不再卡住</td></tr>
+        <tr><td>产出 .ext</td><td>153 个，顶层 .ext 为 17,151,056 B</td></tr>
+        <tr><td>LVS 网表</td><td>ext2spice 出 3,463,849 B 的 spice</td></tr>
+        <tr class="hl"><td>netgen LVS</td><td class="pass">两侧 15,873 器件 / 15,795 网相等，Final result: Circuits match uniquely；badnets、badelements 均为空</td></tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <p>这个修复跟具体设计无关。任何 sky130A + OpenLane 1.1.1 + magic 8.3.483 的 run，只要用到 physical-only 的 tap 单元，都会撞上同一根因。所以修法脚本随 Release 公开，而不是藏在自己的 run 目录里。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>七、边界：我只对这一个根因负责</h2>
+    <ul>
+      <li>验证过的组合是 magic 8.3.483 + OpenLane 1.1.1 + sky130A。不同 magic 版本的 extract 行为可能不同，升级版本前请先在单 cell 上验证。</li>
+      <li><code>extract all</code> 会比 incremental 慢，因为要现场提取全部子 cell。这是用确定性换速度，不是免费的。</li>
+      <li>它解决的是「提取卡住」，不解决「LVS 不匹配」。LVS 匹配是另一条独立证据链，这里只保证网表能被正确生成。</li>
+      <li>我不声称这是 magic 的唯一问题，只对这一个被完整复现、修复并验证的根因负责。</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>八、这是可售服务的样品</h2>
+    <p class="body">你在这一页看到的，就是「按次诊断」的交付标准：可观察的症状、进程级证据、被证死的误判、可执行的修法、可复现的验证、以及明确的边界。不靠「我觉得」，每一步都落到读数。</p>
+    <table>
+      <tbody>
+        <tr><td>适用问题</td><td>OpenLane / OpenROAD / magic 流程卡住、报错看不懂、DRC / LVS / 时序不收敛、环境与 locale 问题</td></tr>
+        <tr><td>报价</td><td>按次诊断 300–800，按问题复杂度、以及是否需要远程复现来定</td></tr>
+        <tr><td>怎么开始</td><td>在 GitHub 仓库提 Issue 描述现象，或在知乎相关文章下留言。先判断能不能定位，能定位再谈，定位不了不收费。</td></tr>
+      </tbody>
+    </table>
+    <p class="body" style="margin-top:18px">
+      <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout">→ GitHub 仓库</a> &nbsp;·&nbsp;
+      <a href="https://github.com/1ouxilisi/sha256-openlane-tapeout/releases/tag/stdflow-signoff">→ Release stdflow-signoff（含修复脚本）</a> &nbsp;·&nbsp;
+      <a href="evidence/stdflow_signoff.txt">→ 完整收尾证据</a>
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>1ouxilisi · 排障案例 · 2026-11-17</p>
+    <p>本页所有数字均来自 runs/stdflow 的实际产物与 docs/evidence/stdflow_signoff.txt，可在仓库中逐项核对。</p>
+  </div>
+</footer>
+
+</body>
+</html>
